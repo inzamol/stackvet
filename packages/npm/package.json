@@ -1,5 +1,5 @@
 {
-  "name": "stackvet",
+  "name": "@inzamol/stackvet",
   "version": "0.1.0",
   "description": "Universal project health and static diagnostics engine",
   "bin": {
