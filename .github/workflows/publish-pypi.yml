@@ -100,7 +100,8 @@ jobs:
       - name: Build sdist
         run: maturin sdist --out dist
       - name: Verify sdist contains LICENSE
-        run: python -c "import tarfile, glob; t = tarfile.open(glob.glob('dist/*.tar.gz')[0]); names = [m.name for m in t.getmembers()]; assert any('LICENSE' in n for n in names), f'LICENSE missing! Archive contents: {names}'"
+        run: |
+          python -c "import tarfile, glob; t = tarfile.open(glob.glob('dist/*.tar.gz')[0]); names = [m.name for m in t.getmembers()]; assert any('LICENSE' in n for n in names)"
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
@@ -128,5 +129,6 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist
+          skip-existing: true
           # If not using Trusted Publishing, provide PYPI_API_TOKEN secret:
           # password: ${{ secrets.PYPI_API_TOKEN }}

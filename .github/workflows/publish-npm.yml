@@ -23,8 +23,12 @@ jobs:
   test-and-publish:
     name: Build & Publish npm Package
     runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@inzamol/stackvet
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout repository
@@ -52,9 +56,6 @@ jobs:
           node-version: "22.x"
           registry-url: "https://registry.npmjs.org/"
 
-      - name: Ensure latest npm for OIDC Trusted Publishing
-        run: npm install -g npm@latest
-
       - name: Build native Rust binary
         run: cargo build -p stackvet --release --locked
 
@@ -72,6 +73,4 @@ jobs:
       - name: Publish to npm registry
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
-          npm publish ./packages/npm --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          npm publish ./packages/npm --access public --provenance
