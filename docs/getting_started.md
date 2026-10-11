@@ -1,10 +1,49 @@
 # Getting Started with stackvet
 
-`stackvet` is a package-manager-agnostic diagnostic platform for Python projects. It analyzes your project configuration, environment, source code imports, and dependency tree to pinpoint health issues and suggest safe, actionable fixes.
+`stackvet` is a high-performance, polyglot diagnostic and project health engine for Python, Node.js/TypeScript, Docker, and CI/CD environments. It analyzes your project configuration, environment, source code imports, ASTs, and dependency trees to pinpoint health issues and suggest safe, actionable fixes.
 
 ---
 
 ## 1. Installation & Execution
+
+=== "Ephemeral Run (npx)"
+    ```bash
+    # Run project health scorecard without installing
+    npx @inzamol/stackvet doctor
+
+    # Run detailed diagnostic scan
+    npx @inzamol/stackvet scan
+
+    # Run automated remediation
+    npx @inzamol/stackvet fix
+    ```
+
+=== "Using npm (Node.js)"
+    ```bash
+    # Install as dev dependency
+    npm install --save-dev @inzamol/stackvet
+
+    # Run health check
+    npx stackvet doctor
+    ```
+
+=== "Using pnpm"
+    ```bash
+    # Install as dev dependency
+    pnpm add -D @inzamol/stackvet
+
+    # Run health check
+    pnpm exec stackvet doctor
+    ```
+
+=== "Using yarn"
+    ```bash
+    # Install as dev dependency
+    yarn add -D @inzamol/stackvet
+
+    # Run health check
+    yarn stackvet doctor
+    ```
 
 === "Ephemeral Run (uvx / pipx)"
     ```bash
@@ -17,23 +56,35 @@
     uvx stackvet scan
     ```
 
-=== "Using uv"
+=== "Using uv (Python)"
     ```bash
     uv add stackvet --dev
+    uv run stackvet doctor
     ```
 
-=== "Using pip"
+=== "Using pip (Python)"
     ```bash
     pip install stackvet
+    stackvet doctor
     ```
 
 === "Using poetry"
     ```bash
     poetry add stackvet --group dev
+    poetry run stackvet doctor
+    ```
+
+=== "Via Cargo (Rust)"
+    ```bash
+    cargo install stackvet
+    stackvet doctor
     ```
 
 === "Global CLI Tool"
     ```bash
+    # Using npm
+    npm install -g @inzamol/stackvet
+
     # Using uv tool
     uv tool install stackvet
 

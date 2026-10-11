@@ -90,7 +90,32 @@ jobs:
 
 ---
 
-### 2.2 GitHub PR Intelligence (Changed Code & Annotations)
+### 2.2 In Node.js / TypeScript CI Workflows (via npm / npx)
+
+Run `stackvet` directly in your Node.js or monorepo CI without Python or Rust installation:
+
+```yaml
+name: Node.js Project Health Check
+
+on: [push, pull_request]
+
+jobs:
+  stackvet-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Run StackVet directly using npx
+      - name: Run StackVet Health Scan
+        run: npx @inzamol/stackvet scan --ci --github-annotations
+```
+
+---
+
+### 2.3 GitHub PR Intelligence (Changed Code & Annotations)
 
 Run PR intelligence on pull requests to analyze only modified lines/files, emit inline workflow command annotations (`::error` and `::warning`), report resolved issues, and generate a step summary:
 
@@ -119,7 +144,7 @@ jobs:
 
 ---
 
-### 2.3 Baseline & Differential Scanning (Prevent New Regressions)
+### 2.4 Baseline & Differential Scanning (Prevent New Regressions)
 
 For large existing codebases with pre-existing warnings or technical debt, use baseline snapshots so CI only fails on **new** diagnostic issues introduced in pull requests:
 

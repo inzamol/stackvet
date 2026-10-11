@@ -95,13 +95,14 @@ pipx install stackvet
 
 ### Via npm / npx (Node.js)
 ```bash
-# Run instantly with npx:
-npx stackvet doctor
+# Run instantly with npx (no install required):
+npx @inzamol/stackvet doctor
 
 # Or install in your project:
-pnpm add -D stackvet
-# or
-npm install --save-dev stackvet
+npm install --save-dev @inzamol/stackvet
+# or with pnpm / yarn:
+pnpm add -D @inzamol/stackvet
+yarn add -D @inzamol/stackvet
 ```
 
 ---

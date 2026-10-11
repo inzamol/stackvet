@@ -60,15 +60,50 @@ flowchart TD
 
 Run `stackvet doctor` or `stackvet scan` directly in any Python project root:
 
-=== "Using uv"
+=== "Run without installing (npx)"
+    ```bash
+    npx @inzamol/stackvet doctor
+    ```
+
+=== "Using npm (Node.js)"
+    ```bash
+    npm install --save-dev @inzamol/stackvet
+    npx stackvet doctor
+    ```
+
+=== "Using pnpm / yarn"
+    ```bash
+    # pnpm
+    pnpm add -D @inzamol/stackvet
+    pnpm exec stackvet doctor
+
+    # yarn
+    yarn add -D @inzamol/stackvet
+    yarn stackvet doctor
+    ```
+
+=== "Run without installing (uvx / pipx)"
+    ```bash
+    uvx stackvet doctor
+    # or
+    pipx run stackvet doctor
+    ```
+
+=== "Using uv (Python)"
     ```bash
     uv add stackvet --dev
     uv run stackvet doctor
     ```
 
-=== "Using pip"
+=== "Using pip (Python)"
     ```bash
     pip install stackvet
+    stackvet doctor
+    ```
+
+=== "Via Cargo (Rust)"
+    ```bash
+    cargo install stackvet
     stackvet doctor
     ```
 
@@ -85,16 +120,6 @@ Run `stackvet doctor` or `stackvet scan` directly in any Python project root:
     pip install -e .
     # or with uv
     uv pip install -e .
-    ```
-
-=== "Run without installing (uvx)"
-    ```bash
-    uvx stackvet doctor
-    ```
-
-=== "Run without installing (pipx)"
-    ```bash
-    pipx run stackvet doctor
     ```
 
 ### 2.1 Live Diagnostic Output
