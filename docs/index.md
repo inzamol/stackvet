@@ -2,15 +2,17 @@
 
 <div align="center" markdown>
 
-**Diagnose why your Python project is unhealthy — understand the root cause and get safe, actionable fixes.**
+**Universal Project Health & Static Diagnostics Engine for Python, Node.js, Docker & CI Stacks**
 
-[![PyPI Version](https://img.shields.io/badge/pypi-v0.1.1-blue.svg)](https://pypi.org/project/stackvet/)
+[![PyPI Version](https://img.shields.io/pypi/v/stackvet.svg?color=blue)](https://pypi.org/project/stackvet/)
+[![npm Version](https://img.shields.io/npm/v/@inzamol/stackvet.svg?color=cb3837)](https://www.npmjs.com/package/@inzamol/stackvet)
 [![Python Versions](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://pypi.org/project/stackvet/)
+[![Node Versions](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg)](https://www.npmjs.com/package/@inzamol/stackvet)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 </div>
 
-`stackvet` is a high-performance, offline-first health analyzer for Python projects. It inspects your project manifests, active virtual environment, source module AST, and packaging metadata in milliseconds to uncover broken dependencies, undeclared packages, circular import loops, and runtime drift across Docker and CI.
+`stackvet` is a high-performance, polyglot diagnostic and project health engine for modern stacks (Python, Node.js/TypeScript, Docker, and CI/CD). It inspects your project manifests (`pyproject.toml`, `package.json`, lockfiles), active runtime environments, source code ASTs, and infrastructure definitions in milliseconds to uncover broken dependencies, undeclared packages, circular import loops, and runtime drift.
 
 ---
 
