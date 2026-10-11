@@ -1305,12 +1305,14 @@
 
 <h1 id="stackvet-documentation">stackvet Documentation</h1>
 <div align="center">
-<p><strong>Diagnose why your Python project is unhealthy — understand the root cause and get safe, actionable fixes.</strong></p>
-<p><a href="https://pypi.org/project/stackvet/"><img alt="PyPI Version" src="https://img.shields.io/badge/pypi-v0.1.1-blue.svg" /></a>
+<p><strong>Universal Project Health &amp; Static Diagnostics Engine for Python, Node.js, Docker &amp; CI Stacks</strong></p>
+<p><a href="https://pypi.org/project/stackvet/"><img alt="PyPI Version" src="https://img.shields.io/pypi/v/stackvet.svg?color=blue" /></a>
+<a href="https://www.npmjs.com/package/@inzamol/stackvet"><img alt="npm Version" src="https://img.shields.io/npm/v/@inzamol/stackvet.svg?color=cb3837" /></a>
 <a href="https://pypi.org/project/stackvet/"><img alt="Python Versions" src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue" /></a>
+<a href="https://www.npmjs.com/package/@inzamol/stackvet"><img alt="Node Versions" src="https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg" /></a>
 <a href="https://opensource.org/licenses/MIT"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green.svg" /></a></p>
 </div>
-<p><code>stackvet</code> is a high-performance, offline-first health analyzer for Python projects. It inspects your project manifests, active virtual environment, source module AST, and packaging metadata in milliseconds to uncover broken dependencies, undeclared packages, circular import loops, and runtime drift across Docker and CI.</p>
+<p><code>stackvet</code> is a high-performance, polyglot diagnostic and project health engine for modern stacks (Python, Node.js/TypeScript, Docker, and CI/CD). It inspects your project manifests (<code>pyproject.toml</code>, <code>package.json</code>, lockfiles), active runtime environments, source code ASTs, and infrastructure definitions in milliseconds to uncover broken dependencies, undeclared packages, circular import loops, and runtime drift.</p>
 <hr />
 <h2 id="1-overview-architecture">1. Overview &amp; Architecture</h2>
 <p>Unlike generic tools that only inspect a single lockfile or flat requirements list, <code>stackvet</code> correlates multi-layer diagnostic signals across your entire project ecosystem:</p>
