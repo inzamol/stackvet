@@ -1,0 +1,82 @@
+name: GitHub Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binary (Linux x86_64)
+        run: |
+          cargo build -p stackvet --release --locked
+          tar -czvf stackvet-linux-x86_64.tar.gz -C target/release stackvet
+
+      - name: Create GitHub Release with Release Notes
+        uses: softprops/action-gh-release@v2
+        with:
+          name: StackVet ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            stackvet-linux-x86_64.tar.gz
+          body: |
+            # 🚀 StackVet ${{ github.ref_name }}
+
+            **StackVet** is a Universal Project Health & Static Diagnostics Engine — diagnose root causes across Python, Node.js, and Docker, and receive safe, automated remediations in milliseconds.
+
+            ---
+
+            ### 📦 Quick Installation
+
+            #### 🟢 npm / npx (Node.js)
+            ```bash
+            # Run instantly without installing
+            npx @inzamol/stackvet doctor
+
+            # Or install globally
+            npm install -g @inzamol/stackvet
+            ```
+
+            #### 🐍 pip / pipx (Python)
+            ```bash
+            # Install via pip
+            pip install stackvet
+
+            # Or run directly with pipx
+            pipx run stackvet doctor
+            ```
+
+            #### 🦀 cargo (Rust)
+            ```bash
+            cargo install stackvet
+            ```
+
+            ---
+
+            ### ⚡ Key Capabilities
+            - **`stackvet doctor`** — Fast repository health diagnostics with score card and actionable breakdown.
+            - **`stackvet check`** — Strict static analysis and CI/CD validation.
+            - **`stackvet fix`** — Automated, AST-safe remediation for detected anomalies and anti-patterns.
+            - **`stackvet explain <RULE-ID>`** — Detailed rationale, bad patterns, and recommended solutions.
+            - **`stackvet graph`** — Multi-ecosystem dependency and architectural graph inspection.
+
+            ---
+
+            ### 📚 Documentation & Resources
+            - 📖 **Documentation**: [https://inzamol.github.io/stackvet/](https://inzamol.github.io/stackvet/)
+            - 📦 **npm**: [https://www.npmjs.com/package/@inzamol/stackvet](https://www.npmjs.com/package/@inzamol/stackvet)
+            - 🐍 **PyPI**: [https://pypi.org/p/stackvet](https://pypi.org/p/stackvet)

@@ -44,3 +44,4 @@ Issues = "https://github.com/inzamol/stackvet/issues"
 manifest-path = "crates/stackvet-cli/Cargo.toml"
 bindings = "bin"
 strip = true
+include = ["LICENSE"]
