@@ -2040,6 +2040,7 @@ name = "stackvet-python"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "get-size2",
  "ruff_python_ast",
  "ruff_python_parser",
  "serde",

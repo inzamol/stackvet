@@ -10,3 +10,4 @@ ruff_python_ast = { workspace = true }
 toml = { workspace = true }
 serde = { workspace = true }
 anyhow = { workspace = true }
+get-size2 = "=0.10.0"
