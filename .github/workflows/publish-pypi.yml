@@ -95,11 +95,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install maturin
+        run: pip install "maturin>=1.5,<2.0"
       - name: Build sdist
-        uses: PyO3/maturin-action@v1
-        with:
-          command: sdist
-          args: --out dist
+        run: maturin sdist --out dist
+      - name: Verify sdist contains LICENSE
+        run: python -c "import tarfile, glob; t = tarfile.open(glob.glob('dist/*.tar.gz')[0]); names = [m.name for m in t.getmembers()]; assert any('LICENSE' in n for n in names), f'LICENSE missing! Archive contents: {names}'"
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:

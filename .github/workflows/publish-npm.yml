@@ -23,12 +23,8 @@ jobs:
   test-and-publish:
     name: Build & Publish npm Package
     runs-on: ubuntu-latest
-    environment:
-      name: npm
-      url: https://www.npmjs.com/package/@inzamol/stackvet
     permissions:
       contents: read
-      id-token: write
 
     steps:
       - name: Checkout repository
@@ -76,7 +72,6 @@ jobs:
       - name: Publish to npm registry
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
-          if [ -n "${{ secrets.NPM_TOKEN }}" ]; then
-            echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
-          fi
-          npm publish ./packages/npm --access public --provenance
+          npm publish ./packages/npm --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
