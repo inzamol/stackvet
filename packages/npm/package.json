@@ -27,7 +27,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/inzamol/stackvet.git"
+    "url": "git+https://github.com/inzamol/stackvet.git"
   },
   "bugs": {
     "url": "https://github.com/inzamol/stackvet/issues"
