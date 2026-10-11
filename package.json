@@ -1,8 +1,9 @@
 {
   "name": "@inzamol/stackvet",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "StackVet Universal Project Health & Static Diagnostics Engine",
   "scripts": {
+    "version:sync": "node scripts/sync_version.js",
     "build:pypi": "python scripts/build_pypi.py",
     "build:npm": "node scripts/build_npm.js",
     "build:all": "npm run build:pypi && npm run build:npm",

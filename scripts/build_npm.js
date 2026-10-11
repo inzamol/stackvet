@@ -11,6 +11,9 @@ if (!fs.existsSync(outDir)) {
   fs.mkdirSync(outDir, { recursive: true });
 }
 
+console.log('Syncing version from Cargo.toml...');
+execSync('node scripts/sync_version.js', { cwd: root, stdio: 'inherit' });
+
 console.log('Building native Rust binary in release mode...');
 execSync('cargo build -p stackvet --release --locked', { cwd: root, stdio: 'inherit' });
 

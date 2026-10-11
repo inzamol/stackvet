@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "stackvet"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Universal Project Health & Static Diagnostics Engine"
 readme = "README.md"
 authors = [{ name = "Inzamul Hoque" }]

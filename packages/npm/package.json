@@ -1,7 +1,11 @@
 {
   "name": "@inzamol/stackvet",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Universal project health and static diagnostics engine",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "bin": {
     "stackvet": "bin/stackvet.js"
   },
