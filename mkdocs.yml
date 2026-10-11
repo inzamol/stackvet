@@ -1,0 +1,89 @@
+site_name: StackVet
+site_description: Universal Project Health & Static Diagnostics Engine — understand root causes and get safe, actionable fixes in milliseconds.
+site_author: Inzamul Hoque
+site_url: https://inzamol.github.io/stackvet/
+repo_url: https://github.com/inzamol/stackvet
+repo_name: inzamol/stackvet
+
+theme:
+  name: material
+  logo: assets/logo.svg
+  favicon: assets/favicon.svg
+  icon:
+    repo: fontawesome/brands/github
+  font:
+    text: Inter
+    code: JetBrains Mono
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: slate
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: slate
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - content.code.copy
+    - content.code.annotate
+    - search.suggest
+    - search.highlight
+
+markdown_extensions:
+  - md_in_html
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - tables
+  - attr_list
+
+nav:
+  - Overview: index.md
+  - Getting Started: getting_started.md
+  - Architecture: architecture.md
+  - Reference:
+      - CLI Commands Reference: cli_reference.md
+      - Configuration Guide: configuration.md
+      - Diagnostic Rules Catalog: rules.md
+  - Features:
+      - Safe Automated Fixes: remediation.md
+      - HTML Report Dashboard: html_report.md
+      - Dependency & Import Tree: tree.md
+  - Integration:
+      - CI/CD & GitHub Actions: ci_integration.md
+      - Pre-commit Hooks: pre_commit.md
+      - Publishing to npm & PyPI: publishing_guide.md
+  - Community:
+      - Contributing Guide: contributing.md
+      - Code of Conduct: code_of_conduct.md

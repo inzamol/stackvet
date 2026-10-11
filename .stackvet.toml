@@ -1,0 +1,17 @@
+# StackVet Project Configuration
+[project]
+name = "stackvet"
+min_score = 80
+
+[scan]
+exclude = [
+    "tests/fixtures/**",
+    "target/**",
+    "node_modules/**",
+    "dist/**",
+    "site/**",
+    "scripts/**",
+]
+
+[rules]
+# All default rules active

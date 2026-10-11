@@ -1,0 +1,11 @@
+[package]
+name = "stackvet-scanner"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+stackvet-core = { path = "../stackvet-core" }
+ignore = { workspace = true }
+walkdir = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }

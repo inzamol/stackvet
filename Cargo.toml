@@ -1,0 +1,58 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/stackvet-core",
+    "crates/stackvet-scanner",
+    "crates/stackvet-python",
+    "crates/stackvet-node",
+    "crates/stackvet-graph",
+    "crates/stackvet-analyzers",
+    "crates/stackvet-frameworks",
+    "crates/stackvet-correlation",
+    "crates/stackvet-remediation",
+    "crates/stackvet-reporter",
+    "crates/stackvet-cli",
+]
+
+[workspace.dependencies]
+# CLI & Terminal
+clap = { version = "4.5", features = ["derive", "env"] }
+crossterm = "0.28"
+comfy-table = "7.1"
+colored = "2.1"
+indicatif = "0.17"
+
+# Concurrency & FS
+rayon = "1.10"
+ignore = "0.4"
+walkdir = "2.5"
+tokio = { version = "1.38", features = ["full"] }
+
+# Parsers & AST
+ruff_python_parser = "0.0.2"
+ruff_python_ast = "0.0.2"
+oxc_parser = "0.14"
+oxc_ast = "0.14"
+oxc_span = "0.14"
+oxc_allocator = "0.14"
+
+# Manifests & Data
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+toml = "0.8"
+toml_edit = { version = "0.22", features = ["serde"] }
+
+# Graph & Algorithms
+petgraph = "0.6"
+
+# Networking & Security
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+url = "2.5"
+semver = "1.0"
+
+# Error Handling
+thiserror = "1.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"

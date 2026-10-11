@@ -1,0 +1,16 @@
+{
+  "name": "stackvet-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "StackVet Universal Project Health & Static Diagnostics Engine",
+  "scripts": {
+    "build:pypi": "python scripts/build_pypi.py",
+    "build:npm": "node scripts/build_npm.js",
+    "build:all": "npm run build:pypi && npm run build:npm",
+    "test:npm": "node packages/npm/bin/stackvet.js doctor",
+    "docs:serve": "mkdocs serve",
+    "docs:build": "mkdocs build"
+  },
+  "author": "Inzamul Hoque",
+  "license": "MIT"
+}

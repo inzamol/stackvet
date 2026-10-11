@@ -1,0 +1,8 @@
+[package]
+name = "stackvet-correlation"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+stackvet-core = { path = "../stackvet-core" }
+anyhow = { workspace = true }

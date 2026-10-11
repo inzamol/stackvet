@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="favBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="100%" stop-color="#030712" />
+    </linearGradient>
+    <linearGradient id="favVet" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22D3EE" />
+      <stop offset="60%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <linearGradient id="favStack" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#6366F1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background Squircle -->
+  <rect width="64" height="64" rx="16" fill="url(#favBg)" stroke="#1E293B" stroke-width="1.5" />
+
+  <!-- Stack Layer Accent (Isometric Plate) -->
+  <path d="M19 22 L32 16 L45 22 L32 28 Z" fill="url(#favStack)" opacity="0.8" />
+  <path d="M19 29 L32 23 L45 29 L39 32 L32 29 L25 32 Z" fill="url(#favStack)" opacity="0.5" />
+
+  <!-- High-Contrast Bold Vetting Checkmark -->
+  <path d="M16 32 L28 46 L48 18" fill="none" stroke="url(#favVet)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Verification Pulse Dot -->
+  <circle cx="48" cy="18" r="3" fill="#34D399" />
+</svg>

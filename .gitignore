@@ -1,0 +1,123 @@
+# ==============================================================================
+# StackVet - Enterprise Git Ignore Configuration
+# ==============================================================================
+
+# --- Rust & Cargo Artifacts ---
+/target/
+.cargo/config.toml
+**/*.rs.bk
+*.pdb
+*.d
+cargo-timing*.html
+
+# --- Distribution & Build Packages ---
+/dist/
+build/
+*.whl
+*.tar.gz
+*.tgz
+
+# --- Python Build & Cache ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# --- Node.js & npm / pnpm / yarn ---
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/
+*.tsbuildinfo
+.next/
+out/
+packages/npm/bin/*.exe
+packages/npm/bin/stackvet
+packages/npm/README.md
+packages/npm/LICENSE
+packages/npm/*.tgz
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# --- Documentation Build Output ---
+site/
+.cache/
+
+# --- Environment, Secrets & Credentials ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+*.kdbx
+*.asc
+id_rsa
+id_ed25519
+credentials.json
+token.json
+*.secret
+*.tfvars
+*service-account*.json
+
+# --- Operating System Files ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# --- IDE & Editor Artifacts ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+.project
+.settings/
+
+# --- Test Outputs, Logs & Baselines ---
+*.log
+**/.stackvet-baseline.json
+tests/fixtures/**/*.log
+tests/fixtures/**/.stackvet.toml
+tests/fixtures/**/.stackvet-baseline.json
+tests/fixtures/**/.github/

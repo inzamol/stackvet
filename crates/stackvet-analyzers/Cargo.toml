@@ -1,0 +1,17 @@
+[package]
+name = "stackvet-analyzers"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+stackvet-core = { path = "../stackvet-core" }
+stackvet-python = { path = "../stackvet-python" }
+stackvet-node = { path = "../stackvet-node" }
+stackvet-graph = { path = "../stackvet-graph" }
+rayon = { workspace = true }
+semver = { workspace = true }
+serde_yaml = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }

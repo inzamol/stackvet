@@ -1,0 +1,13 @@
+[package]
+name = "stackvet-frameworks"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+stackvet-core = { path = "../stackvet-core" }
+stackvet-python = { path = "../stackvet-python" }
+stackvet-node = { path = "../stackvet-node" }
+ruff_python_parser = { workspace = true }
+ruff_python_ast = { workspace = true }
+oxc_ast = { workspace = true }
+anyhow = { workspace = true }

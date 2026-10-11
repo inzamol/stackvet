@@ -1,0 +1,10 @@
+[package]
+name = "stackvet-remediation"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+stackvet-core = { path = "../stackvet-core" }
+toml_edit = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }

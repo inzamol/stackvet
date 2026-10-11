@@ -1,0 +1,44 @@
+{
+  "name": "stackvet",
+  "version": "0.1.0",
+  "description": "Universal project health and static diagnostics engine",
+  "bin": {
+    "stackvet": "bin/stackvet.js"
+  },
+  "main": "bin/stackvet.js",
+  "scripts": {
+    "test": "node bin/stackvet.js --version",
+    "prepack": "node scripts/copy-binary.js"
+  },
+  "keywords": [
+    "diagnostics",
+    "static-analysis",
+    "linter",
+    "health",
+    "ast",
+    "fastapi",
+    "sqlalchemy",
+    "react",
+    "nextjs",
+    "docker",
+    "ci"
+  ],
+  "author": "Inzamul Hoque",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/inzamol/stackvet.git"
+  },
+  "bugs": {
+    "url": "https://github.com/inzamol/stackvet/issues"
+  },
+  "homepage": "https://inzamol.github.io/stackvet/",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ]
+}

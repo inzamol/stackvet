@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="50%" stop-color="#0B0F19" />
+      <stop offset="100%" stop-color="#030712" />
+    </linearGradient>
+
+    <!-- Stack Blue/Indigo Gradient -->
+    <linearGradient id="stackGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="50%" stop-color="#6366F1" />
+      <stop offset="100%" stop-color="#8B5CF6" />
+    </linearGradient>
+
+    <!-- Vet Cyan/Emerald Gradient -->
+    <linearGradient id="vetGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22D3EE" />
+      <stop offset="60%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+
+    <!-- Soft Glow Filter -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Outer Rounded Squircle Badge -->
+  <rect x="6" y="6" width="116" height="116" rx="30" fill="url(#bgGrad)" stroke="#1E293B" stroke-width="2" />
+  <rect x="12" y="12" width="104" height="104" rx="24" fill="none" stroke="#334155" stroke-width="1" stroke-opacity="0.4" />
+
+  <!-- Layer 1: Top Stack Chevron / Plate -->
+  <path d="M38 34 L64 22 L90 34 L64 46 Z" fill="url(#stackGrad)" opacity="0.9" />
+
+  <!-- Layer 2: Middle Stack Plate (Translucent Offset) -->
+  <path d="M38 48 L64 36 L90 48 L76 54 L64 48 L52 54 Z" fill="url(#stackGrad)" opacity="0.65" />
+
+  <!-- Layer 3: Bottom Base Plate -->
+  <path d="M38 62 L64 50 L90 62 L78 68 L64 62 L50 68 Z" fill="url(#stackGrad)" opacity="0.4" />
+
+  <!-- Vet Check / 'V' Diagnostic Crest (Cutting through the stack with high-contrast glow) -->
+  <path d="M32 58 L54 84 L96 36" fill="none" stroke="url(#vetGrad)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)" />
+
+  <!-- Pulse Diagnostic Indicator Dot -->
+  <circle cx="96" cy="36" r="4.5" fill="#34D399" />
+  <circle cx="96" cy="36" r="7" fill="none" stroke="#34D399" stroke-width="1.5" stroke-opacity="0.5" />
+</svg>

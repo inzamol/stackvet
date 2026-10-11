@@ -1,0 +1,9 @@
+[package]
+name = "stackvet-graph"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+stackvet-core = { path = "../stackvet-core" }
+petgraph = { workspace = true }
+anyhow = { workspace = true }

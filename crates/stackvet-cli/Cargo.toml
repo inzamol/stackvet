@@ -1,0 +1,24 @@
+[package]
+name = "stackvet"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+stackvet-core = { path = "../stackvet-core" }
+stackvet-scanner = { path = "../stackvet-scanner" }
+stackvet-python = { path = "../stackvet-python" }
+stackvet-node = { path = "../stackvet-node" }
+stackvet-graph = { path = "../stackvet-graph" }
+stackvet-analyzers = { path = "../stackvet-analyzers" }
+stackvet-frameworks = { path = "../stackvet-frameworks" }
+stackvet-correlation = { path = "../stackvet-correlation" }
+stackvet-remediation = { path = "../stackvet-remediation" }
+stackvet-reporter = { path = "../stackvet-reporter" }
+clap = { workspace = true }
+colored = { workspace = true }
+comfy-table = { workspace = true }
+crossterm = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
