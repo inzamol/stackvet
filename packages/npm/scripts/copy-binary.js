@@ -6,7 +6,10 @@ const isWindows = process.platform === 'win32';
 const binName = isWindows ? 'stackvet.exe' : 'stackvet';
 const dest = path.join(__dirname, '..', 'bin', binName);
 
+const rootDir = path.resolve(__dirname, '..', '..', '..');
 const candidatePaths = [
+  path.join(rootDir, 'target', 'release', binName),
+  path.join(rootDir, 'target', 'debug', binName),
   path.join(__dirname, '..', '..', 'target', 'release', binName),
   path.join(os.homedir(), '.cargo-target', 'stackvet', 'release', binName),
   path.join(os.homedir(), '.cargo', 'bin', binName),
@@ -26,5 +29,5 @@ for (const src of candidatePaths) {
 }
 
 if (!copied) {
-  console.warn(`Warning: Could not find prebuilt native binary in candidate paths.`);
+  throw new Error(`Failed to bundle native binary: '${binName}' was not found in candidate paths:\n  ${candidatePaths.join('\n  ')}`);
 }
