@@ -54,7 +54,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22.x"
-          registry-url: "https://registry.npmjs.org/"
 
       - name: Build native Rust binary
         run: cargo build -p stackvet --release --locked
@@ -68,9 +67,11 @@ jobs:
       - name: Dry-run publish
         if: ${{ github.event.inputs.dry_run == 'true' }}
         run: |
-          npm publish ./packages/npm --dry-run
+          cd packages/npm
+          npm publish --dry-run
 
       - name: Publish to npm registry
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
-          npm publish ./packages/npm --access public --provenance
+          cd packages/npm
+          npm publish --access public --provenance
