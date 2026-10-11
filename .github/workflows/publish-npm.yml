@@ -55,6 +55,9 @@ jobs:
         with:
           node-version: "22.x"
 
+      - name: Update npm to latest (v11+) for OIDC Trusted Publishing
+        run: npm install -g npm@latest
+
       - name: Build native Rust binary
         run: cargo build -p stackvet --release --locked
 
