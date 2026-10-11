@@ -134,7 +134,7 @@ Health Score: 85/100
 
     Explore findings interactively with keyboard navigation (`↑`/`↓`), expand evidence, view live dependency trees (`t`), and apply fixes (`f`) in a rich TUI.
 
-    [:material-arrow-right: Open TUI Guide](tui.md)
+    [:material-arrow-right: Open CLI Reference](cli_reference.md)
 
 -   __Self-Contained HTML Reports__
 

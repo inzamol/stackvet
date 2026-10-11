@@ -14,10 +14,10 @@ This guide walks you through publishing **StackVet** to both the **npm Registry*
    - [Verifying npm Installation](#d-verifying-npm-installation)
 3. [Publishing to PyPI](#3-publishing-to-pypi)
    - [Prerequisites](#a-prerequisites-pypi)
-   - [Automated Publishing via GitHub Actions (Recommended)](#b-automated-publishing-via-github-actions-1)
-   - [Manual Publishing via CLI](#c-manual-publishing-via-cli-1)
+   - [Automated Publishing via GitHub Actions (Recommended)](#b-automated-publishing-via-github-actions-pypi)
+   - [Manual Publishing via CLI](#c-manual-publishing-via-cli-pypi)
    - [Verifying PyPI Installation](#d-verifying-pypi-installation)
-4. [Troubleshooting & FAQs](#4-troubleshooting--faqs)
+4. [Troubleshooting & FAQs](#4-troubleshooting-faqs)
 
 ---
 
@@ -53,7 +53,7 @@ StackVet's npm distribution is located in `packages/npm/` and ships a cross-plat
 
 ### B. Automated Publishing via GitHub Actions
 
-The repository includes a ready-to-run workflow at [`.github/workflows/publish-npm.yml`](../.github/workflows/publish-npm.yml).
+The repository includes a ready-to-run workflow at [`.github/workflows/publish-npm.yml`](https://github.com/inzamol/stackvet/blob/main/.github/workflows/publish-npm.yml).
 
 #### Step 1: Configure GitHub Secret
 1. Open your repository on GitHub.
@@ -131,9 +131,9 @@ StackVet uses [Maturin](https://www.maturin.rs/) (`bindings = "bin"`) to build n
 
 ---
 
-### B. Automated Publishing via GitHub Actions
+### B. Automated Publishing via GitHub Actions (PyPI)
 
-The repository includes a multi-platform build workflow at [`.github/workflows/publish-pypi.yml`](../.github/workflows/publish-pypi.yml).
+The repository includes a multi-platform build workflow at [`.github/workflows/publish-pypi.yml`](https://github.com/inzamol/stackvet/blob/main/.github/workflows/publish-pypi.yml).
 
 It uses PyPI's modern **Trusted Publishing (OIDC)**, eliminating the need to store long-lived API tokens.
 
@@ -167,7 +167,7 @@ GitHub Actions will automatically:
 
 ---
 
-### C. Manual Publishing via CLI
+### C. Manual Publishing via CLI (PyPI)
 
 To manually build and upload the current platform's wheel and sdist:
 
