@@ -27,8 +27,8 @@ impl ProjectScanner {
         let mut result = ScanResult::default();
 
         let walker = WalkBuilder::new(&self.root)
-            .hidden(true)
-            .parents(true)
+            .hidden(false)
+            .parents(false)
             .git_ignore(true)
             .filter_entry(|entry| {
                 let name = entry.file_name().to_string_lossy();

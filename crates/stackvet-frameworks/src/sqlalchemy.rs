@@ -25,7 +25,10 @@ impl SqlAlchemyAnalyzer {
         let lines: Vec<&str> = content.lines().collect();
 
         // SQL-008: create_engine missing pool_pre_ping=True
-        if content.contains("create_engine(") && !content.contains("pool_pre_ping=True") {
+        let has_pool_pre_ping = lines
+            .iter()
+            .any(|l| !l.trim().starts_with('#') && l.contains("pool_pre_ping=True"));
+        if content.contains("create_engine(") && !has_pool_pre_ping {
             for (idx, line) in lines.iter().enumerate() {
                 if line.contains("create_engine(") && !line.contains("sqlite") {
                     diags.push(

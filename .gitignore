@@ -120,4 +120,4 @@ desktop.ini
 tests/fixtures/**/*.log
 tests/fixtures/**/.stackvet.toml
 tests/fixtures/**/.stackvet-baseline.json
-tests/fixtures/**/.github/
+

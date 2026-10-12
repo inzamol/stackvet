@@ -19,9 +19,16 @@ impl CeleryAnalyzer {
 
         let lines: Vec<&str> = content.lines().collect();
 
+        let is_test_file = path
+            .file_name()
+            .map(|s| s.to_string_lossy())
+            .map_or(false, |name| {
+                name.starts_with("test_") || name.ends_with("_test.py") || name == "tests.py"
+            });
+
         // CEL-001: task.apply() called synchronously
         for (idx, line) in lines.iter().enumerate() {
-            if line.contains(".apply(") && !line.contains(".apply_async(") && !line.contains("def ") && !path.to_string_lossy().contains("test") {
+            if line.contains(".apply(") && !line.contains(".apply_async(") && !line.contains("def ") && !is_test_file {
                 diags.push(
                     Diagnostic::builder("CEL-001", Severity::Warning, LanguageTarget::Python)
                         .message("Synchronous task execution using task.apply() instead of asynchronous .delay() or .apply_async()")
