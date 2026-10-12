@@ -13,7 +13,10 @@ impl CeleryAnalyzer {
     }
 
     fn check_celery_file(&self, path: &Path, content: &str, diags: &mut Vec<Diagnostic>) {
-        if !content.contains("celery") && !content.contains("@app.task") && !content.contains("@shared_task") {
+        if !content.contains("celery")
+            && !content.contains("@app.task")
+            && !content.contains("@shared_task")
+        {
             return;
         }
 
@@ -28,7 +31,11 @@ impl CeleryAnalyzer {
 
         // CEL-001: task.apply() called synchronously
         for (idx, line) in lines.iter().enumerate() {
-            if line.contains(".apply(") && !line.contains(".apply_async(") && !line.contains("def ") && !is_test_file {
+            if line.contains(".apply(")
+                && !line.contains(".apply_async(")
+                && !line.contains("def ")
+                && !is_test_file
+            {
                 diags.push(
                     Diagnostic::builder("CEL-001", Severity::Warning, LanguageTarget::Python)
                         .message("Synchronous task execution using task.apply() instead of asynchronous .delay() or .apply_async()")

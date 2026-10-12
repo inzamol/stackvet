@@ -1,6 +1,6 @@
 use anyhow::Result;
 use ignore::WalkBuilder;
-use stackvet_core::{ProjectContext};
+use stackvet_core::ProjectContext;
 use std::path::{Path, PathBuf};
 
 pub struct ProjectScanner {
@@ -62,7 +62,10 @@ impl ProjectScanner {
                 }
 
                 // Check GitHub Actions / CI workflows
-                if path.to_string_lossy().replace('\\', "/").contains(".github/workflows")
+                if path
+                    .to_string_lossy()
+                    .replace('\\', "/")
+                    .contains(".github/workflows")
                     && (file_name.ends_with(".yml") || file_name.ends_with(".yaml"))
                 {
                     result.ci_workflows.push(path.clone());

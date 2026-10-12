@@ -32,9 +32,24 @@ impl Reporter {
         let mut out = String::new();
 
         out.push_str("\n");
-        out.push_str(&"=======================================================================\n".cyan().bold().to_string());
-        out.push_str(&"                StackVet Universal Project Health Report               \n".cyan().bold().to_string());
-        out.push_str(&"=======================================================================\n\n".cyan().bold().to_string());
+        out.push_str(
+            &"=======================================================================\n"
+                .cyan()
+                .bold()
+                .to_string(),
+        );
+        out.push_str(
+            &"                StackVet Universal Project Health Report               \n"
+                .cyan()
+                .bold()
+                .to_string(),
+        );
+        out.push_str(
+            &"=======================================================================\n\n"
+                .cyan()
+                .bold()
+                .to_string(),
+        );
 
         // Score Card
         let score_colored = match score {
@@ -48,20 +63,45 @@ impl Reporter {
         out.push_str(&format!("  Overall Grade: {}\n\n", grade.bold()));
 
         // Counts
-        let criticals = diagnostics.iter().filter(|d| d.severity == Severity::Critical).count();
-        let errors = diagnostics.iter().filter(|d| d.severity == Severity::Error).count();
-        let warnings = diagnostics.iter().filter(|d| d.severity == Severity::Warning).count();
+        let criticals = diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Critical)
+            .count();
+        let errors = diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .count();
+        let warnings = diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Warning)
+            .count();
 
         out.push_str(&format!(
             "  Critical: {}  |  Errors: {}  |  Warnings: {}\n\n",
-            if criticals > 0 { criticals.to_string().red().bold() } else { "0".green() },
-            if errors > 0 { errors.to_string().red() } else { "0".green() },
-            if warnings > 0 { warnings.to_string().yellow() } else { "0".green() }
+            if criticals > 0 {
+                criticals.to_string().red().bold()
+            } else {
+                "0".green()
+            },
+            if errors > 0 {
+                errors.to_string().red()
+            } else {
+                "0".green()
+            },
+            if warnings > 0 {
+                warnings.to_string().yellow()
+            } else {
+                "0".green()
+            }
         ));
 
         // Root causes section
         if !root_causes.is_empty() {
-            out.push_str(&format!("--- Root Cause Clusters ({}) ---\n", root_causes.len()).bold().to_string());
+            out.push_str(
+                &format!("--- Root Cause Clusters ({}) ---\n", root_causes.len())
+                    .bold()
+                    .to_string(),
+            );
             for (idx, rc) in root_causes.iter().enumerate() {
                 let sev_badge = match rc.impact_severity {
                     Severity::Critical => "[CRITICAL]".red().bold(),
@@ -71,7 +111,10 @@ impl Reporter {
                 };
                 out.push_str(&format!("{}. {} {}\n", idx + 1, sev_badge, rc.title.bold()));
                 out.push_str(&format!("   Summary: {}\n", rc.summary));
-                out.push_str(&format!("   Remediation: {}\n", rc.primary_remediation.cyan()));
+                out.push_str(&format!(
+                    "   Remediation: {}\n",
+                    rc.primary_remediation.cyan()
+                ));
                 out.push_str(&format!("   Symptoms Count: {}\n\n", rc.symptoms.len()));
             }
         }
@@ -119,7 +162,12 @@ impl Reporter {
             out.push_str(&table.to_string());
             out.push_str("\n\n");
         } else {
-            out.push_str(&"No issues found! Your project stack is pristine.\n\n".green().bold().to_string());
+            out.push_str(
+                &"No issues found! Your project stack is pristine.\n\n"
+                    .green()
+                    .bold()
+                    .to_string(),
+            );
         }
 
         out
@@ -154,10 +202,7 @@ impl Reporter {
                 };
 
                 let start_line = d.location.span.as_ref().map(|s| s.start_line).unwrap_or(1);
-                let raw_uri = d
-                    .location
-                    .file_path
-                    .to_string_lossy();
+                let raw_uri = d.location.file_path.to_string_lossy();
                 let uri = raw_uri.replace(r"\\?\", "").replace('\\', "/");
 
                 serde_json::json!({

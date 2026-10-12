@@ -144,7 +144,9 @@ impl Analyzer for ImportsArchAnalyzer {
                     let imports = parse_node_imports(&content, file);
                     for imp in imports {
                         if imp.specifier.starts_with('.') {
-                            if let Some(target_file) = Self::resolve_local_import(file, &imp.specifier) {
+                            if let Some(target_file) =
+                                Self::resolve_local_import(file, &imp.specifier)
+                            {
                                 let target_rel = target_file
                                     .strip_prefix(&ctx.root)
                                     .unwrap_or(&target_file)
@@ -227,12 +229,18 @@ impl Analyzer for ImportsArchAnalyzer {
         }
 
         // ARC-001: Layer Violation (e.g. database importing api)
-        for (from, to) in [("db", "api"), ("models", "routes"), ("database", "controllers")] {
+        for (from, to) in [
+            ("db", "api"),
+            ("models", "routes"),
+            ("database", "controllers"),
+        ] {
             for file_str in &all_source_files {
                 if file_str.contains(&format!("/{}/", from)) {
                     // Check outgoing imports
                     for target_file in &all_source_files {
-                        if target_file.contains(&format!("/{}/", to)) && graph.find_cycles().is_empty() {
+                        if target_file.contains(&format!("/{}/", to))
+                            && graph.find_cycles().is_empty()
+                        {
                             // If from imports target
                             // check if there's an edge
                         }

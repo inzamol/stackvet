@@ -12,7 +12,13 @@ impl DockerAnalyzer {
         Self
     }
 
-    fn analyze_dockerfile(&self, path: &Path, content: &str, diags: &mut Vec<Diagnostic>, root: &Path) {
+    fn analyze_dockerfile(
+        &self,
+        path: &Path,
+        content: &str,
+        diags: &mut Vec<Diagnostic>,
+        root: &Path,
+    ) {
         let lines: Vec<&str> = content.lines().collect();
         let mut has_user_instruction = false;
         let mut has_healthcheck = false;
@@ -23,7 +29,9 @@ impl DockerAnalyzer {
         let mut has_python_unbuffered = false;
         let mut has_python_dontwritebytecode = false;
 
-        let web_keywords = ["uvicorn", "gunicorn", "fastapi", "flask", "django", "next", "vite"];
+        let web_keywords = [
+            "uvicorn", "gunicorn", "fastapi", "flask", "django", "next", "vite",
+        ];
 
         // DOC-003: Missing .dockerignore
         let dockerignore = path.parent().unwrap_or(root).join(".dockerignore");
@@ -115,15 +123,25 @@ impl DockerAnalyzer {
                 diags.push(
                     Diagnostic::builder("DOC-007", Severity::Warning, LanguageTarget::Docker)
                         .message("apt-get install without cleaning /var/lib/apt/lists/*")
-                        .location(DiagnosticLocation::new(path.to_path_buf()).with_span(TextSpan::single_line(line_num, 1, 1)))
-                        .explanation("Uncleaned apt package lists bloat the Docker image layer cache.")
-                        .remediation("Append '&& rm -rf /var/lib/apt/lists/*' to the apt-get RUN command.")
+                        .location(
+                            DiagnosticLocation::new(path.to_path_buf())
+                                .with_span(TextSpan::single_line(line_num, 1, 1)),
+                        )
+                        .explanation(
+                            "Uncleaned apt package lists bloat the Docker image layer cache.",
+                        )
+                        .remediation(
+                            "Append '&& rm -rf /var/lib/apt/lists/*' to the apt-get RUN command.",
+                        )
                         .build(),
                 );
             }
 
             // DOC-008: pip install without --no-cache-dir
-            if upper.contains("PIP INSTALL") && !upper.contains("--NO-CACHE-DIR") && !upper.contains("PIP_NO_CACHE_DIR") {
+            if upper.contains("PIP INSTALL")
+                && !upper.contains("--NO-CACHE-DIR")
+                && !upper.contains("PIP_NO_CACHE_DIR")
+            {
                 diags.push(
                     Diagnostic::builder("DOC-008", Severity::Warning, LanguageTarget::Docker)
                         .message("pip install without --no-cache-dir")
@@ -135,7 +153,12 @@ impl DockerAnalyzer {
             }
 
             // DOC-012: ADD used instead of COPY
-            if upper.starts_with("ADD ") && !trimmed.contains(".tar") && !trimmed.contains(".gz") && !trimmed.contains("http://") && !trimmed.contains("https://") {
+            if upper.starts_with("ADD ")
+                && !trimmed.contains(".tar")
+                && !trimmed.contains(".gz")
+                && !trimmed.contains("http://")
+                && !trimmed.contains("https://")
+            {
                 diags.push(
                     Diagnostic::builder("DOC-012", Severity::Warning, LanguageTarget::Docker)
                         .message("Use COPY instead of ADD for local files")
@@ -162,7 +185,11 @@ impl DockerAnalyzer {
             if upper.starts_with("COPY . .") || upper.starts_with("COPY . /") {
                 found_copy = true;
             }
-            if found_copy && (upper.contains("PIP INSTALL") || upper.contains("PNPM INSTALL") || upper.contains("NPM INSTALL")) {
+            if found_copy
+                && (upper.contains("PIP INSTALL")
+                    || upper.contains("PNPM INSTALL")
+                    || upper.contains("NPM INSTALL"))
+            {
                 has_copy_before_deps = true;
             }
         }

@@ -34,7 +34,9 @@ impl DjangoAnalyzer {
 
             // DJG-002: Hardcoded django-insecure SECRET_KEY
             for (idx, line) in lines.iter().enumerate() {
-                if line.contains("django-insecure-") || (line.contains("SECRET_KEY = '") && line.len() < 30) {
+                if line.contains("django-insecure-")
+                    || (line.contains("SECRET_KEY = '") && line.len() < 30)
+                {
                     diags.push(
                         Diagnostic::builder("DJG-002", Severity::Critical, LanguageTarget::Python)
                             .message("Insecure default or hardcoded SECRET_KEY in Django settings")
@@ -49,7 +51,10 @@ impl DjangoAnalyzer {
 
             // DJG-003: ALLOWED_HOSTS = ['*']
             for (idx, line) in lines.iter().enumerate() {
-                if (line.contains("ALLOWED_HOSTS = ['*']") || line.contains("ALLOWED_HOSTS = [\"*\"]")) && !content.contains("DEBUG = True") {
+                if (line.contains("ALLOWED_HOSTS = ['*']")
+                    || line.contains("ALLOWED_HOSTS = [\"*\"]"))
+                    && !content.contains("DEBUG = True")
+                {
                     diags.push(
                         Diagnostic::builder("DJG-003", Severity::Error, LanguageTarget::Python)
                             .message("Wildcard ALLOWED_HOSTS = ['*'] configured in production")
@@ -63,7 +68,9 @@ impl DjangoAnalyzer {
             }
 
             // DJG-004: Insecure cookie settings
-            if content.contains("SESSION_COOKIE_SECURE = False") || content.contains("CSRF_COOKIE_SECURE = False") {
+            if content.contains("SESSION_COOKIE_SECURE = False")
+                || content.contains("CSRF_COOKIE_SECURE = False")
+            {
                 diags.push(
                     Diagnostic::builder("DJG-004", Severity::Error, LanguageTarget::Python)
                         .message("Insecure cookie configuration: Secure flag disabled for session or CSRF cookies")
@@ -105,7 +112,10 @@ impl Analyzer for DjangoAnalyzer {
         for file in &ctx.source_files {
             if file.extension().and_then(|s| s.to_str()) == Some("py") {
                 if let Ok(content) = fs::read_to_string(file) {
-                    if content.contains("django") || file.to_string_lossy().contains("settings") || file.to_string_lossy().contains("urls") {
+                    if content.contains("django")
+                        || file.to_string_lossy().contains("settings")
+                        || file.to_string_lossy().contains("urls")
+                    {
                         self.check_django_file(file, &content, &mut diagnostics);
                     }
                 }

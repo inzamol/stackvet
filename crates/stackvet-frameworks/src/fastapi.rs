@@ -26,7 +26,8 @@ impl FastApiAnalyzer {
 
         // FAP-004: Insecure CORS
         if content.contains("CORSMiddleware")
-            && (content.contains("allow_origins=[\"*\"]") || content.contains("allow_origins=['*']"))
+            && (content.contains("allow_origins=[\"*\"]")
+                || content.contains("allow_origins=['*']"))
             && content.contains("allow_credentials=True")
         {
             diags.push(
@@ -163,11 +164,9 @@ impl FastApiAnalyzer {
                         }
 
                         // FAP-003: Missing response_model / return type
-                        let has_response_model = call
-                            .arguments
-                            .keywords
-                            .iter()
-                            .any(|kw| kw.arg.as_ref().map(|a| a.as_str()) == Some("response_model"));
+                        let has_response_model = call.arguments.keywords.iter().any(|kw| {
+                            kw.arg.as_ref().map(|a| a.as_str()) == Some("response_model")
+                        });
                         let has_return_type = func.returns.is_some();
 
                         if !has_response_model && !has_return_type {
@@ -202,7 +201,10 @@ impl FastApiAnalyzer {
         // FAP-011: Mutable default parameter
         for arg in &func.parameters.args {
             if let Some(default) = &arg.default {
-                if matches!(default.as_ref(), Expr::List(_) | Expr::Dict(_) | Expr::Set(_)) {
+                if matches!(
+                    default.as_ref(),
+                    Expr::List(_) | Expr::Dict(_) | Expr::Set(_)
+                ) {
                     let offset = usize::from(func.range.start());
                     let line = content[..offset.min(content.len())].matches('\n').count() + 1;
                     diags.push(
@@ -236,7 +238,8 @@ impl FastApiAnalyzer {
                         if let Expr::Name(n) = &*call.func {
                             if n.id.as_str() == "open" {
                                 let offset = usize::from(with_stmt.range.start());
-                                let line = content[..offset.min(content.len())].matches('\n').count() + 1;
+                                let line =
+                                    content[..offset.min(content.len())].matches('\n').count() + 1;
                                 diags.push(
                                     Diagnostic::builder("FAP-015", Severity::Error, LanguageTarget::Python)
                                         .message("Synchronous file I/O with open() inside async route handler")
@@ -261,7 +264,8 @@ impl FastApiAnalyzer {
                                 || (obj.id.as_str() == "subprocess")
                             {
                                 let offset = usize::from(expr_stmt.range.start());
-                                let line = content[..offset.min(content.len())].matches('\n').count() + 1;
+                                let line =
+                                    content[..offset.min(content.len())].matches('\n').count() + 1;
                                 diags.push(
                                     Diagnostic::builder("FAP-001", Severity::Critical, LanguageTarget::Python)
                                         .message(format!(
