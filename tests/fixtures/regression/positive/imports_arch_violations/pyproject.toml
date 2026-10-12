@@ -1,0 +1,4 @@
+[project]
+name = "imports-arch-violations"
+version = "0.1.0"
+dependencies = []

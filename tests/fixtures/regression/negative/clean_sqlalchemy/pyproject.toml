@@ -1,0 +1,6 @@
+[project]
+name = "clean-sqlalchemy"
+version = "0.1.0"
+dependencies = [
+    "sqlalchemy>=2.0.0",
+]
