@@ -55,7 +55,10 @@ pub enum Commands {
         #[arg(help = "Target project directory [default: .]")]
         path: Option<PathBuf>,
 
-        #[arg(long, help = "Fail with exit code 1 if health score is below threshold")]
+        #[arg(
+            long,
+            help = "Fail with exit code 1 if health score is below threshold"
+        )]
         min_score: Option<u32>,
     },
 
@@ -100,7 +103,10 @@ pub enum Commands {
         #[arg(long, help = "Automatically apply all safe fixes without confirmation")]
         yes: bool,
 
-        #[arg(long, help = "Preview proposed changes and diffs without modifying files")]
+        #[arg(
+            long,
+            help = "Preview proposed changes and diffs without modifying files"
+        )]
         dry_run: bool,
 
         #[arg(long, help = "Rollback the last applied auto-fix session")]
@@ -133,7 +139,10 @@ pub enum Commands {
         #[arg(help = "Target project directory [default: .]")]
         path: Option<PathBuf>,
 
-        #[arg(long, help = "Generate GitHub Actions CI workflow (.github/workflows/stackvet.yml)")]
+        #[arg(
+            long,
+            help = "Generate GitHub Actions CI workflow (.github/workflows/stackvet.yml)"
+        )]
         ci: bool,
     },
 
@@ -154,7 +163,12 @@ pub enum BaselineAction {
         #[arg(help = "Target project directory [default: .]")]
         path: Option<PathBuf>,
 
-        #[arg(short, long, default_value = ".stackvet-baseline.json", help = "Output baseline filepath")]
+        #[arg(
+            short,
+            long,
+            default_value = ".stackvet-baseline.json",
+            help = "Output baseline filepath"
+        )]
         output: PathBuf,
     },
 
@@ -163,7 +177,12 @@ pub enum BaselineAction {
         #[arg(help = "Target project directory [default: .]")]
         path: Option<PathBuf>,
 
-        #[arg(short, long, default_value = ".stackvet-baseline.json", help = "Baseline filepath to check against")]
+        #[arg(
+            short,
+            long,
+            default_value = ".stackvet-baseline.json",
+            help = "Baseline filepath to check against"
+        )]
         baseline: PathBuf,
 
         #[arg(long, help = "Treat warnings as errors")]
@@ -194,7 +213,10 @@ fn build_full_context(root: &Path) -> Result<ProjectContext> {
     Ok(ctx)
 }
 
-fn collect_all_diagnostics(ctx: &ProjectContext, offline: bool) -> Result<Vec<stackvet_core::Diagnostic>> {
+fn collect_all_diagnostics(
+    ctx: &ProjectContext,
+    offline: bool,
+) -> Result<Vec<stackvet_core::Diagnostic>> {
     let mut diagnostics = run_all_analyzers(ctx, offline)?;
     let mut fw_diags = run_all_framework_analyzers(ctx)?;
     diagnostics.append(&mut fw_diags);
@@ -256,9 +278,19 @@ fn print_rules_catalog(filter_term: Option<&str>) {
 
 fn print_rule_explanation(rule_id: &str) {
     if let Some(rule) = get_rule_meta(rule_id) {
-        println!("\n{}", "=======================================================================".cyan());
-        println!("  Rule Details: {} - {}", rule.id.bold().cyan(), rule.title.bold());
-        println!("{}\n", "=======================================================================".cyan());
+        println!(
+            "\n{}",
+            "=======================================================================".cyan()
+        );
+        println!(
+            "  Rule Details: {} - {}",
+            rule.id.bold().cyan(),
+            rule.title.bold()
+        );
+        println!(
+            "{}\n",
+            "=======================================================================".cyan()
+        );
 
         let sev_badge = match rule.severity {
             "CRITICAL" => "[CRITICAL]".red().bold(),
@@ -276,9 +308,12 @@ fn print_rule_explanation(rule_id: &str) {
     } else {
         eprintln!(
             "{}",
-            format!("Error: Unknown rule ID '{}'. Run 'stackvet rules' to browse all available rules.", rule_id)
-                .red()
-                .bold()
+            format!(
+                "Error: Unknown rule ID '{}'. Run 'stackvet rules' to browse all available rules.",
+                rule_id
+            )
+            .red()
+            .bold()
         );
         exit(1);
     }
@@ -338,9 +373,15 @@ frameworks = true
 rules = []
 "#;
         fs::write(&config_file, default_config)?;
-        println!("Created configuration file: {}", config_file.display().to_string().green());
+        println!(
+            "Created configuration file: {}",
+            config_file.display().to_string().green()
+        );
     } else {
-        println!("Configuration file already exists: {}", config_file.display().to_string().yellow());
+        println!(
+            "Configuration file already exists: {}",
+            config_file.display().to_string().yellow()
+        );
     }
 
     if generate_ci {
@@ -381,7 +422,10 @@ jobs:
           sarif_file: stackvet.sarif
 "#;
         fs::write(&workflow_file, ci_content)?;
-        println!("Created GitHub Actions CI workflow: {}", workflow_file.display().to_string().green());
+        println!(
+            "Created GitHub Actions CI workflow: {}",
+            workflow_file.display().to_string().green()
+        );
     }
 
     println!("{}", "StackVet initialized successfully!".green().bold());
@@ -423,7 +467,12 @@ async fn main() -> Result<()> {
     let root = target_dir.canonicalize().unwrap_or(target_dir);
 
     if !root.exists() {
-        eprintln!("{}", format!("Error: Target path does not exist: {}", root.display()).red().bold());
+        eprintln!(
+            "{}",
+            format!("Error: Target path does not exist: {}", root.display())
+                .red()
+                .bold()
+        );
         exit(1);
     }
 
@@ -445,41 +494,77 @@ async fn main() -> Result<()> {
     match &cli.command {
         None | Some(Commands::Doctor { .. }) => {
             let output = match cli.format {
-                OutputFormat::Text => reporter.render_text(score, grade, &root_causes, &diagnostics),
-                OutputFormat::Json => reporter.render_json(score, grade, &root_causes, &diagnostics)?,
+                OutputFormat::Text => {
+                    reporter.render_text(score, grade, &root_causes, &diagnostics)
+                }
+                OutputFormat::Json => {
+                    reporter.render_json(score, grade, &root_causes, &diagnostics)?
+                }
                 OutputFormat::Sarif => reporter.render_sarif(&diagnostics)?,
-                OutputFormat::Html => reporter.render_html(score, grade, &root_causes, &diagnostics),
+                OutputFormat::Html => {
+                    reporter.render_html(score, grade, &root_causes, &diagnostics)
+                }
             };
             println!("{}", output);
 
-            if let Some(Commands::Doctor { min_score: Some(threshold), .. }) = &cli.command {
+            if let Some(Commands::Doctor {
+                min_score: Some(threshold),
+                ..
+            }) = &cli.command
+            {
                 if score < *threshold {
                     eprintln!(
                         "{}",
-                        format!("FAILED: Health score {} is below minimum threshold {}.", score, threshold)
-                            .red()
-                            .bold()
+                        format!(
+                            "FAILED: Health score {} is below minimum threshold {}.",
+                            score, threshold
+                        )
+                        .red()
+                        .bold()
                     );
                     exit(1);
                 }
             }
         }
         Some(Commands::Check { strict, .. }) => {
-            let errors = diagnostics.iter().filter(|d| d.severity == Severity::Error || d.severity == Severity::Critical).count();
-            let warnings = diagnostics.iter().filter(|d| d.severity == Severity::Warning).count();
+            let errors = diagnostics
+                .iter()
+                .filter(|d| d.severity == Severity::Error || d.severity == Severity::Critical)
+                .count();
+            let warnings = diagnostics
+                .iter()
+                .filter(|d| d.severity == Severity::Warning)
+                .count();
 
             if cli.format == OutputFormat::Text {
                 if errors == 0 && (!*strict || warnings == 0) {
-                    println!("{}", "✓ CI Check Passed: No critical issues or errors.".green().bold());
+                    println!(
+                        "{}",
+                        "✓ CI Check Passed: No critical issues or errors."
+                            .green()
+                            .bold()
+                    );
                     exit(0);
                 } else {
                     eprintln!(
                         "{}",
-                        format!("✗ CI Check Failed: {} error(s), {} warning(s).", errors, warnings).red().bold()
+                        format!(
+                            "✗ CI Check Failed: {} error(s), {} warning(s).",
+                            errors, warnings
+                        )
+                        .red()
+                        .bold()
                     );
                     for d in &diagnostics {
-                        if d.severity >= Severity::Error || (*strict && d.severity >= Severity::Warning) {
-                            eprintln!("  [{}] {}: {}", d.severity.as_str().red(), d.rule_id.as_str().cyan(), d.message);
+                        if d.severity >= Severity::Error
+                            || (*strict && d.severity >= Severity::Warning)
+                        {
+                            eprintln!(
+                                "  [{}] {}: {}",
+                                d.severity.as_str().red(),
+                                d.rule_id.as_str().cyan(),
+                                d.message
+                            );
                         }
                     }
                     exit(1);
@@ -504,7 +589,12 @@ async fn main() -> Result<()> {
 
             println!("\n{}", "--- Detailed Deep Inspection ---".cyan().bold());
             for d in &filtered {
-                println!("\n[{}] {} ({})", d.severity.as_str().red().bold(), d.rule_id.0.cyan().bold(), d.language.as_str());
+                println!(
+                    "\n[{}] {} ({})",
+                    d.severity.as_str().red().bold(),
+                    d.rule_id.0.cyan().bold(),
+                    d.language.as_str()
+                );
                 println!("  Location: {}", d.location.file_path.display());
                 if let Some(span) = &d.location.span {
                     println!("  Line: {}", span.start_line);
@@ -627,66 +717,94 @@ async fn main() -> Result<()> {
             };
             println!("{}", rendered);
         }
-        Some(Commands::Baseline { action }) => match action {
-            BaselineAction::Record { output, .. } => {
-                let baseline_file = if output.is_absolute() {
-                    output.clone()
-                } else if output.parent().map(|p| p.as_os_str().is_empty()).unwrap_or(true) {
-                    root.join(output)
-                } else {
-                    output.clone()
-                };
-                let baseline_data = BaselineData::from_diagnostics(&diagnostics);
-                baseline_data.save_to_file(&baseline_file)?;
-                println!(
-                    "{}",
-                    format!(
-                        "Baseline recorded successfully with {} issue fingerprint(s) to '{}'.",
-                        baseline_data.issue_fingerprints.len(),
-                        baseline_file.display()
-                    )
-                    .green()
-                    .bold()
-                );
-            }
-            BaselineAction::Verify { baseline, strict, .. } => {
-                let baseline_file = if baseline.is_absolute() || baseline.is_file() {
-                    baseline.clone()
-                } else {
-                    root.join(baseline)
-                };
-                if !baseline_file.is_file() {
-                    eprintln!("{}", format!("Baseline file not found: '{}'. Run 'stackvet baseline record' first.", baseline_file.display()).red().bold());
-                    exit(1);
+        Some(Commands::Baseline { action }) => {
+            match action {
+                BaselineAction::Record { output, .. } => {
+                    let baseline_file = if output.is_absolute() {
+                        output.clone()
+                    } else if output
+                        .parent()
+                        .map(|p| p.as_os_str().is_empty())
+                        .unwrap_or(true)
+                    {
+                        root.join(output)
+                    } else {
+                        output.clone()
+                    };
+                    let baseline_data = BaselineData::from_diagnostics(&diagnostics);
+                    baseline_data.save_to_file(&baseline_file)?;
+                    println!(
+                        "{}",
+                        format!(
+                            "Baseline recorded successfully with {} issue fingerprint(s) to '{}'.",
+                            baseline_data.issue_fingerprints.len(),
+                            baseline_file.display()
+                        )
+                        .green()
+                        .bold()
+                    );
                 }
+                BaselineAction::Verify {
+                    baseline, strict, ..
+                } => {
+                    let baseline_file = if baseline.is_absolute() || baseline.is_file() {
+                        baseline.clone()
+                    } else {
+                        root.join(baseline)
+                    };
+                    if !baseline_file.is_file() {
+                        eprintln!("{}", format!("Baseline file not found: '{}'. Run 'stackvet baseline record' first.", baseline_file.display()).red().bold());
+                        exit(1);
+                    }
 
-                let baseline_data = BaselineData::load_from_file(&baseline_file)?;
-                let new_issues = baseline_data.filter_new_issues(diagnostics);
+                    let baseline_data = BaselineData::load_from_file(&baseline_file)?;
+                    let new_issues = baseline_data.filter_new_issues(diagnostics);
 
-                if new_issues.is_empty() {
-                    println!("{}", "✓ Baseline Verified: No new regressions detected.".green().bold());
-                    exit(0);
-                } else {
-                    let errors = new_issues.iter().filter(|d| d.severity >= Severity::Error).count();
-                    let warnings = new_issues.iter().filter(|d| d.severity == Severity::Warning).count();
+                    if new_issues.is_empty() {
+                        println!(
+                            "{}",
+                            "✓ Baseline Verified: No new regressions detected."
+                                .green()
+                                .bold()
+                        );
+                        exit(0);
+                    } else {
+                        let errors = new_issues
+                            .iter()
+                            .filter(|d| d.severity >= Severity::Error)
+                            .count();
+                        let warnings = new_issues
+                            .iter()
+                            .filter(|d| d.severity == Severity::Warning)
+                            .count();
 
-                    eprintln!(
+                        eprintln!(
                         "{}",
                         format!("✗ Baseline Regression Detected: {} new error(s), {} new warning(s).", errors, warnings).red().bold()
                     );
-                    for d in &new_issues {
-                        if d.severity >= Severity::Error || (*strict && d.severity >= Severity::Warning) {
-                            eprintln!("  [{}] {}: {}", d.severity.as_str().red(), d.rule_id.as_str().cyan(), d.message);
+                        for d in &new_issues {
+                            if d.severity >= Severity::Error
+                                || (*strict && d.severity >= Severity::Warning)
+                            {
+                                eprintln!(
+                                    "  [{}] {}: {}",
+                                    d.severity.as_str().red(),
+                                    d.rule_id.as_str().cyan(),
+                                    d.message
+                                );
+                            }
                         }
-                    }
 
-                    if errors > 0 || (*strict && warnings > 0) {
-                        exit(1);
+                        if errors > 0 || (*strict && warnings > 0) {
+                            exit(1);
+                        }
                     }
                 }
             }
-        },
-        Some(Commands::Explain { .. }) | Some(Commands::Rules { .. }) | Some(Commands::Init { .. }) => {
+        }
+        Some(Commands::Explain { .. })
+        | Some(Commands::Rules { .. })
+        | Some(Commands::Init { .. }) => {
             // Handled above
         }
     }

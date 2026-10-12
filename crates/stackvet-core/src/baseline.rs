@@ -1,9 +1,9 @@
+use crate::Diagnostic;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
-use crate::Diagnostic;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BaselineData {
@@ -33,7 +33,9 @@ impl BaselineData {
     pub fn from_diagnostics(diagnostics: &[Diagnostic]) -> Self {
         let mut baseline = Self::new();
         for d in diagnostics {
-            baseline.issue_fingerprints.insert(Self::compute_fingerprint(d));
+            baseline
+                .issue_fingerprints
+                .insert(Self::compute_fingerprint(d));
         }
         baseline
     }
@@ -41,7 +43,11 @@ impl BaselineData {
     pub fn filter_new_issues(&self, diagnostics: Vec<Diagnostic>) -> Vec<Diagnostic> {
         diagnostics
             .into_iter()
-            .filter(|d| !self.issue_fingerprints.contains(&Self::compute_fingerprint(d)))
+            .filter(|d| {
+                !self
+                    .issue_fingerprints
+                    .contains(&Self::compute_fingerprint(d))
+            })
             .collect()
     }
 

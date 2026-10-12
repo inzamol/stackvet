@@ -28,10 +28,7 @@ pub fn parse_node_imports(content: &str, file: &Path) -> Vec<NodeImport> {
             if let ModuleDeclaration::ImportDeclaration(import_decl) = mod_decl {
                 let specifier = import_decl.source.value.to_string();
                 let offset = import_decl.span.start as usize;
-                let line = content[..offset.min(content.len())]
-                    .matches('\n')
-                    .count()
-                    + 1;
+                let line = content[..offset.min(content.len())].matches('\n').count() + 1;
                 imports.push(NodeImport {
                     specifier,
                     is_dynamic: false,
@@ -183,8 +180,14 @@ mod tests {
         let info = parse_package_json(content, Path::new("package.json")).unwrap();
         assert_eq!(info.package_manager, "pnpm");
         assert_eq!(info.node_version_constraint.as_deref(), Some(">=20.0.0"));
-        assert_eq!(info.dependencies.get("react").map(|s| s.as_str()), Some("^18.2.0"));
-        assert_eq!(info.dev_dependencies.get("vitest").map(|s| s.as_str()), Some("^1.4.0"));
+        assert_eq!(
+            info.dependencies.get("react").map(|s| s.as_str()),
+            Some("^18.2.0")
+        );
+        assert_eq!(
+            info.dev_dependencies.get("vitest").map(|s| s.as_str()),
+            Some("^1.4.0")
+        );
     }
 
     #[test]

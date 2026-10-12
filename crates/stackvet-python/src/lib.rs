@@ -24,10 +24,7 @@ pub fn parse_python_imports(content: &str, _file: &Path) -> Vec<PythonImport> {
             match stmt {
                 Stmt::Import(StmtImport { names, range, .. }) => {
                     let offset = usize::from(range.start());
-                    let line = content[..offset.min(content.len())]
-                        .matches('\n')
-                        .count()
-                        + 1;
+                    let line = content[..offset.min(content.len())].matches('\n').count() + 1;
                     for alias in names {
                         imports.push(PythonImport {
                             module: alias.name.to_string(),
@@ -45,10 +42,7 @@ pub fn parse_python_imports(content: &str, _file: &Path) -> Vec<PythonImport> {
                     ..
                 }) => {
                     let offset = usize::from(range.start());
-                    let line = content[..offset.min(content.len())]
-                        .matches('\n')
-                        .count()
-                        + 1;
+                    let line = content[..offset.min(content.len())].matches('\n').count() + 1;
                     let mod_name = module.map(|m| m.to_string()).unwrap_or_default();
                     for alias in names {
                         imports.push(PythonImport {

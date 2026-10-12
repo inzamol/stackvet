@@ -46,8 +46,16 @@ impl SqlAlchemyAnalyzer {
 
         // SQL-010: Hardcoded database credentials
         for (idx, line) in lines.iter().enumerate() {
-            if line.contains("postgresql://") || line.contains("mysql://") || line.contains("mysql+pymysql://") {
-                if line.contains(':') && line.contains('@') && !line.contains("os.environ") && !line.contains("os.getenv") && !line.contains("settings.") {
+            if line.contains("postgresql://")
+                || line.contains("mysql://")
+                || line.contains("mysql+pymysql://")
+            {
+                if line.contains(':')
+                    && line.contains('@')
+                    && !line.contains("os.environ")
+                    && !line.contains("os.getenv")
+                    && !line.contains("settings.")
+                {
                     diags.push(
                         Diagnostic::builder("SQL-010", Severity::Critical, LanguageTarget::Python)
                             .message("Plaintext database credentials hardcoded in connection URL")
@@ -63,8 +71,16 @@ impl SqlAlchemyAnalyzer {
 
         // SQL-004: Raw SQL string interpolation (SQL Injection Risk)
         for (idx, line) in lines.iter().enumerate() {
-            if (line.contains("execute(f\"") || line.contains("execute(f'") || line.contains("text(f\"") || line.contains("text(f'"))
-                && (line.contains("SELECT") || line.contains("INSERT") || line.contains("UPDATE") || line.contains("DELETE") || line.contains("select") || line.contains("where"))
+            if (line.contains("execute(f\"")
+                || line.contains("execute(f'")
+                || line.contains("text(f\"")
+                || line.contains("text(f'"))
+                && (line.contains("SELECT")
+                    || line.contains("INSERT")
+                    || line.contains("UPDATE")
+                    || line.contains("DELETE")
+                    || line.contains("select")
+                    || line.contains("where"))
             {
                 diags.push(
                     Diagnostic::builder("SQL-004", Severity::Critical, LanguageTarget::Python)
@@ -95,7 +111,9 @@ impl SqlAlchemyAnalyzer {
         // SQL-009: expire_on_commit=True in AsyncSession
         for (idx, line) in lines.iter().enumerate() {
             if (line.contains("AsyncSession") || line.contains("async_sessionmaker"))
-                && (line.contains("expire_on_commit=True") || (!content.contains("expire_on_commit=False") && line.contains("sessionmaker(")))
+                && (line.contains("expire_on_commit=True")
+                    || (!content.contains("expire_on_commit=False")
+                        && line.contains("sessionmaker(")))
             {
                 diags.push(
                     Diagnostic::builder("SQL-009", Severity::Error, LanguageTarget::Python)
@@ -151,7 +169,10 @@ impl SqlAlchemyAnalyzer {
                 let current_indent = line.chars().take_while(|c| c.is_whitespace()).count();
                 if current_indent <= loop_indent && !trimmed.is_empty() {
                     in_loop = false;
-                } else if trimmed.contains("session.execute(") || trimmed.contains("session.query(") || trimmed.contains(".filter(") {
+                } else if trimmed.contains("session.execute(")
+                    || trimmed.contains("session.query(")
+                    || trimmed.contains(".filter(")
+                {
                     diags.push(
                         Diagnostic::builder("SQL-001", Severity::Warning, LanguageTarget::Python)
                             .message("Potential N+1 database query executed inside loop")

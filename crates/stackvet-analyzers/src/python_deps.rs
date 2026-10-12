@@ -41,7 +41,8 @@ impl Analyzer for PythonDependencyAnalyzer {
             .collect();
 
         // 1. Scan all imports in python files
-        let mut imported_packages: HashMap<String, Vec<(&std::path::PathBuf, usize)>> = HashMap::new();
+        let mut imported_packages: HashMap<String, Vec<(&std::path::PathBuf, usize)>> =
+            HashMap::new();
 
         for file in &py_files {
             if let Ok(content) = fs::read_to_string(file) {
@@ -75,16 +76,9 @@ impl Analyzer for PythonDependencyAnalyzer {
         .into_iter()
         .collect();
 
-        let all_declared_direct: HashSet<String> = py_info
-            .direct_dependencies
-            .keys()
-            .cloned()
-            .collect();
-        let all_declared_dev: HashSet<String> = py_info
-            .dev_dependencies
-            .keys()
-            .cloned()
-            .collect();
+        let all_declared_direct: HashSet<String> =
+            py_info.direct_dependencies.keys().cloned().collect();
+        let all_declared_dev: HashSet<String> = py_info.dev_dependencies.keys().cloned().collect();
 
         // Check DEP-002: Missing Declaration & DEP-007: Transitive Dependency Import
         for (pkg_name, occurrences) in &imported_packages {
@@ -174,14 +168,22 @@ impl Analyzer for PythonDependencyAnalyzer {
         // Check DEP-003: Unused Dependency
         for (declared_pkg, _) in &py_info.direct_dependencies {
             let matches_import = imported_packages.contains_key(declared_pkg)
-                || import_to_pypi
-                    .iter()
-                    .any(|(imp, pypi)| *pypi == declared_pkg && imported_packages.contains_key(*imp));
+                || import_to_pypi.iter().any(|(imp, pypi)| {
+                    *pypi == declared_pkg && imported_packages.contains_key(*imp)
+                });
 
             // Whitelist common CLI / build / runner dependencies
             let cli_deps = [
-                "uvicorn", "gunicorn", "pytest", "black", "ruff", "mypy", "alembic",
-                "celery", "pre-commit", "watchfiles",
+                "uvicorn",
+                "gunicorn",
+                "pytest",
+                "black",
+                "ruff",
+                "mypy",
+                "alembic",
+                "celery",
+                "pre-commit",
+                "watchfiles",
             ];
             if !matches_import && !cli_deps.contains(&declared_pkg.as_str()) {
                 diagnostics.push(

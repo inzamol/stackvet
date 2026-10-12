@@ -86,8 +86,7 @@ impl ImportGraph {
         }
 
         for (from, to) in &self.edges {
-            if let (Some(f_id), Some(t_id)) = (id_map.get(from.as_str()), id_map.get(to.as_str()))
-            {
+            if let (Some(f_id), Some(t_id)) = (id_map.get(from.as_str()), id_map.get(to.as_str())) {
                 out.push_str(&format!("    {} --> {}\n", f_id, t_id));
             }
         }

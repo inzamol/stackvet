@@ -22,11 +22,7 @@ pub fn normalize_python_package_name(name: &str) -> String {
 }
 
 /// Injects dependency into pyproject.toml without altering existing formatting or comments
-pub fn add_dependency_to_pyproject(
-    content: &str,
-    package: &str,
-    version: &str,
-) -> Result<String> {
+pub fn add_dependency_to_pyproject(content: &str, package: &str, version: &str) -> Result<String> {
     let mut doc: DocumentMut = content
         .parse()
         .context("Failed to parse pyproject.toml for editing: invalid TOML syntax")?;
@@ -71,7 +67,9 @@ pub fn add_dependency_to_pyproject(
                 }
                 deps.push_formatted(val);
             } else {
-                anyhow::bail!("Failed to edit pyproject.toml: 'dependencies' in [project] is not an array");
+                anyhow::bail!(
+                    "Failed to edit pyproject.toml: 'dependencies' in [project] is not an array"
+                );
             }
         } else {
             let mut arr = Array::new();
@@ -82,28 +80,20 @@ pub fn add_dependency_to_pyproject(
         if let Some(poetry) = tool.get_mut("poetry").and_then(Item::as_table_mut) {
             if let Some(deps_item) = poetry.get_mut("dependencies") {
                 if let Some(deps) = deps_item.as_table_mut() {
-                    let already_has = deps.iter().any(|(k, _)| {
-                        normalize_python_package_name(k) == norm_pkg
-                    });
+                    let already_has = deps
+                        .iter()
+                        .any(|(k, _)| normalize_python_package_name(k) == norm_pkg);
                     if already_has {
                         return Ok(content.to_string());
                     }
-                    let ver_spec = if version.is_empty() {
-                        "*"
-                    } else {
-                        version
-                    };
+                    let ver_spec = if version.is_empty() { "*" } else { version };
                     deps.insert(package, Item::Value(Value::from(ver_spec)));
                 } else {
                     anyhow::bail!("Failed to edit pyproject.toml: 'dependencies' in [tool.poetry] is not a table");
                 }
             } else {
                 let mut deps_table = toml_edit::Table::new();
-                let ver_spec = if version.is_empty() {
-                    "*"
-                } else {
-                    version
-                };
+                let ver_spec = if version.is_empty() { "*" } else { version };
                 deps_table.insert(package, Item::Value(Value::from(ver_spec)));
                 poetry.insert("dependencies", Item::Table(deps_table));
             }
@@ -135,8 +125,8 @@ pub fn add_dependency_to_package_json(
     package: &str,
     version: &str,
 ) -> Result<String> {
-    let mut val: serde_json::Value =
-        serde_json::from_str(content).context("Failed to parse package.json: invalid JSON syntax")?;
+    let mut val: serde_json::Value = serde_json::from_str(content)
+        .context("Failed to parse package.json: invalid JSON syntax")?;
 
     let obj = val
         .as_object_mut()
@@ -184,8 +174,8 @@ pub fn add_dependency_to_package_json(
         out.push('\n');
     }
 
-    let _verify: serde_json::Value =
-        serde_json::from_str(&out).context("Auto-fix resulted in invalid JSON; changes reverted")?;
+    let _verify: serde_json::Value = serde_json::from_str(&out)
+        .context("Auto-fix resulted in invalid JSON; changes reverted")?;
     Ok(out)
 }
 
@@ -232,13 +222,13 @@ pub fn add_dependency_to_requirements_txt(
 }
 
 /// Applies a surgical span replacement to a text document
-pub fn apply_span_replacement(
-    content: &str,
-    span: &TextSpan,
-    replacement: &str,
-) -> Result<String> {
+pub fn apply_span_replacement(content: &str, span: &TextSpan, replacement: &str) -> Result<String> {
     if span.start_line == 0 || span.end_line < span.start_line {
-        anyhow::bail!("Invalid text span: lines {}-{}", span.start_line, span.end_line);
+        anyhow::bail!(
+            "Invalid text span: lines {}-{}",
+            span.start_line,
+            span.end_line
+        );
     }
 
     let mut char_offset = 0;
@@ -579,15 +569,23 @@ impl RemediationEngine {
             );
         }
 
-        let content = fs::read_to_string(&snapshot_path)
-            .with_context(|| format!("Failed to read rollback snapshot from {}", snapshot_path.display()))?;
-        let snapshot: RollbackSnapshot = serde_json::from_str(&content)
-            .context("Failed to parse rollback snapshot JSON")?;
+        let content = fs::read_to_string(&snapshot_path).with_context(|| {
+            format!(
+                "Failed to read rollback snapshot from {}",
+                snapshot_path.display()
+            )
+        })?;
+        let snapshot: RollbackSnapshot =
+            serde_json::from_str(&content).context("Failed to parse rollback snapshot JSON")?;
 
         let mut restored = Vec::new();
         for backup in snapshot.backups {
-            fs::write(&backup.path, &backup.original_content)
-                .with_context(|| format!("Failed to restore original content to {}", backup.path.display()))?;
+            fs::write(&backup.path, &backup.original_content).with_context(|| {
+                format!(
+                    "Failed to restore original content to {}",
+                    backup.path.display()
+                )
+            })?;
             restored.push(backup.path);
         }
 
@@ -626,7 +624,6 @@ mod tests {
 
     #[test]
     fn test_add_dependency_to_pyproject() {
-
         let original = r#"
 [project]
 name = "sample"
@@ -825,7 +822,11 @@ dependencies = []
         let engine = RemediationEngine::new();
         let fix1 = FixAction::new("Add fastapi", &file1, "fastapi");
         // Fix2 points to a non-existent file
-        let fix2 = FixAction::new("Add express", dir.path().join("non_existent.json"), "express");
+        let fix2 = FixAction::new(
+            "Add express",
+            dir.path().join("non_existent.json"),
+            "express",
+        );
 
         let res = engine.apply_fixes_transactional(&[fix1, fix2], Some(dir.path()));
         assert!(res.is_err());
@@ -848,7 +849,9 @@ dependencies = []
         let engine = RemediationEngine::new();
         let fix = FixAction::new("Add fastapi", &file1, "fastapi");
 
-        let report = engine.apply_fixes_transactional(&[fix], Some(dir.path())).unwrap();
+        let report = engine
+            .apply_fixes_transactional(&[fix], Some(dir.path()))
+            .unwrap();
         assert_eq!(report.applied_count, 1);
 
         let content_modified = fs::read_to_string(&file1).unwrap();
@@ -863,4 +866,3 @@ dependencies = []
         assert!(!engine.has_rollback_session(dir.path()));
     }
 }
-

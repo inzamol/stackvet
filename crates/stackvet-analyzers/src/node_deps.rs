@@ -44,7 +44,8 @@ impl Analyzer for NodeDependencyAnalyzer {
             .collect();
 
         // 1. Collect all imports
-        let mut imported_packages: HashMap<String, Vec<(&std::path::PathBuf, usize)>> = HashMap::new();
+        let mut imported_packages: HashMap<String, Vec<(&std::path::PathBuf, usize)>> =
+            HashMap::new();
 
         for file in &node_files {
             if let Ok(content) = fs::read_to_string(file) {
@@ -107,7 +108,12 @@ impl Analyzer for NodeDependencyAnalyzer {
             let matches_import = imported_packages.contains_key(dep_name);
             // Ignore build tools, type definitions or runtime plugins often in dependencies
             let whitelist = [
-                "react", "react-dom", "next", "tailwindcss", "postcss", "autoprefixer",
+                "react",
+                "react-dom",
+                "next",
+                "tailwindcss",
+                "postcss",
+                "autoprefixer",
                 "typescript",
             ];
             if !matches_import && !whitelist.contains(&dep_name.as_str()) {

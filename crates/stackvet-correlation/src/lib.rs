@@ -32,8 +32,9 @@ impl CorrelationEngine {
         let mut root_causes = Vec::new();
 
         // 1. Cluster circular imports
-        let (circular_diags, rest): (Vec<Diagnostic>, Vec<Diagnostic>) =
-            diagnostics.into_iter().partition(|d| d.rule_id.0 == "IMP-001");
+        let (circular_diags, rest): (Vec<Diagnostic>, Vec<Diagnostic>) = diagnostics
+            .into_iter()
+            .partition(|d| d.rule_id.0 == "IMP-001");
 
         if !circular_diags.is_empty() {
             root_causes.push(RootCause {
@@ -87,12 +88,19 @@ impl CorrelationEngine {
         }
 
         // 3. Cluster lockfile & environment drift (DEP-005, NDEP-004, ENV-001, ENV-002, ENV-003)
-        let (env_diags, others): (Vec<Diagnostic>, Vec<Diagnostic>) = remaining_diags
-            .into_iter()
-            .partition(|d| d.rule_id.0.starts_with("ENV-") || d.rule_id.0 == "DEP-005" || d.rule_id.0 == "NDEP-004");
+        let (env_diags, others): (Vec<Diagnostic>, Vec<Diagnostic>) =
+            remaining_diags.into_iter().partition(|d| {
+                d.rule_id.0.starts_with("ENV-")
+                    || d.rule_id.0 == "DEP-005"
+                    || d.rule_id.0 == "NDEP-004"
+            });
 
         if !env_diags.is_empty() {
-            let max_sev = env_diags.iter().map(|d| d.severity).max().unwrap_or(Severity::Warning);
+            let max_sev = env_diags
+                .iter()
+                .map(|d| d.severity)
+                .max()
+                .unwrap_or(Severity::Warning);
             root_causes.push(RootCause {
                 id: "RC-ENVIRONMENT-DRIFT".to_string(),
                 title: "Environment, Lockfile & Runtime Drift".to_string(),
@@ -123,7 +131,11 @@ impl CorrelationEngine {
         }
 
         for (fw_name, syms) in framework_map {
-            let max_sev = syms.iter().map(|d| d.severity).max().unwrap_or(Severity::Warning);
+            let max_sev = syms
+                .iter()
+                .map(|d| d.severity)
+                .max()
+                .unwrap_or(Severity::Warning);
             root_causes.push(RootCause {
                 id: format!("RC-FRAMEWORK-{}", fw_name.to_uppercase().replace([' ', '/'], "-")),
                 title: format!("{} Anti-Patterns & Concurrency Hazards", fw_name),
@@ -145,7 +157,11 @@ impl CorrelationEngine {
         }
 
         for (rule_id, syms) in rule_map {
-            let max_sev = syms.iter().map(|d| d.severity).max().unwrap_or(Severity::Info);
+            let max_sev = syms
+                .iter()
+                .map(|d| d.severity)
+                .max()
+                .unwrap_or(Severity::Info);
             let first_explanation = syms[0].explanation.clone();
             let first_remediation = syms[0].suggested_remediation.clone();
             let first_fix = syms.iter().find_map(|s| s.fix.clone());

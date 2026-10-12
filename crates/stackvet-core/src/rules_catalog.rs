@@ -1071,5 +1071,7 @@ pub static ALL_RULES: &[RuleMeta] = &[
 ];
 
 pub fn get_rule_meta(rule_id: &str) -> Option<&'static RuleMeta> {
-    ALL_RULES.iter().find(|r| r.id.eq_ignore_ascii_case(rule_id))
+    ALL_RULES
+        .iter()
+        .find(|r| r.id.eq_ignore_ascii_case(rule_id))
 }

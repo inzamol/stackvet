@@ -54,7 +54,10 @@ impl ReactAnalyzer {
                         .chars()
                         .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
                         .collect();
-                    if !var_name.is_empty() && !var_name.starts_with("NEXT_PUBLIC_") && var_name != "NODE_ENV" {
+                    if !var_name.is_empty()
+                        && !var_name.starts_with("NEXT_PUBLIC_")
+                        && var_name != "NODE_ENV"
+                    {
                         diags.push(
                             Diagnostic::builder("NXT-002", Severity::Critical, LanguageTarget::Node)
                                 .message(format!(
@@ -75,7 +78,10 @@ impl ReactAnalyzer {
 
         // RCT-005: Barrel Import Bloat
         for (idx, line) in content.lines().enumerate() {
-            if (line.contains("from '@mui/material'") || line.contains("from \"@mui/material\"") || line.contains("from 'lodash'") || line.contains("from \"lodash\""))
+            if (line.contains("from '@mui/material'")
+                || line.contains("from \"@mui/material\"")
+                || line.contains("from 'lodash'")
+                || line.contains("from \"lodash\""))
                 && !line.contains("import type")
             {
                 diags.push(
@@ -103,7 +109,11 @@ impl ReactAnalyzer {
                 let current_indent = line.chars().take_while(|c| c.is_whitespace()).count();
                 if current_indent <= if_indent && !trimmed.is_empty() && trimmed.starts_with('}') {
                     in_if = false;
-                } else if trimmed.starts_with("use") && (trimmed.contains("useState") || trimmed.contains("useEffect") || trimmed.contains("useMemo")) {
+                } else if trimmed.starts_with("use")
+                    && (trimmed.contains("useState")
+                        || trimmed.contains("useEffect")
+                        || trimmed.contains("useMemo"))
+                {
                     diags.push(
                         Diagnostic::builder("RCT-002", Severity::Error, LanguageTarget::Node)
                             .message("React Hook invoked conditionally inside if-statement")
@@ -118,10 +128,15 @@ impl ReactAnalyzer {
 
         // RCT-004: Missing Key in .map()
         for (idx, line) in lines.iter().enumerate() {
-            if line.contains(".map(") && (lines.get(idx + 1).map_or(false, |l| l.contains('<')) || line.contains('<')) {
+            if line.contains(".map(")
+                && (lines.get(idx + 1).map_or(false, |l| l.contains('<')) || line.contains('<'))
+            {
                 // If it renders JSX without key=
                 let check_block = format!("{} {}", line, lines.get(idx + 1).unwrap_or(&""));
-                if check_block.contains('<') && !check_block.contains("key=") && !check_block.contains("key={") {
+                if check_block.contains('<')
+                    && !check_block.contains("key=")
+                    && !check_block.contains("key={")
+                {
                     diags.push(
                         Diagnostic::builder("RCT-004", Severity::Warning, LanguageTarget::Node)
                             .message("JSX element in .map() loop is missing a unique 'key' prop")

@@ -5,7 +5,7 @@ use std::fmt;
 use std::path::PathBuf;
 
 pub mod rules_catalog;
-pub use rules_catalog::{ALL_RULES, RuleMeta, get_rule_meta};
+pub use rules_catalog::{get_rule_meta, RuleMeta, ALL_RULES};
 
 pub mod baseline;
 pub use baseline::BaselineData;
@@ -204,11 +204,7 @@ pub struct DiagnosticBuilder {
 }
 
 impl DiagnosticBuilder {
-    pub fn new(
-        rule_id: impl Into<String>,
-        severity: Severity,
-        language: LanguageTarget,
-    ) -> Self {
+    pub fn new(rule_id: impl Into<String>, severity: Severity, language: LanguageTarget) -> Self {
         Self {
             rule_id: RuleId::new(rule_id),
             message: None,
@@ -252,7 +248,9 @@ impl DiagnosticBuilder {
     }
 
     pub fn build(self) -> Diagnostic {
-        let location = self.location.unwrap_or_else(|| DiagnosticLocation::new("<unknown>"));
+        let location = self
+            .location
+            .unwrap_or_else(|| DiagnosticLocation::new("<unknown>"));
         Diagnostic {
             rule_id: self.rule_id,
             message: self.message.unwrap_or_default(),
@@ -274,7 +272,7 @@ pub struct PythonProjectInfo {
     pub lock_file: Option<PathBuf>,
     pub direct_dependencies: HashMap<String, String>, // name -> version requirement
     pub dev_dependencies: HashMap<String, String>,
-    pub installed_packages: HashMap<String, String>,   // if virtualenv detected
+    pub installed_packages: HashMap<String, String>, // if virtualenv detected
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

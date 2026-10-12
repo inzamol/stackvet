@@ -32,7 +32,11 @@ impl Analyzer for EnvDriftAnalyzer {
                     if let Ok(content) = fs::read_to_string(&py_version_file) {
                         let local_ver = content.trim();
                         // Check if local_ver contradicts target_py
-                        if target_py.contains("3.12") && (local_ver.starts_with("3.10") || local_ver.starts_with("3.9") || local_ver.starts_with("3.11")) {
+                        if target_py.contains("3.12")
+                            && (local_ver.starts_with("3.10")
+                                || local_ver.starts_with("3.9")
+                                || local_ver.starts_with("3.11"))
+                        {
                             diagnostics.push(
                                 Diagnostic::builder("ENV-001", Severity::Warning, LanguageTarget::Python)
                                     .message(format!(
@@ -59,7 +63,9 @@ impl Analyzer for EnvDriftAnalyzer {
                 if nvmrc_file.is_file() {
                     if let Ok(content) = fs::read_to_string(&nvmrc_file) {
                         let local_ver = content.trim();
-                        if target_node.contains("20") && (local_ver.starts_with("18") || local_ver.starts_with("16")) {
+                        if target_node.contains("20")
+                            && (local_ver.starts_with("18") || local_ver.starts_with("16"))
+                        {
                             diagnostics.push(
                                 Diagnostic::builder("ENV-001", Severity::Warning, LanguageTarget::Node)
                                     .message(format!(
@@ -118,7 +124,10 @@ impl Analyzer for EnvDriftAnalyzer {
             if let Ok(content) = fs::read_to_string(workflow) {
                 if let Some(py_info) = &ctx.python {
                     if let Some(req) = &py_info.requires_python {
-                        if req.contains("3.12") && (content.contains("\"3.10\"") || content.contains("'3.10'")) && !content.contains("3.12") {
+                        if req.contains("3.12")
+                            && (content.contains("\"3.10\"") || content.contains("'3.10'"))
+                            && !content.contains("3.12")
+                        {
                             diagnostics.push(
                                 Diagnostic::builder("ENV-003", Severity::Error, LanguageTarget::Ci)
                                     .message(format!(
