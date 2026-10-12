@@ -2053,6 +2053,7 @@ name = "stackvet-remediation"
 version = "0.1.2"
 dependencies = [
  "anyhow",
+ "serde",
  "serde_json",
  "stackvet-core",
  "toml_edit",

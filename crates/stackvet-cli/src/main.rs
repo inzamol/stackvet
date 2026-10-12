@@ -99,6 +99,12 @@ pub enum Commands {
 
         #[arg(long, help = "Automatically apply all safe fixes without confirmation")]
         yes: bool,
+
+        #[arg(long, help = "Preview proposed changes and diffs without modifying files")]
+        dry_run: bool,
+
+        #[arg(long, help = "Rollback the last applied auto-fix session")]
+        rollback: bool,
     },
 
     #[command(
@@ -512,16 +518,81 @@ async fn main() -> Result<()> {
             }
             println!();
         }
-        Some(Commands::Fix { yes, .. }) => {
+        Some(Commands::Fix {
+            yes,
+            dry_run,
+            rollback,
+            path,
+        }) => {
+            let root = path.as_deref().unwrap_or_else(|| Path::new("."));
+            let engine = RemediationEngine::new();
+
+            if *rollback {
+                if !engine.has_rollback_session(root) {
+                    println!(
+                        "{}",
+                        "No active rollback session found in target directory.".yellow()
+                    );
+                    return Ok(());
+                }
+                let restored = engine.rollback_session(root)?;
+                println!(
+                    "{}",
+                    format!("Successfully rolled back {} file(s):", restored.len())
+                        .green()
+                        .bold()
+                );
+                for p in restored {
+                    println!("  Restored: {}", p.display().to_string().cyan());
+                }
+                return Ok(());
+            }
+
             let fixable: Vec<_> = diagnostics.iter().filter_map(|d| d.fix.clone()).collect();
             if fixable.is_empty() {
-                println!("{}", "No automated fixes available for current issues.".yellow());
+                println!(
+                    "{}",
+                    "No automated fixes available for current issues.".yellow()
+                );
                 return Ok(());
             }
 
             println!("Found {} automated fix(es):", fixable.len());
             for (idx, fix) in fixable.iter().enumerate() {
-                println!("{}. {} -> {}", idx + 1, fix.file_path.display(), fix.description);
+                println!(
+                    "{}. {} -> {}",
+                    idx + 1,
+                    fix.file_path.display(),
+                    fix.description
+                );
+            }
+
+            // Generate diff previews
+            let previews = engine.preview_fixes(&fixable)?;
+            let has_any_diff = previews.iter().any(|p| p.has_changes);
+            if has_any_diff {
+                println!("\n{}", "--- Proposed Changes (Preview) ---".cyan().bold());
+                for preview in &previews {
+                    if preview.has_changes {
+                        println!("\nFile: {}", preview.file_path.display().to_string().bold());
+                        for line in preview.diff.lines() {
+                            if line.starts_with('+') && !line.starts_with("+++") {
+                                println!("{}", line.green());
+                            } else if line.starts_with('-') && !line.starts_with("---") {
+                                println!("{}", line.red());
+                            } else if line.starts_with('@') {
+                                println!("{}", line.cyan());
+                            } else {
+                                println!("{}", line);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if *dry_run {
+                println!("\n{}", "Dry-run complete. No files were modified.".yellow());
+                return Ok(());
             }
 
             if !yes {
@@ -529,12 +600,23 @@ async fn main() -> Result<()> {
                 return Ok(());
             }
 
-            let engine = RemediationEngine::new();
+            let report = engine.apply_fixes_transactional(&fixable, Some(root))?;
             for fix in &fixable {
-                engine.apply_fix(fix)?;
                 println!("Applied fix: {}", fix.description.green());
             }
-            println!("{}", "All safe fixes applied successfully!".green().bold());
+            println!(
+                "{}",
+                format!(
+                    "All safe fixes applied successfully ({} file(s) updated)!",
+                    report.applied_count
+                )
+                .green()
+                .bold()
+            );
+            println!(
+                "{}",
+                "To revert these changes, run 'stackvet fix --rollback'.".cyan()
+            );
         }
         Some(Commands::Graph { style, .. }) => {
             let graph = build_import_graph(&ctx);

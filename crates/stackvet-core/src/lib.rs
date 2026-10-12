@@ -101,13 +101,17 @@ pub struct TextSpan {
 }
 
 impl TextSpan {
-    pub fn single_line(line: usize, start_col: usize, end_col: usize) -> Self {
+    pub fn new(start_line: usize, end_line: usize, start_col: usize, end_col: usize) -> Self {
         Self {
-            start_line: line,
+            start_line,
             start_col,
-            end_line: line,
+            end_line,
             end_col,
         }
+    }
+
+    pub fn single_line(line: usize, start_col: usize, end_col: usize) -> Self {
+        Self::new(line, line, start_col, end_col)
     }
 }
 

@@ -50,3 +50,85 @@ fn test_doctor_full_flow() {
     assert!(html.contains("StackVet Project Health Report"));
     assert!(html.contains("72"));
 }
+
+#[test]
+fn test_remediation_preview_and_rollback_flow() {
+    use stackvet_core::FixAction;
+    use stackvet_remediation::RemediationEngine;
+
+    let test_dir = std::env::temp_dir().join(format!(
+        "stackvet_cli_test_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&test_dir).unwrap();
+
+    let pyproject_path = test_dir.join("pyproject.toml");
+    let original_pyproject = r#"# Main pyproject
+[project]
+name = "demo"
+dependencies = [
+    # Existing dependency
+    "click>=8.0",
+]
+"#;
+    std::fs::write(&pyproject_path, original_pyproject).unwrap();
+
+    let pkg_json_path = test_dir.join("package.json");
+    let original_pkg_json = r#"{
+  "name": "demo-frontend",
+  "dependencies": {
+    "react": "^18.0.0"
+  }
+}
+"#;
+    std::fs::write(&pkg_json_path, original_pkg_json).unwrap();
+
+    let engine = RemediationEngine::new();
+    let fixes = vec![
+        FixAction::new("Add fastapi", &pyproject_path, "fastapi"),
+        FixAction::new("Add axios", &pkg_json_path, "axios"),
+    ];
+
+    // 1. Preview
+    let previews = engine.preview_fixes(&fixes).unwrap();
+    assert_eq!(previews.len(), 2);
+    for p in &previews {
+        assert!(p.has_changes);
+        assert!(!p.diff.is_empty());
+    }
+
+    // 2. Transactional Apply
+    let report = engine
+        .apply_fixes_transactional(&fixes, Some(&test_dir))
+        .unwrap();
+    assert_eq!(report.applied_count, 2);
+    assert!(engine.has_rollback_session(&test_dir));
+
+    let modified_py = std::fs::read_to_string(&pyproject_path).unwrap();
+    assert!(modified_py.contains("\"fastapi\""));
+    assert!(modified_py.contains("# Main pyproject"));
+    assert!(modified_py.contains("# Existing dependency"));
+
+    let modified_pkg = std::fs::read_to_string(&pkg_json_path).unwrap();
+    assert!(modified_pkg.contains("\"axios\""));
+
+    // 3. Rollback
+    let restored = engine.rollback_session(&test_dir).unwrap();
+    assert_eq!(restored.len(), 2);
+    assert!(!engine.has_rollback_session(&test_dir));
+
+    assert_eq!(
+        std::fs::read_to_string(&pyproject_path).unwrap(),
+        original_pyproject
+    );
+    assert_eq!(
+        std::fs::read_to_string(&pkg_json_path).unwrap(),
+        original_pkg_json
+    );
+
+    let _ = std::fs::remove_dir_all(&test_dir);
+}
+
