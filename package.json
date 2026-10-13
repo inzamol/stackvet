@@ -5,6 +5,7 @@
   "scripts": {
     "version:sync": "node scripts/sync_version.js",
     "version:check": "node scripts/sync_version.js --check",
+    "release:bump": "node scripts/bump_version.js",
     "build:pypi": "python scripts/build_pypi.py",
     "build:npm": "node scripts/build_npm.js",
     "build:all": "npm run build:pypi && npm run build:npm",
