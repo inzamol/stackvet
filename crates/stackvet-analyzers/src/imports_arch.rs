@@ -52,6 +52,106 @@ impl ImportsArchAnalyzer {
 
         None
     }
+
+    /// Resolves Python relative imports taking into account traversal level, submodule path, and package symbols
+    fn resolve_python_relative_import(
+        base_file: &Path,
+        imp: &stackvet_python::PythonImport,
+    ) -> Option<PathBuf> {
+        let mut current_dir = base_file.parent()?;
+        if imp.level > 1 {
+            for _ in 1..imp.level {
+                current_dir = current_dir.parent()?;
+            }
+        }
+
+        // 1. Explicit submodule/subpackage path (e.g. from .models import User or from ..common.auth import verify)
+        if !imp.module.is_empty() {
+            let subpath = imp.module.replace('.', "/");
+            let candidate_file = current_dir.join(format!("{}.py", subpath));
+            if candidate_file.is_file() {
+                return Some(candidate_file);
+            }
+            let candidate_dir = current_dir.join(&subpath);
+            if let Some(sym) = &imp.symbol {
+                let symbol_file = candidate_dir.join(format!("{}.py", sym));
+                if symbol_file.is_file() {
+                    return Some(symbol_file);
+                }
+            }
+            let candidate_init = candidate_dir.join("__init__.py");
+            if candidate_init.is_file() {
+                return Some(candidate_init);
+            }
+            // PEP 420 namespace package (directory containing .py files)
+            if candidate_dir.is_dir() {
+                if let Ok(entries) = fs::read_dir(&candidate_dir) {
+                    let mut py_files: Vec<PathBuf> = entries
+                        .flatten()
+                        .map(|e| e.path())
+                        .filter(|p| {
+                            p.is_file() && p.extension().and_then(|s| s.to_str()) == Some("py")
+                        })
+                        .collect();
+                    py_files.sort();
+                    if let Some(init) = py_files
+                        .iter()
+                        .find(|p| p.file_name().and_then(|n| n.to_str()) == Some("__init__.py"))
+                    {
+                        return Some(init.clone());
+                    }
+                    if let Some(first) = py_files.into_iter().next() {
+                        return Some(first);
+                    }
+                }
+            }
+        } else if let Some(sym) = &imp.symbol {
+            // 2. Bare relative import (e.g. from . import helper or from .. import config)
+            let candidate_file = current_dir.join(format!("{}.py", sym));
+            if candidate_file.is_file() {
+                return Some(candidate_file);
+            }
+            let candidate_dir = current_dir.join(sym);
+            let candidate_init = candidate_dir.join("__init__.py");
+            if candidate_init.is_file() {
+                return Some(candidate_init);
+            }
+            if candidate_dir.is_dir() {
+                if let Ok(entries) = fs::read_dir(&candidate_dir) {
+                    let mut py_files: Vec<PathBuf> = entries
+                        .flatten()
+                        .map(|e| e.path())
+                        .filter(|p| {
+                            p.is_file() && p.extension().and_then(|s| s.to_str()) == Some("py")
+                        })
+                        .collect();
+                    py_files.sort();
+                    if let Some(init) = py_files
+                        .iter()
+                        .find(|p| p.file_name().and_then(|n| n.to_str()) == Some("__init__.py"))
+                    {
+                        return Some(init.clone());
+                    }
+                    if let Some(first) = py_files.into_iter().next() {
+                        return Some(first);
+                    }
+                }
+            }
+            // Check if current directory has __init__.py (symbol exported from current package)
+            let pkg_init = current_dir.join("__init__.py");
+            if pkg_init.is_file() {
+                return Some(pkg_init);
+            }
+        }
+
+        None
+    }
+}
+
+impl Default for ImportsArchAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Analyzer for ImportsArchAnalyzer {
@@ -105,9 +205,9 @@ impl Analyzer for ImportsArchAnalyzer {
                         }
 
                         if imp.is_relative {
-                            // Check local relative import resolution: IMP-002
-                            let spec = format!("./{}", imp.module.replace('.', "/"));
-                            if let Some(target_file) = Self::resolve_local_import(file, &spec) {
+                            if let Some(target_file) =
+                                Self::resolve_python_relative_import(file, &imp)
+                            {
                                 let target_rel = target_file
                                     .strip_prefix(&ctx.root)
                                     .unwrap_or(&target_file)
@@ -115,6 +215,21 @@ impl Analyzer for ImportsArchAnalyzer {
                                     .replace('\\', "/");
                                 graph.add_import(rel_path.clone(), target_rel);
                             } else {
+                                let dots = ".".repeat(imp.level);
+                                let import_desc = if imp.module.is_empty() {
+                                    format!(
+                                        "from {} import {}",
+                                        dots,
+                                        imp.symbol.as_deref().unwrap_or("?")
+                                    )
+                                } else {
+                                    format!(
+                                        "from {}{} import {}",
+                                        dots,
+                                        imp.module,
+                                        imp.symbol.as_deref().unwrap_or("*")
+                                    )
+                                };
                                 diagnostics.push(
                                     Diagnostic::builder(
                                         "IMP-002",
@@ -122,8 +237,8 @@ impl Analyzer for ImportsArchAnalyzer {
                                         LanguageTarget::Python,
                                     )
                                     .message(format!(
-                                        "Unresolved relative Python import 'from .{}' in '{}'",
-                                        imp.module, rel_path
+                                        "Unresolved relative Python import '{}' in '{}'",
+                                        import_desc, rel_path
                                     ))
                                     .location(
                                         DiagnosticLocation::new(file.clone())

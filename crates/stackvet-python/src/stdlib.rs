@@ -169,16 +169,24 @@ pub static PYTHON_STDLIB: &[&str] = &[
     "zipimport",
     "zlib",
     "zoneinfo",
+    "__future__",
+    "_thread",
+    "_dummy_thread",
+    "antigravity",
+    "this",
 ];
 
-// PEP 594: Modules removed in Python 3.13
+// PEP 594 & PEP 632: Modules removed in Python 3.12 / 3.13
 pub static PYTHON_REMOVED_PEP594: &[&str] = &[
     "aifc",
+    "asynchat",
+    "asyncore",
     "audioop",
     "cgi",
     "cgitb",
     "chunk",
     "crypt",
+    "distutils",
     "imghdr",
     "mailcap",
     "msilib",
@@ -186,6 +194,7 @@ pub static PYTHON_REMOVED_PEP594: &[&str] = &[
     "nntplib",
     "ossaudiodev",
     "pipes",
+    "smtpd",
     "sndhdr",
     "spwd",
     "sunau",
@@ -194,12 +203,76 @@ pub static PYTHON_REMOVED_PEP594: &[&str] = &[
     "xdrlib",
 ];
 
+/// Known mappings from Python top-level import name to PyPI package distribution names.
+pub static KNOWN_IMPORT_TO_PYPI: &[(&str, &[&str])] = &[
+    ("yaml", &["pyyaml", "ruamel-yaml"]),
+    ("dotenv", &["python-dotenv"]),
+    ("jwt", &["pyjwt"]),
+    (
+        "cv2",
+        &[
+            "opencv-python",
+            "opencv-python-headless",
+            "opencv-contrib-python",
+        ],
+    ),
+    ("dateutil", &["python-dateutil"]),
+    ("bs4", &["beautifulsoup4"]),
+    ("pil", &["pillow", "pillow-simd"]),
+    ("serial", &["pyserial"]),
+    ("magic", &["python-magic", "python-magic-bin"]),
+    ("sklearn", &["scikit-learn"]),
+    ("rest-framework", &["djangorestframework"]),
+    ("psycopg2", &["psycopg2", "psycopg2-binary"]),
+    ("docx", &["python-docx"]),
+    ("pptx", &["python-pptx"]),
+    ("git", &["gitpython"]),
+    ("fitz", &["pymupdf"]),
+    ("crypto", &["pycryptodome", "cryptography"]),
+    ("openssl", &["pyopenssl"]),
+    ("websocket", &["websocket-client"]),
+    ("confluent-kafka", &["confluent-kafka"]),
+    ("kafka", &["kafka-python"]),
+    ("pydantic-settings", &["pydantic-settings"]),
+    ("pydantic-core", &["pydantic-core"]),
+    ("sentry-sdk", &["sentry-sdk"]),
+    ("slack-sdk", &["slack-sdk"]),
+    ("github", &["pygithub"]),
+    ("tortoise", &["tortoise-orm"]),
+    ("boto3", &["boto3"]),
+    ("botocore", &["botocore"]),
+    ("requests-mock", &["requests-mock"]),
+    ("jose", &["python-jose"]),
+    ("multipart", &["python-multipart"]),
+    (
+        "mysql",
+        &["mysqlclient", "mysql-connector-python", "pymysql"],
+    ),
+    ("redis", &["redis"]),
+    ("sqlalchemy", &["sqlalchemy"]),
+];
+
 pub fn is_python_stdlib(module_name: &str) -> bool {
     let root = module_name.split('.').next().unwrap_or(module_name);
-    PYTHON_STDLIB.contains(&root)
+    let underscore_version = root.replace('-', "_");
+    PYTHON_STDLIB.contains(&root) || PYTHON_STDLIB.contains(&underscore_version.as_str())
 }
 
 pub fn is_pep594_removed(module_name: &str) -> bool {
     let root = module_name.split('.').next().unwrap_or(module_name);
+    let underscore_version = root.replace('-', "_");
     PYTHON_REMOVED_PEP594.contains(&root)
+        || PYTHON_REMOVED_PEP594.contains(&underscore_version.as_str())
+}
+
+pub fn get_known_pypi_packages(import_name: &str) -> Option<&'static [&'static str]> {
+    let lower = import_name.to_lowercase();
+    let hyphenated = lower.replace('_', "-");
+    let underscored = lower.replace('-', "_");
+    for (imp, packages) in KNOWN_IMPORT_TO_PYPI {
+        if *imp == hyphenated || *imp == underscored || *imp == import_name {
+            return Some(packages);
+        }
+    }
+    None
 }

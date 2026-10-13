@@ -15,6 +15,62 @@ impl PythonDependencyAnalyzer {
     pub fn new(offline: bool) -> Self {
         Self { offline }
     }
+
+    /// Determines if an import root name corresponds to a local module, package, or PEP 420 namespace package in the repository.
+    fn is_local_module_or_package(ctx: &ProjectContext, pkg_name: &str) -> bool {
+        // 1. Direct file in project root or src/: <pkg_name>.py
+        if ctx.root.join(format!("{}.py", pkg_name)).is_file()
+            || ctx
+                .root
+                .join("src")
+                .join(format!("{}.py", pkg_name))
+                .is_file()
+        {
+            return true;
+        }
+
+        // 2. Package directory with __init__.py or PEP 420 namespace package (directory with .py files)
+        let candidate_dirs = [ctx.root.join(pkg_name), ctx.root.join("src").join(pkg_name)];
+        for dir in &candidate_dirs {
+            if dir.is_dir() {
+                if dir.join("__init__.py").is_file() {
+                    return true;
+                }
+                if let Ok(entries) = fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("py")
+                        {
+                            return true;
+                        }
+                        if path.is_dir() {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Check ctx.source_files
+        for file in &ctx.source_files {
+            if let Ok(rel) = file.strip_prefix(&ctx.root) {
+                let rel_str = rel.to_string_lossy().replace('\\', "/");
+                let clean_rel = if let Some(stripped) = rel_str.strip_prefix("src/") {
+                    stripped
+                } else {
+                    &rel_str
+                };
+
+                if clean_rel == format!("{}.py", pkg_name)
+                    || clean_rel.starts_with(&format!("{}/", pkg_name))
+                {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
 }
 
 impl Analyzer for PythonDependencyAnalyzer {
@@ -52,6 +108,9 @@ impl Analyzer for PythonDependencyAnalyzer {
                         continue;
                     }
                     let root_pkg = imp.module.split('.').next().unwrap_or(&imp.module);
+                    if is_python_stdlib(root_pkg) || is_pep594_removed(root_pkg) {
+                        continue;
+                    }
                     let norm = normalize_package_name(root_pkg);
                     imported_packages
                         .entry(norm)
@@ -60,21 +119,6 @@ impl Analyzer for PythonDependencyAnalyzer {
                 }
             }
         }
-
-        // Mapping of popular import names to PyPI package names
-        let import_to_pypi: HashMap<&str, &str> = [
-            ("yaml", "pyyaml"),
-            ("dotenv", "python-dotenv"),
-            ("jwt", "pyjwt"),
-            ("cv2", "opencv-python"),
-            ("dateutil", "python-dateutil"),
-            ("bs4", "beautifulsoup4"),
-            ("pil", "pillow"),
-            ("serial", "pyserial"),
-            ("magic", "python-magic"),
-        ]
-        .into_iter()
-        .collect();
 
         let all_declared_direct: HashSet<String> =
             py_info.direct_dependencies.keys().cloned().collect();
@@ -86,16 +130,25 @@ impl Analyzer for PythonDependencyAnalyzer {
                 continue;
             }
 
-            // Check if matches a package directly or mapped
-            let pypi_alt = import_to_pypi.get(pkg_name.as_str()).copied();
+            // Check if matches a local module, package, or PEP 420 namespace package in the repository
+            if Self::is_local_module_or_package(ctx, pkg_name) {
+                continue;
+            }
+
+            // Check if matches a package directly or mapped via known PyPI distribution names
+            let pypi_alts = stackvet_python::stdlib::get_known_pypi_packages(pkg_name);
             let is_declared = all_declared_direct.contains(pkg_name)
                 || all_declared_dev.contains(pkg_name)
-                || pypi_alt.map_or(false, |alt| {
-                    all_declared_direct.contains(alt) || all_declared_dev.contains(alt)
+                || pypi_alts.is_some_and(|alts| {
+                    alts.iter().any(|alt| {
+                        all_declared_direct.contains(*alt) || all_declared_dev.contains(*alt)
+                    })
                 });
 
             if !is_declared {
-                let target_pypi_name = pypi_alt.unwrap_or(pkg_name.as_str());
+                let target_pypi_name = pypi_alts
+                    .and_then(|alts| alts.first().copied())
+                    .unwrap_or(pkg_name.as_str());
                 let (first_file, first_line) = occurrences[0];
 
                 // Check if in lockfile (transitive dependency) -> DEP-007
@@ -166,11 +219,18 @@ impl Analyzer for PythonDependencyAnalyzer {
         }
 
         // Check DEP-003: Unused Dependency
-        for (declared_pkg, _) in &py_info.direct_dependencies {
-            let matches_import = imported_packages.contains_key(declared_pkg)
-                || import_to_pypi.iter().any(|(imp, pypi)| {
-                    *pypi == declared_pkg && imported_packages.contains_key(*imp)
-                });
+        for declared_pkg in py_info.direct_dependencies.keys() {
+            let norm_declared = normalize_package_name(declared_pkg);
+            let matches_import = imported_packages.contains_key(&norm_declared)
+                || stackvet_python::stdlib::KNOWN_IMPORT_TO_PYPI
+                    .iter()
+                    .any(|(imp, pypis)| {
+                        let imp_norm = normalize_package_name(imp);
+                        let pypi_matches = pypis
+                            .iter()
+                            .any(|p| normalize_package_name(p) == norm_declared);
+                        pypi_matches && imported_packages.contains_key(&imp_norm)
+                    });
 
             // Whitelist common CLI / build / runner dependencies
             let cli_deps = [
