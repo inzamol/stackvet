@@ -233,7 +233,7 @@ impl Reporter {
                     "driver": {
                         "name": "stackvet",
                         "informationUri": "https://github.com/stackvet/stackvet",
-                        "version": "0.1.0"
+                        "version": env!("CARGO_PKG_VERSION")
                     }
                 },
                 "results": results
