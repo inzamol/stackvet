@@ -27,12 +27,27 @@ impl ImportsArchAnalyzer {
             return Some(target_base);
         }
 
-        // Try extensions (preserving dotted basenames)
+        let extensions = ["ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "json"];
+
+        // 1. If target_base has a recognized runtime extension (e.g. .js, .jsx, .mjs, .cjs),
+        // substitute with TypeScript / JavaScript extensions (e.g. ./helper.js -> ./helper.ts)
+        if let Some(ext) = target_base.extension().and_then(|s| s.to_str()) {
+            if matches!(ext, "js" | "jsx" | "mjs" | "cjs") {
+                let ts_js_extensions = ["ts", "tsx", "js", "jsx", "mjs", "cjs"];
+                for target_ext in ts_js_extensions {
+                    let with_sub = target_base.with_extension(target_ext);
+                    if with_sub.is_file() {
+                        return Some(with_sub);
+                    }
+                }
+            }
+        }
+
+        // 2. Try extensions (preserving dotted basenames)
         let file_name = target_base
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("");
-        let extensions = ["ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "json"];
         for ext in extensions {
             let with_ext = target_base.with_file_name(format!("{}.{}", file_name, ext));
             if with_ext.is_file() {

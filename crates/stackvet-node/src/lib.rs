@@ -393,6 +393,24 @@ fn resolve_candidate_path(candidate: &Path, extensions: &[&str]) -> Option<std::
     if candidate.is_file() {
         return Some(candidate.to_path_buf());
     }
+
+    // 1. If candidate has a recognized runtime extension (e.g. .js, .jsx, .mjs, .cjs),
+    // substitute with TypeScript / JavaScript extensions (e.g. ./helper.js -> ./helper.ts)
+    if let Some(ext) = candidate.extension().and_then(|s| s.to_str()) {
+        if matches!(ext, "js" | "jsx" | "mjs" | "cjs") {
+            for target_ext in extensions {
+                if *target_ext == "json" {
+                    continue;
+                }
+                let with_sub = candidate.with_extension(target_ext);
+                if with_sub.is_file() {
+                    return Some(with_sub);
+                }
+            }
+        }
+    }
+
+    // 2. Append lookup for dotted basenames / extensionless paths (e.g. ./user.service -> ./user.service.ts)
     let file_name = candidate.file_name().and_then(|n| n.to_str()).unwrap_or("");
     for ext in extensions {
         let with_ext = candidate.with_file_name(format!("{}.{}", file_name, ext));
@@ -400,6 +418,8 @@ fn resolve_candidate_path(candidate: &Path, extensions: &[&str]) -> Option<std::
             return Some(with_ext);
         }
     }
+
+    // 3. Directory index files
     if candidate.is_dir() {
         for ext in extensions {
             let index = candidate.join(format!("index.{}", ext));
