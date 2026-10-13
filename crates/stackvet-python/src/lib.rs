@@ -98,17 +98,25 @@ impl<'a, 'b> Visitor<'a> for ImportVisitor<'b> {
             if is_dynamic_import {
                 if let Some(first_arg) = arguments.args.first() {
                     if let Expr::StringLiteral(ExprStringLiteral { value, .. }) = first_arg {
+                        let raw_mod = value.to_str();
                         let offset = usize::from(range.start());
                         let line = self.content[..offset.min(self.content.len())]
                             .matches('\n')
                             .count()
                             + 1;
+                        let leading_dots = raw_mod.chars().take_while(|&c| c == '.').count();
+                        let is_relative = leading_dots > 0;
+                        let clean_mod = if is_relative {
+                            raw_mod.trim_start_matches('.').to_string()
+                        } else {
+                            raw_mod.to_string()
+                        };
                         self.imports.push(PythonImport {
-                            module: value.to_str().to_string(),
+                            module: clean_mod,
                             symbol: None,
                             line,
-                            is_relative: false,
-                            level: 0,
+                            is_relative,
+                            level: leading_dots,
                             is_dynamic: true,
                         });
                     }

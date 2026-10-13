@@ -72,19 +72,36 @@ impl ImportsArchAnalyzer {
             if candidate_file.is_file() {
                 return Some(candidate_file);
             }
-            let candidate_init = current_dir.join(&subpath).join("__init__.py");
+            let candidate_dir = current_dir.join(&subpath);
+            if let Some(sym) = &imp.symbol {
+                let symbol_file = candidate_dir.join(format!("{}.py", sym));
+                if symbol_file.is_file() {
+                    return Some(symbol_file);
+                }
+            }
+            let candidate_init = candidate_dir.join("__init__.py");
             if candidate_init.is_file() {
                 return Some(candidate_init);
             }
             // PEP 420 namespace package (directory containing .py files)
-            let candidate_dir = current_dir.join(&subpath);
             if candidate_dir.is_dir() {
                 if let Ok(entries) = fs::read_dir(&candidate_dir) {
-                    for entry in entries.flatten() {
-                        let p = entry.path();
-                        if p.is_file() && p.extension().and_then(|s| s.to_str()) == Some("py") {
-                            return Some(p);
-                        }
+                    let mut py_files: Vec<PathBuf> = entries
+                        .flatten()
+                        .map(|e| e.path())
+                        .filter(|p| {
+                            p.is_file() && p.extension().and_then(|s| s.to_str()) == Some("py")
+                        })
+                        .collect();
+                    py_files.sort();
+                    if let Some(init) = py_files
+                        .iter()
+                        .find(|p| p.file_name().and_then(|n| n.to_str()) == Some("__init__.py"))
+                    {
+                        return Some(init.clone());
+                    }
+                    if let Some(first) = py_files.into_iter().next() {
+                        return Some(first);
                     }
                 }
             }
@@ -94,18 +111,29 @@ impl ImportsArchAnalyzer {
             if candidate_file.is_file() {
                 return Some(candidate_file);
             }
-            let candidate_init = current_dir.join(sym).join("__init__.py");
+            let candidate_dir = current_dir.join(sym);
+            let candidate_init = candidate_dir.join("__init__.py");
             if candidate_init.is_file() {
                 return Some(candidate_init);
             }
-            let candidate_dir = current_dir.join(sym);
             if candidate_dir.is_dir() {
                 if let Ok(entries) = fs::read_dir(&candidate_dir) {
-                    for entry in entries.flatten() {
-                        let p = entry.path();
-                        if p.is_file() && p.extension().and_then(|s| s.to_str()) == Some("py") {
-                            return Some(p);
-                        }
+                    let mut py_files: Vec<PathBuf> = entries
+                        .flatten()
+                        .map(|e| e.path())
+                        .filter(|p| {
+                            p.is_file() && p.extension().and_then(|s| s.to_str()) == Some("py")
+                        })
+                        .collect();
+                    py_files.sort();
+                    if let Some(init) = py_files
+                        .iter()
+                        .find(|p| p.file_name().and_then(|n| n.to_str()) == Some("__init__.py"))
+                    {
+                        return Some(init.clone());
+                    }
+                    if let Some(first) = py_files.into_iter().next() {
+                        return Some(first);
                     }
                 }
             }

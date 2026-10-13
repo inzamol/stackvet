@@ -219,7 +219,7 @@ impl Analyzer for PythonDependencyAnalyzer {
         }
 
         // Check DEP-003: Unused Dependency
-        for (declared_pkg, _) in &py_info.direct_dependencies {
+        for declared_pkg in py_info.direct_dependencies.keys() {
             let norm_declared = normalize_package_name(declared_pkg);
             let matches_import = imported_packages.contains_key(&norm_declared)
                 || stackvet_python::stdlib::KNOWN_IMPORT_TO_PYPI
@@ -229,9 +229,7 @@ impl Analyzer for PythonDependencyAnalyzer {
                         let pypi_matches = pypis
                             .iter()
                             .any(|p| normalize_package_name(p) == norm_declared);
-                        pypi_matches
-                            && (imported_packages.contains_key(*imp)
-                                || imported_packages.contains_key(&imp_norm))
+                        pypi_matches && imported_packages.contains_key(&imp_norm)
                     });
 
             // Whitelist common CLI / build / runner dependencies

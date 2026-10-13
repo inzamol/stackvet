@@ -327,3 +327,98 @@ import missing_foobar_pkg
         "Local module 'models' must not be flagged as missing dependency!"
     );
 }
+
+#[test]
+fn test_typing_extensions_is_third_party_not_stdlib() {
+    let test_dir = TestDir::new("typing-ext-test");
+    let root = test_dir.path();
+
+    fs::write(
+        root.join("pyproject.toml"),
+        "[project]\nname = \"typing-ext-app\"\nversion = \"0.1.0\"\ndependencies = []\n",
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("main.py"),
+        "from typing_extensions import override\n",
+    )
+    .unwrap();
+
+    let diags = analyze_test_dir(root);
+    let dep002_diags: Vec<&Diagnostic> =
+        diags.iter().filter(|d| d.rule_id.0 == "DEP-002").collect();
+
+    assert!(
+        !dep002_diags.is_empty(),
+        "typing_extensions must be detected as third-party missing dependency when not in pyproject.toml"
+    );
+}
+
+#[test]
+fn test_dynamic_relative_imports_do_not_derive_empty_root() {
+    let test_dir = TestDir::new("dyn-rel-test");
+    let root = test_dir.path();
+
+    fs::write(
+        root.join("pyproject.toml"),
+        "[project]\nname = \"dyn-rel-app\"\nversion = \"0.1.0\"\ndependencies = []\n",
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("main.py"),
+        r#"
+import importlib
+mod = importlib.import_module(".sibling", package=__name__)
+sub = __import__("..parent")
+"#,
+    )
+    .unwrap();
+
+    let diags = analyze_test_dir(root);
+    let dep002_diags: Vec<&Diagnostic> =
+        diags.iter().filter(|d| d.rule_id.0 == "DEP-002").collect();
+
+    assert!(
+        dep002_diags.is_empty(),
+        "Relative dynamic imports (.sibling, ..parent) must not trigger DEP-002 or produce empty root packages: {:?}",
+        dep002_diags
+    );
+}
+
+#[test]
+fn test_submodule_file_preferred_over_init_and_deterministic_order() {
+    let test_dir = TestDir::new("submod-pref");
+    let root = test_dir.path();
+
+    fs::write(
+        root.join("pyproject.toml"),
+        "[project]\nname = \"submod-app\"\nversion = \"0.1.0\"\ndependencies = []\n",
+    )
+    .unwrap();
+
+    // Package structure:
+    // root/pkg/__init__.py
+    // root/pkg/service.py
+    // root/pkg/consumer.py
+    let pkg = root.join("pkg");
+    fs::create_dir_all(&pkg).unwrap();
+    fs::write(pkg.join("__init__.py"), "# init\n").unwrap();
+    fs::write(pkg.join("service.py"), "def start(): pass\n").unwrap();
+    fs::write(
+        pkg.join("consumer.py"),
+        "from . import service\nfrom .service import start\n",
+    )
+    .unwrap();
+
+    let diags = analyze_test_dir(root);
+    let imp002_diags: Vec<&Diagnostic> =
+        diags.iter().filter(|d| d.rule_id.0 == "IMP-002").collect();
+
+    assert!(
+        imp002_diags.is_empty(),
+        "Local submodule file 'service.py' within candidate dir must resolve without IMP-002: {:?}",
+        imp002_diags
+    );
+}

@@ -174,7 +174,6 @@ pub static PYTHON_STDLIB: &[&str] = &[
     "_dummy_thread",
     "antigravity",
     "this",
-    "typing_extensions",
 ];
 
 // PEP 594 & PEP 632: Modules removed in Python 3.12 / 3.13
@@ -223,7 +222,7 @@ pub static KNOWN_IMPORT_TO_PYPI: &[(&str, &[&str])] = &[
     ("serial", &["pyserial"]),
     ("magic", &["python-magic", "python-magic-bin"]),
     ("sklearn", &["scikit-learn"]),
-    ("rest_framework", &["djangorestframework"]),
+    ("rest-framework", &["djangorestframework"]),
     ("psycopg2", &["psycopg2", "psycopg2-binary"]),
     ("docx", &["python-docx"]),
     ("pptx", &["python-pptx"]),
@@ -232,17 +231,17 @@ pub static KNOWN_IMPORT_TO_PYPI: &[(&str, &[&str])] = &[
     ("crypto", &["pycryptodome", "cryptography"]),
     ("openssl", &["pyopenssl"]),
     ("websocket", &["websocket-client"]),
-    ("confluent_kafka", &["confluent-kafka"]),
+    ("confluent-kafka", &["confluent-kafka"]),
     ("kafka", &["kafka-python"]),
-    ("pydantic_settings", &["pydantic-settings"]),
-    ("pydantic_core", &["pydantic-core"]),
-    ("sentry_sdk", &["sentry-sdk"]),
-    ("slack_sdk", &["slack-sdk"]),
+    ("pydantic-settings", &["pydantic-settings"]),
+    ("pydantic-core", &["pydantic-core"]),
+    ("sentry-sdk", &["sentry-sdk"]),
+    ("slack-sdk", &["slack-sdk"]),
     ("github", &["pygithub"]),
     ("tortoise", &["tortoise-orm"]),
     ("boto3", &["boto3"]),
     ("botocore", &["botocore"]),
-    ("requests_mock", &["requests-mock"]),
+    ("requests-mock", &["requests-mock"]),
     ("jose", &["python-jose"]),
     ("multipart", &["python-multipart"]),
     (
@@ -274,9 +273,11 @@ pub fn is_pep594_removed(module_name: &str) -> bool {
 }
 
 pub fn get_known_pypi_packages(import_name: &str) -> Option<&'static [&'static str]> {
-    let normalized = import_name.to_lowercase().replace('-', "_");
+    let lower = import_name.to_lowercase();
+    let hyphenated = lower.replace('_', "-");
+    let underscored = lower.replace('-', "_");
     for (imp, packages) in KNOWN_IMPORT_TO_PYPI {
-        if *imp == normalized || *imp == import_name {
+        if *imp == hyphenated || *imp == underscored || *imp == import_name {
             return Some(packages);
         }
     }
