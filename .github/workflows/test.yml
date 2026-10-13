@@ -27,8 +27,16 @@ jobs:
         with:
           components: clippy, rustfmt
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
+
+      - name: Check version consistency
+        run: node scripts/sync_version.js --check
 
       - name: Check code formatting
         run: cargo fmt --all --check
@@ -41,3 +49,12 @@ jobs:
 
       - name: Run documentation tests
         run: cargo test --doc
+
+      - name: Build release binary
+        run: cargo build -p stackvet --release --locked
+
+      - name: Bundle native binary for npm package
+        run: node packages/npm/scripts/copy-binary.js
+
+      - name: Run cross-platform smoke tests
+        run: node scripts/smoke_test.js

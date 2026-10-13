@@ -4,10 +4,12 @@
   "description": "StackVet Universal Project Health & Static Diagnostics Engine",
   "scripts": {
     "version:sync": "node scripts/sync_version.js",
+    "version:check": "node scripts/sync_version.js --check",
     "build:pypi": "python scripts/build_pypi.py",
     "build:npm": "node scripts/build_npm.js",
     "build:all": "npm run build:pypi && npm run build:npm",
     "test:npm": "node packages/npm/bin/stackvet.js doctor",
+    "smoke-test": "node scripts/smoke_test.js",
     "docs:serve": "mkdocs serve",
     "docs:build": "mkdocs build"
   },

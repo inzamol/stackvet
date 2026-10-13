@@ -22,7 +22,7 @@ use std::process::exit;
 #[command(
     name = "stackvet",
     about = "Universal project health and static diagnostics engine",
-    version = "0.1.0",
+    version,
     author = "StackVet Engineering"
 )]
 pub struct Cli {
