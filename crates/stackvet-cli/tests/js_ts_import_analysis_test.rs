@@ -357,3 +357,105 @@ import { motion } from 'framer-motion';
         ndep001_messages[0]
     );
 }
+
+#[test]
+fn test_dotted_basename_local_module_resolution() {
+    let test_dir = TestDir::new("dotted-basename");
+    let root = test_dir.path();
+
+    fs::write(
+        root.join("package.json"),
+        r#"{ "name": "dotted-app", "dependencies": {} }"#,
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("user.service.ts"),
+        "export const getUser = () => ({ id: 1 });\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("index.ts"),
+        "import { getUser } from './user.service';\n",
+    )
+    .unwrap();
+
+    let diags = analyze_test_dir(root);
+    let imp002_diags: Vec<&Diagnostic> =
+        diags.iter().filter(|d| d.rule_id.0 == "IMP-002").collect();
+
+    assert!(
+        imp002_diags.is_empty(),
+        "Dotted basename import './user.service' must resolve to './user.service.ts' without IMP-002: {:?}",
+        imp002_diags
+    );
+}
+
+#[test]
+fn test_longest_prefix_alias_and_base_url_resolution() {
+    let test_dir = TestDir::new("longest-prefix");
+    let root = test_dir.path();
+
+    fs::write(
+        root.join("package.json"),
+        r#"{ "name": "prefix-app", "dependencies": { "react": "^18.0.0" } }"#,
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("tsconfig.json"),
+        r#"{
+            "compilerOptions": {
+                "baseUrl": "./src",
+                "paths": {
+                    "@/*": ["*"],
+                    "@components/*": ["special_components/*"],
+                    "*": ["fallback/*"]
+                }
+            }
+        }"#,
+    )
+    .unwrap();
+
+    let src = root.join("src");
+    let special = src.join("special_components");
+    let general = src.join("general");
+    fs::create_dir_all(&special).unwrap();
+    fs::create_dir_all(&general).unwrap();
+
+    fs::write(
+        special.join("Header.tsx"),
+        "export const Header = () => null;\n",
+    )
+    .unwrap();
+    fs::write(general.join("Helper.ts"), "export const help = () => 42;\n").unwrap();
+
+    // App imports via longest-prefix @components, general @, and baseUrl direct import
+    fs::write(
+        src.join("main.ts"),
+        r#"
+import { Header } from '@components/Header';
+import { help } from '@/general/Helper';
+import { help as h2 } from 'general/Helper';
+import React from 'react';
+"#,
+    )
+    .unwrap();
+
+    let diags = analyze_test_dir(root);
+    let imp002_diags: Vec<&Diagnostic> =
+        diags.iter().filter(|d| d.rule_id.0 == "IMP-002").collect();
+    let ndep001_diags: Vec<&Diagnostic> =
+        diags.iter().filter(|d| d.rule_id.0 == "NDEP-001").collect();
+
+    assert!(
+        imp002_diags.is_empty(),
+        "All aliased and baseUrl imports should resolve without IMP-002: {:?}",
+        imp002_diags
+    );
+    assert!(
+        ndep001_diags.is_empty(),
+        "No false NDEP-001 diagnostics should be emitted: {:?}",
+        ndep001_diags
+    );
+}

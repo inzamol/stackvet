@@ -27,10 +27,14 @@ impl ImportsArchAnalyzer {
             return Some(target_base);
         }
 
-        // Try extensions
+        // Try extensions (preserving dotted basenames)
+        let file_name = target_base
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
         let extensions = ["ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "json"];
         for ext in extensions {
-            let with_ext = target_base.with_extension(ext);
+            let with_ext = target_base.with_file_name(format!("{}.{}", file_name, ext));
             if with_ext.is_file() {
                 return Some(with_ext);
             }
@@ -329,6 +333,18 @@ impl Analyzer for ImportsArchAnalyzer {
                                         .build(),
                                     );
                                 }
+                            } else if let Some(target_file) = stackvet_node::resolve_aliased_import(
+                                &ctx.root,
+                                &node_info.tsconfig_paths,
+                                node_info.tsconfig_base_url.as_deref(),
+                                &imp.specifier,
+                            ) {
+                                let target_rel = target_file
+                                    .strip_prefix(&ctx.root)
+                                    .unwrap_or(&target_file)
+                                    .to_string_lossy()
+                                    .replace('\\', "/");
+                                graph.add_import(rel_path.clone(), target_rel);
                             }
                         }
                     }

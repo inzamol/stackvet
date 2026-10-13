@@ -288,6 +288,33 @@ pub fn parse_tsconfig(
     (std::collections::HashMap::new(), None)
 }
 
+/// Selects the best matching paths key: exact match first, then wildcard with longest prefix.
+fn find_best_matching_path_key<'a>(
+    specifier: &str,
+    paths: &'a std::collections::HashMap<String, Vec<String>>,
+) -> Option<(&'a str, &'a [String])> {
+    if let Some((key, targets)) = paths.get_key_value(specifier) {
+        return Some((key.as_str(), targets.as_slice()));
+    }
+
+    let mut best_match: Option<(&'a str, usize, &'a [String])> = None;
+    for (pattern, targets) in paths {
+        if let Some(prefix) = pattern.strip_suffix('*') {
+            if specifier.starts_with(prefix) {
+                let prefix_len = prefix.len();
+                if best_match
+                    .as_ref()
+                    .map_or(true, |(_, len, _)| prefix_len > *len)
+                {
+                    best_match = Some((pattern.as_str(), prefix_len, targets.as_slice()));
+                }
+            }
+        }
+    }
+
+    best_match.map(|(pattern, _, targets)| (pattern, targets))
+}
+
 /// Checks whether an import specifier matches a TypeScript path alias pattern
 pub fn is_tsconfig_alias(
     specifier: &str,
@@ -299,15 +326,12 @@ pub fn is_tsconfig_alias(
     if specifier.starts_with("@/") || specifier.starts_with("~/") {
         return true;
     }
-    if paths.contains_key(specifier) {
-        return true;
-    }
-    for pattern in paths.keys() {
-        if let Some(prefix) = pattern.strip_suffix('*') {
-            if specifier.starts_with(prefix) {
-                return true;
-            }
+    if let Some((pattern, _)) = find_best_matching_path_key(specifier, paths) {
+        // Ensure a bare "*" (prefix "") does not classify every arbitrary package as an alias
+        if pattern == "*" {
+            return false;
         }
+        return true;
     }
     false
 }
@@ -331,20 +355,19 @@ pub fn resolve_aliased_import(
         root.to_path_buf()
     };
 
-    // 1. Try path aliases
-    for (pattern, targets) in paths {
+    // 1. Try best matching path key (exact first, then longest wildcard prefix)
+    if let Some((pattern, targets)) = find_best_matching_path_key(specifier, paths) {
         if let Some(prefix) = pattern.strip_suffix('*') {
-            if let Some(remainder) = specifier.strip_prefix(prefix) {
-                for target in targets {
-                    let clean_target = target.replace('*', remainder);
-                    let target_trimmed = clean_target.trim_start_matches("./");
-                    let candidate = base_dir.join(target_trimmed);
-                    if let Some(resolved) = resolve_candidate_path(&candidate, &extensions) {
-                        return Some(resolved);
-                    }
+            let remainder = specifier.strip_prefix(prefix).unwrap_or("");
+            for target in targets {
+                let clean_target = target.replace('*', remainder);
+                let target_trimmed = clean_target.trim_start_matches("./");
+                let candidate = base_dir.join(target_trimmed);
+                if let Some(resolved) = resolve_candidate_path(&candidate, &extensions) {
+                    return Some(resolved);
                 }
             }
-        } else if pattern == specifier {
+        } else {
             for target in targets {
                 let target_trimmed = target.trim_start_matches("./");
                 let candidate = base_dir.join(target_trimmed);
@@ -370,8 +393,9 @@ fn resolve_candidate_path(candidate: &Path, extensions: &[&str]) -> Option<std::
     if candidate.is_file() {
         return Some(candidate.to_path_buf());
     }
+    let file_name = candidate.file_name().and_then(|n| n.to_str()).unwrap_or("");
     for ext in extensions {
-        let with_ext = candidate.with_extension(ext);
+        let with_ext = candidate.with_file_name(format!("{}.{}", file_name, ext));
         if with_ext.is_file() {
             return Some(with_ext);
         }
