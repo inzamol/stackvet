@@ -1,7 +1,10 @@
 pub mod stdlib;
 
 use anyhow::Result;
-use ruff_python_ast::{Stmt, StmtImport, StmtImportFrom};
+use ruff_python_ast::visitor::{walk_expr, walk_stmt, Visitor};
+use ruff_python_ast::{
+    Expr, ExprAttribute, ExprCall, ExprName, ExprStringLiteral, Stmt, StmtImport, StmtImportFrom,
+};
 use ruff_python_parser::parse_module;
 use stackvet_core::PythonProjectInfo;
 use std::collections::HashMap;
@@ -14,50 +17,119 @@ pub struct PythonImport {
     pub symbol: Option<String>,
     pub line: usize,
     pub is_relative: bool,
+    pub level: usize,
+    pub is_dynamic: bool,
 }
 
-pub fn parse_python_imports(content: &str, _file: &Path) -> Vec<PythonImport> {
-    let mut imports = Vec::new();
-    if let Ok(parsed) = parse_module(content) {
-        let module = parsed.into_syntax();
-        for stmt in module.body {
-            match stmt {
-                Stmt::Import(StmtImport { names, range, .. }) => {
-                    let offset = usize::from(range.start());
-                    let line = content[..offset.min(content.len())].matches('\n').count() + 1;
-                    for alias in names {
-                        imports.push(PythonImport {
-                            module: alias.name.to_string(),
-                            symbol: None,
-                            line,
-                            is_relative: false,
-                        });
-                    }
+struct ImportVisitor<'b> {
+    content: &'b str,
+    imports: Vec<PythonImport>,
+}
+
+impl<'a, 'b> Visitor<'a> for ImportVisitor<'b> {
+    fn visit_stmt(&mut self, stmt: &'a Stmt) {
+        match stmt {
+            Stmt::Import(StmtImport { names, range, .. }) => {
+                let offset = usize::from(range.start());
+                let line = self.content[..offset.min(self.content.len())]
+                    .matches('\n')
+                    .count()
+                    + 1;
+                for alias in names {
+                    self.imports.push(PythonImport {
+                        module: alias.name.to_string(),
+                        symbol: None,
+                        line,
+                        is_relative: false,
+                        level: 0,
+                        is_dynamic: false,
+                    });
                 }
-                Stmt::ImportFrom(StmtImportFrom {
-                    module,
-                    names,
-                    level,
-                    range,
-                    ..
-                }) => {
-                    let offset = usize::from(range.start());
-                    let line = content[..offset.min(content.len())].matches('\n').count() + 1;
-                    let mod_name = module.map(|m| m.to_string()).unwrap_or_default();
-                    for alias in names {
-                        imports.push(PythonImport {
-                            module: mod_name.clone(),
-                            symbol: Some(alias.name.to_string()),
-                            line,
-                            is_relative: level > 0,
-                        });
-                    }
+            }
+            Stmt::ImportFrom(StmtImportFrom {
+                module,
+                names,
+                level,
+                range,
+                ..
+            }) => {
+                let offset = usize::from(range.start());
+                let line = self.content[..offset.min(self.content.len())]
+                    .matches('\n')
+                    .count()
+                    + 1;
+                let mod_name = module.as_ref().map(|m| m.to_string()).unwrap_or_default();
+                let lvl = *level as usize;
+                for alias in names {
+                    self.imports.push(PythonImport {
+                        module: mod_name.clone(),
+                        symbol: Some(alias.name.to_string()),
+                        line,
+                        is_relative: lvl > 0,
+                        level: lvl,
+                        is_dynamic: false,
+                    });
                 }
-                _ => {}
+            }
+            _ => {
+                walk_stmt(self, stmt);
             }
         }
     }
-    imports
+
+    fn visit_expr(&mut self, expr: &'a Expr) {
+        if let Expr::Call(ExprCall {
+            func,
+            arguments,
+            range,
+            ..
+        }) = expr
+        {
+            let is_dynamic_import = match func.as_ref() {
+                Expr::Name(ExprName { id, .. }) if id.as_str() == "__import__" => true,
+                Expr::Attribute(ExprAttribute { value, attr, .. })
+                    if attr.as_str() == "import_module" =>
+                {
+                    matches!(value.as_ref(), Expr::Name(ExprName { id, .. }) if id.as_str() == "importlib")
+                }
+                _ => false,
+            };
+
+            if is_dynamic_import {
+                if let Some(first_arg) = arguments.args.first() {
+                    if let Expr::StringLiteral(ExprStringLiteral { value, .. }) = first_arg {
+                        let offset = usize::from(range.start());
+                        let line = self.content[..offset.min(self.content.len())]
+                            .matches('\n')
+                            .count()
+                            + 1;
+                        self.imports.push(PythonImport {
+                            module: value.to_str().to_string(),
+                            symbol: None,
+                            line,
+                            is_relative: false,
+                            level: 0,
+                            is_dynamic: true,
+                        });
+                    }
+                }
+            }
+        }
+        walk_expr(self, expr);
+    }
+}
+
+pub fn parse_python_imports(content: &str, _file: &Path) -> Vec<PythonImport> {
+    let mut visitor = ImportVisitor {
+        content,
+        imports: Vec::new(),
+    };
+    if let Ok(parsed) = parse_module(content) {
+        for stmt in parsed.suite() {
+            visitor.visit_stmt(stmt);
+        }
+    }
+    visitor.imports
 }
 
 /// Normalizes Python package names (PEP 503: lowercase, hyphens/underscores normalized)
@@ -289,6 +361,85 @@ import requests
 
         let rel = imports.iter().find(|i| i.module == "local_mod").unwrap();
         assert!(rel.is_relative);
+        assert_eq!(rel.level, 1);
+        assert_eq!(rel.symbol.as_deref(), Some("helper"));
+    }
+
+    #[test]
+    fn test_parse_relative_and_nested_imports() {
+        let code = r#"
+from . import sibling
+from ..parent_pkg import util
+from ...ancestor.core import engine
+
+def load_plugins():
+    import plugin_a
+    try:
+        from optional_pkg import feature
+    except ImportError:
+        import fallback_pkg
+
+class Service:
+    def execute(self):
+        import worker
+"#;
+        let imports = parse_python_imports(code, Path::new("service.py"));
+        let modules: Vec<&str> = imports.iter().map(|i| i.module.as_str()).collect();
+
+        // Check relative imports with varying levels
+        let rel_sibling = imports
+            .iter()
+            .find(|i| i.symbol.as_deref() == Some("sibling"))
+            .unwrap();
+        assert!(rel_sibling.is_relative);
+        assert_eq!(rel_sibling.level, 1);
+        assert_eq!(rel_sibling.module, "");
+
+        let rel_parent = imports.iter().find(|i| i.module == "parent_pkg").unwrap();
+        assert!(rel_parent.is_relative);
+        assert_eq!(rel_parent.level, 2);
+        assert_eq!(rel_parent.symbol.as_deref(), Some("util"));
+
+        let rel_ancestor = imports
+            .iter()
+            .find(|i| i.module == "ancestor.core")
+            .unwrap();
+        assert!(rel_ancestor.is_relative);
+        assert_eq!(rel_ancestor.level, 3);
+        assert_eq!(rel_ancestor.symbol.as_deref(), Some("engine"));
+
+        // Check nested imports inside function, try/except, and class method
+        assert!(modules.contains(&"plugin_a"));
+        assert!(modules.contains(&"optional_pkg"));
+        assert!(modules.contains(&"fallback_pkg"));
+        assert!(modules.contains(&"worker"));
+    }
+
+    #[test]
+    fn test_parse_dynamic_imports() {
+        let code = r#"
+import os
+backend = __import__("custom_backend")
+import importlib
+driver = importlib.import_module("database_driver")
+"#;
+        let imports = parse_python_imports(code, Path::new("app.py"));
+        let dynamic_imports: Vec<&PythonImport> = imports.iter().filter(|i| i.is_dynamic).collect();
+        assert_eq!(dynamic_imports.len(), 2);
+
+        let dyn_backend = dynamic_imports
+            .iter()
+            .find(|i| i.module == "custom_backend")
+            .unwrap();
+        assert!(dyn_backend.is_dynamic);
+        assert!(!dyn_backend.is_relative);
+
+        let dyn_driver = dynamic_imports
+            .iter()
+            .find(|i| i.module == "database_driver")
+            .unwrap();
+        assert!(dyn_driver.is_dynamic);
+        assert!(!dyn_driver.is_relative);
     }
 
     #[test]
