@@ -254,13 +254,6 @@ pub static KNOWN_IMPORT_TO_PYPI: &[(&str, &[&str])] = &[
 
 pub fn is_python_stdlib(module_name: &str) -> bool {
     let root = module_name.split('.').next().unwrap_or(module_name);
-    if root.starts_with('_')
-        || root.starts_with('-')
-        || root == "__future__"
-        || root == "--future--"
-    {
-        return true;
-    }
     let underscore_version = root.replace('-', "_");
     PYTHON_STDLIB.contains(&root) || PYTHON_STDLIB.contains(&underscore_version.as_str())
 }

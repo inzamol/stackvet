@@ -422,3 +422,27 @@ fn test_submodule_file_preferred_over_init_and_deterministic_order() {
         imp002_diags
     );
 }
+
+#[test]
+fn test_underscore_prefixed_third_party_imports_not_treated_as_stdlib() {
+    let test_dir = TestDir::new("underscore-import-test");
+    let root = test_dir.path();
+
+    fs::write(
+        root.join("pyproject.toml"),
+        "[project]\nname = \"underscore-app\"\nversion = \"0.1.0\"\ndependencies = []\n",
+    )
+    .unwrap();
+
+    // Import a third-party internal/private module like _pytest
+    fs::write(root.join("main.py"), "import _pytest\n").unwrap();
+
+    let diags = analyze_test_dir(root);
+    let dep002_diags: Vec<&Diagnostic> =
+        diags.iter().filter(|d| d.rule_id.0 == "DEP-002").collect();
+
+    assert!(
+        !dep002_diags.is_empty(),
+        "_pytest must not be classified as stdlib and should trigger DEP-002 when undeclared"
+    );
+}
