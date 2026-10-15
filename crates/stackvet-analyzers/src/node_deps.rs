@@ -3,7 +3,9 @@ use stackvet_core::{
     Analyzer, Diagnostic, DiagnosticLocation, FixAction, LanguageTarget, ProjectContext, Severity,
 };
 use stackvet_node::builtins::is_node_builtin;
-use stackvet_node::{extract_package_name, parse_node_imports};
+use stackvet_node::{
+    extract_package_name, is_tsconfig_alias, parse_node_imports, resolve_aliased_import,
+};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 
@@ -12,6 +14,12 @@ pub struct NodeDependencyAnalyzer;
 impl NodeDependencyAnalyzer {
     pub fn new() -> Self {
         Self
+    }
+}
+
+impl Default for NodeDependencyAnalyzer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -52,6 +60,19 @@ impl Analyzer for NodeDependencyAnalyzer {
                 let imports = parse_node_imports(&content, file);
                 for imp in imports {
                     if is_node_builtin(&imp.specifier) {
+                        continue;
+                    }
+                    if is_tsconfig_alias(&imp.specifier, &node_info.tsconfig_paths) {
+                        continue;
+                    }
+                    if resolve_aliased_import(
+                        &ctx.root,
+                        &node_info.tsconfig_paths,
+                        node_info.tsconfig_base_url.as_deref(),
+                        &imp.specifier,
+                    )
+                    .is_some()
+                    {
                         continue;
                     }
                     if let Some(pkg_name) = extract_package_name(&imp.specifier) {
@@ -104,7 +125,7 @@ impl Analyzer for NodeDependencyAnalyzer {
         }
 
         // NDEP-002: Unused Node Package
-        for (dep_name, _) in &node_info.dependencies {
+        for dep_name in node_info.dependencies.keys() {
             let matches_import = imported_packages.contains_key(dep_name);
             // Ignore build tools, type definitions or runtime plugins often in dependencies
             let whitelist = [
@@ -138,7 +159,7 @@ impl Analyzer for NodeDependencyAnalyzer {
         }
 
         // NDEP-005: DevDependency in Production Source
-        for (dev_pkg, _) in &node_info.dev_dependencies {
+        for dev_pkg in node_info.dev_dependencies.keys() {
             if let Some(occurrences) = imported_packages.get(dev_pkg) {
                 for (file, line) in occurrences {
                     let file_str = file.to_string_lossy().replace('\\', "/");

@@ -285,6 +285,7 @@ pub struct NodeProjectInfo {
     pub dev_dependencies: HashMap<String, String>,
     pub peer_dependencies: HashMap<String, String>,
     pub tsconfig_paths: HashMap<String, Vec<String>>,
+    pub tsconfig_base_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

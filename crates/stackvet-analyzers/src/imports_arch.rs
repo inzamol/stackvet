@@ -27,10 +27,37 @@ impl ImportsArchAnalyzer {
             return Some(target_base);
         }
 
-        // Try extensions
-        let extensions = ["ts", "tsx", "js", "jsx", "py", "json"];
+        let extensions = ["ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "json"];
+
+        // 1. If target_base has a recognized runtime extension (e.g. .js, .jsx, .mjs, .cjs),
+        // substitute with TypeScript / JavaScript extensions:
+        // .mjs -> .mts, .mjs
+        // .cjs -> .cts, .cjs
+        // .jsx -> .tsx, .jsx
+        // .js  -> .ts, .tsx, .js, .jsx
+        if let Some(ext) = target_base.extension().and_then(|s| s.to_str()) {
+            let candidate_subs: &[&str] = match ext {
+                "mjs" => &["mts", "mjs"],
+                "cjs" => &["cts", "cjs"],
+                "jsx" => &["tsx", "jsx"],
+                "js" => &["ts", "tsx", "js", "jsx"],
+                _ => &[],
+            };
+            for target_ext in candidate_subs {
+                let with_sub = target_base.with_extension(target_ext);
+                if with_sub.is_file() {
+                    return Some(with_sub);
+                }
+            }
+        }
+
+        // 2. Try extensions (preserving dotted basenames)
+        let file_name = target_base
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
         for ext in extensions {
-            let with_ext = target_base.with_extension(ext);
+            let with_ext = target_base.with_file_name(format!("{}.{}", file_name, ext));
             if with_ext.is_file() {
                 return Some(with_ext);
             }
@@ -254,7 +281,7 @@ impl Analyzer for ImportsArchAnalyzer {
                         }
                     }
                 }
-            } else if matches!(ext, "ts" | "tsx" | "js" | "jsx") {
+            } else if matches!(ext, "ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs") {
                 if let Ok(content) = fs::read_to_string(file) {
                     let imports = parse_node_imports(&content, file);
                     for imp in imports {
@@ -289,6 +316,58 @@ impl Analyzer for ImportsArchAnalyzer {
                                     .remediation("Check file extension, path casing, or tsconfig path aliases.")
                                     .build(),
                                 );
+                            }
+                        } else if let Some(node_info) = &ctx.node {
+                            if stackvet_node::is_tsconfig_alias(
+                                &imp.specifier,
+                                &node_info.tsconfig_paths,
+                            ) {
+                                if let Some(target_file) = stackvet_node::resolve_aliased_import(
+                                    &ctx.root,
+                                    &node_info.tsconfig_paths,
+                                    node_info.tsconfig_base_url.as_deref(),
+                                    &imp.specifier,
+                                ) {
+                                    let target_rel = target_file
+                                        .strip_prefix(&ctx.root)
+                                        .unwrap_or(&target_file)
+                                        .to_string_lossy()
+                                        .replace('\\', "/");
+                                    graph.add_import(rel_path.clone(), target_rel);
+                                } else {
+                                    diagnostics.push(
+                                        Diagnostic::builder(
+                                            "IMP-002",
+                                            Severity::Error,
+                                            LanguageTarget::Node,
+                                        )
+                                        .message(format!(
+                                            "Unresolved TypeScript path alias '{}' in '{}'",
+                                            imp.specifier, rel_path
+                                        ))
+                                        .location(
+                                            DiagnosticLocation::new(file.clone())
+                                                .with_span(stackvet_core::TextSpan::single_line(imp.line, 1, 1)),
+                                        )
+                                        .explanation(
+                                            "Path alias matched tsconfig.json paths but target file could not be found on disk.",
+                                        )
+                                        .remediation("Verify tsconfig.json paths mapping and ensure target file exists.")
+                                        .build(),
+                                    );
+                                }
+                            } else if let Some(target_file) = stackvet_node::resolve_aliased_import(
+                                &ctx.root,
+                                &node_info.tsconfig_paths,
+                                node_info.tsconfig_base_url.as_deref(),
+                                &imp.specifier,
+                            ) {
+                                let target_rel = target_file
+                                    .strip_prefix(&ctx.root)
+                                    .unwrap_or(&target_file)
+                                    .to_string_lossy()
+                                    .replace('\\', "/");
+                                graph.add_import(rel_path.clone(), target_rel);
                             }
                         }
                     }
