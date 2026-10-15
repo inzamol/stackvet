@@ -299,8 +299,13 @@ fn find_best_matching_path_key<'a>(
 
     let mut best_match: Option<(&'a str, usize, &'a [String])> = None;
     for (pattern, targets) in paths {
-        if let Some(prefix) = pattern.strip_suffix('*') {
-            if specifier.starts_with(prefix) {
+        if let Some(star_idx) = pattern.find('*') {
+            let prefix = &pattern[..star_idx];
+            let suffix = &pattern[star_idx + 1..];
+            if specifier.starts_with(prefix)
+                && specifier.ends_with(suffix)
+                && specifier.len() >= prefix.len() + suffix.len()
+            {
                 let prefix_len = prefix.len();
                 if best_match
                     .as_ref()
@@ -357,8 +362,10 @@ pub fn resolve_aliased_import(
 
     // 1. Try best matching path key (exact first, then longest wildcard prefix)
     if let Some((pattern, targets)) = find_best_matching_path_key(specifier, paths) {
-        if let Some(prefix) = pattern.strip_suffix('*') {
-            let remainder = specifier.strip_prefix(prefix).unwrap_or("");
+        if let Some(star_idx) = pattern.find('*') {
+            let prefix = &pattern[..star_idx];
+            let suffix = &pattern[star_idx + 1..];
+            let remainder = &specifier[prefix.len()..specifier.len() - suffix.len()];
             for target in targets {
                 let clean_target = target.replace('*', remainder);
                 let target_trimmed = clean_target.trim_start_matches("./");
@@ -376,9 +383,10 @@ pub fn resolve_aliased_import(
                 }
             }
         }
+        return None;
     }
 
-    // 2. Direct baseUrl fallback
+    // 2. Direct baseUrl fallback (only when no paths key matches)
     if base_url.is_some() {
         let candidate = base_dir.join(specifier);
         if let Some(resolved) = resolve_candidate_path(&candidate, &extensions) {
@@ -395,17 +403,23 @@ fn resolve_candidate_path(candidate: &Path, extensions: &[&str]) -> Option<std::
     }
 
     // 1. If candidate has a recognized runtime extension (e.g. .js, .jsx, .mjs, .cjs),
-    // substitute with TypeScript / JavaScript extensions (e.g. ./helper.js -> ./helper.ts)
+    // substitute with TypeScript / JavaScript extensions:
+    // .mjs -> .mts, .mjs
+    // .cjs -> .cts, .cjs
+    // .jsx -> .tsx, .jsx
+    // .js  -> .ts, .tsx, .js, .jsx
     if let Some(ext) = candidate.extension().and_then(|s| s.to_str()) {
-        if matches!(ext, "js" | "jsx" | "mjs" | "cjs") {
-            for target_ext in extensions {
-                if *target_ext == "json" {
-                    continue;
-                }
-                let with_sub = candidate.with_extension(target_ext);
-                if with_sub.is_file() {
-                    return Some(with_sub);
-                }
+        let candidate_subs: &[&str] = match ext {
+            "mjs" => &["mts", "mjs"],
+            "cjs" => &["cts", "cjs"],
+            "jsx" => &["tsx", "jsx"],
+            "js" => &["ts", "tsx", "js", "jsx"],
+            _ => &[],
+        };
+        for target_ext in candidate_subs {
+            let with_sub = candidate.with_extension(target_ext);
+            if with_sub.is_file() {
+                return Some(with_sub);
             }
         }
     }

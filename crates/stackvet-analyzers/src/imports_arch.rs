@@ -30,15 +30,23 @@ impl ImportsArchAnalyzer {
         let extensions = ["ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "json"];
 
         // 1. If target_base has a recognized runtime extension (e.g. .js, .jsx, .mjs, .cjs),
-        // substitute with TypeScript / JavaScript extensions (e.g. ./helper.js -> ./helper.ts)
+        // substitute with TypeScript / JavaScript extensions:
+        // .mjs -> .mts, .mjs
+        // .cjs -> .cts, .cjs
+        // .jsx -> .tsx, .jsx
+        // .js  -> .ts, .tsx, .js, .jsx
         if let Some(ext) = target_base.extension().and_then(|s| s.to_str()) {
-            if matches!(ext, "js" | "jsx" | "mjs" | "cjs") {
-                let ts_js_extensions = ["ts", "tsx", "js", "jsx", "mjs", "cjs"];
-                for target_ext in ts_js_extensions {
-                    let with_sub = target_base.with_extension(target_ext);
-                    if with_sub.is_file() {
-                        return Some(with_sub);
-                    }
+            let candidate_subs: &[&str] = match ext {
+                "mjs" => &["mts", "mjs"],
+                "cjs" => &["cts", "cjs"],
+                "jsx" => &["tsx", "jsx"],
+                "js" => &["ts", "tsx", "js", "jsx"],
+                _ => &[],
+            };
+            for target_ext in candidate_subs {
+                let with_sub = target_base.with_extension(target_ext);
+                if with_sub.is_file() {
+                    return Some(with_sub);
                 }
             }
         }

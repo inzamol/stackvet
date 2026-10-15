@@ -409,8 +409,7 @@ fn test_longest_prefix_alias_and_base_url_resolution() {
                 "baseUrl": "./src",
                 "paths": {
                     "@/*": ["*"],
-                    "@components/*": ["special_components/*"],
-                    "*": ["fallback/*"]
+                    "@components/*": ["special_components/*"]
                 }
             }
         }"#,
@@ -457,5 +456,68 @@ import React from 'react';
         ndep001_diags.is_empty(),
         "No false NDEP-001 diagnostics should be emitted: {:?}",
         ndep001_diags
+    );
+}
+
+#[test]
+fn test_wildcard_with_suffix_and_no_fallback_to_base_url() {
+    let test_dir = TestDir::new("suffix-wildcard");
+    let root = test_dir.path();
+
+    fs::write(
+        root.join("package.json"),
+        r#"{ "name": "suffix-app", "dependencies": {} }"#,
+    )
+    .unwrap();
+
+    fs::write(
+        root.join("tsconfig.json"),
+        r#"{
+            "compilerOptions": {
+                "baseUrl": "./src",
+                "paths": {
+                    "@assets/*.json": ["assets/data/*.json"],
+                    "@blocked/*": ["nonexistent/*"]
+                }
+            }
+        }"#,
+    )
+    .unwrap();
+
+    let src = root.join("src");
+    let assets = src.join("assets").join("data");
+    fs::create_dir_all(&assets).unwrap();
+    fs::write(assets.join("config.json"), "{\"key\": \"val\"}\n").unwrap();
+
+    // In src/blocked/file.ts: exists in baseUrl, but @blocked/* mapped to nonexistent/* must NOT fall back to baseUrl
+    let blocked = src.join("blocked");
+    fs::create_dir_all(&blocked).unwrap();
+    fs::write(blocked.join("file.ts"), "export const b = 1;\n").unwrap();
+
+    fs::write(
+        src.join("main.ts"),
+        r#"
+import data from '@assets/config.json';
+import { b } from '@blocked/file';
+"#,
+    )
+    .unwrap();
+
+    let diags = analyze_test_dir(root);
+    let imp002_diags: Vec<&Diagnostic> =
+        diags.iter().filter(|d| d.rule_id.0 == "IMP-002").collect();
+
+    // @assets/config.json resolves successfully
+    // @blocked/file matches @blocked/*, points to nonexistent/*, and must NOT fall back to baseUrl, so it emits IMP-002
+    assert_eq!(
+        imp002_diags.len(),
+        1,
+        "Expected 1 IMP-002 diagnostic for @blocked/file: {:?}",
+        imp002_diags
+    );
+    assert!(
+        imp002_diags[0].message.contains("@blocked/file"),
+        "Diagnostic message must reference @blocked/file: {}",
+        imp002_diags[0].message
     );
 }
