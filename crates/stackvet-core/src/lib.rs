@@ -273,6 +273,9 @@ pub struct PythonProjectInfo {
     pub direct_dependencies: HashMap<String, String>, // name -> version requirement
     pub dev_dependencies: HashMap<String, String>,
     pub installed_packages: HashMap<String, String>, // if virtualenv detected
+    pub locked_packages: HashMap<String, String>,    // primary locked version per package
+    pub locked_versions: HashMap<String, Vec<String>>, // all locked versions per package
+    pub workspace_packages: HashMap<String, String>, // workspace package name -> version
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -284,6 +287,9 @@ pub struct NodeProjectInfo {
     pub dependencies: HashMap<String, String>,
     pub dev_dependencies: HashMap<String, String>,
     pub peer_dependencies: HashMap<String, String>,
+    pub locked_packages: HashMap<String, String>, // primary locked version per package
+    pub locked_versions: HashMap<String, Vec<String>>, // all locked versions per package
+    pub workspace_packages: HashMap<String, String>, // workspace package name -> version
     pub tsconfig_paths: HashMap<String, Vec<String>>,
     pub tsconfig_base_url: Option<String>,
 }

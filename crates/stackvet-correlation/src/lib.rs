@@ -87,12 +87,13 @@ impl CorrelationEngine {
             });
         }
 
-        // 3. Cluster lockfile & environment drift (DEP-005, NDEP-004, ENV-001, ENV-002, ENV-003)
+        // 3. Cluster lockfile & environment drift (DEP-005, NDEP-004, NDEP-006, ENV-001, ENV-002, ENV-003)
         let (env_diags, others): (Vec<Diagnostic>, Vec<Diagnostic>) =
             remaining_diags.into_iter().partition(|d| {
                 d.rule_id.0.starts_with("ENV-")
                     || d.rule_id.0 == "DEP-005"
                     || d.rule_id.0 == "NDEP-004"
+                    || d.rule_id.0 == "NDEP-006"
             });
 
         if !env_diags.is_empty() {

@@ -3,7 +3,7 @@ use stackvet_core::{
     Analyzer, Diagnostic, DiagnosticLocation, FixAction, LanguageTarget, ProjectContext, Severity,
 };
 use stackvet_python::stdlib::{is_pep594_removed, is_python_stdlib};
-use stackvet_python::{normalize_package_name, parse_python_imports};
+use stackvet_python::{normalize_package_name, parse_python_imports, pep_version_satisfies};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 
@@ -139,6 +139,7 @@ impl Analyzer for PythonDependencyAnalyzer {
             let pypi_alts = stackvet_python::stdlib::get_known_pypi_packages(pkg_name);
             let is_declared = all_declared_direct.contains(pkg_name)
                 || all_declared_dev.contains(pkg_name)
+                || py_info.workspace_packages.contains_key(pkg_name)
                 || pypi_alts.is_some_and(|alts| {
                     alts.iter().any(|alt| {
                         all_declared_direct.contains(*alt) || all_declared_dev.contains(*alt)
@@ -273,7 +274,85 @@ impl Analyzer for PythonDependencyAnalyzer {
                 .file_name()
                 .map(|s| s.to_string_lossy())
                 .unwrap_or_default();
-            if manifest_name == "pyproject.toml" && py_info.lock_file.is_none() {
+
+            if let Some(lock_file_path) = &py_info.lock_file {
+                let lock_name = lock_file_path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy();
+
+                let mut all_manifest_deps: Vec<(&String, &String)> = Vec::new();
+                for (k, v) in &py_info.direct_dependencies {
+                    all_manifest_deps.push((k, v));
+                }
+                for (k, v) in &py_info.dev_dependencies {
+                    all_manifest_deps.push((k, v));
+                }
+
+                for (pkg_name, req_spec) in all_manifest_deps {
+                    let norm = normalize_package_name(pkg_name);
+                    let all_versions = py_info.locked_versions.get(&norm);
+                    let fallback_ver = py_info.locked_packages.get(&norm);
+
+                    let has_match = if let Some(versions) = all_versions {
+                        if !versions.is_empty() {
+                            versions.iter().any(|v| pep_version_satisfies(req_spec, v))
+                        } else if let Some(ver) = fallback_ver {
+                            pep_version_satisfies(req_spec, ver)
+                        } else {
+                            false
+                        }
+                    } else if let Some(ver) = fallback_ver {
+                        pep_version_satisfies(req_spec, ver)
+                    } else {
+                        false
+                    };
+
+                    let reported_ver =
+                        fallback_ver.or_else(|| all_versions.and_then(|v| v.first()));
+
+                    if let Some(locked_ver) = reported_ver {
+                        if !has_match {
+                            diagnostics.push(
+                                Diagnostic::builder("DEP-005", Severity::Warning, LanguageTarget::Python)
+                                    .message(format!(
+                                        "Lockfile dependency drift: package '{}' is locked at version '{}', which violates manifest requirement '{}'",
+                                        pkg_name, locked_ver, req_spec
+                                    ))
+                                    .file(&py_info.manifest_file)
+                                    .explanation(format!(
+                                        "The version locked in {} does not satisfy the requirement in {}. Run '{} lock' to update the lockfile.",
+                                        lock_name, manifest_name, py_info.package_manager
+                                    ))
+                                    .remediation(format!(
+                                        "Run '{} lock' or '{} sync' to align the lockfile with manifest declarations.",
+                                        py_info.package_manager, py_info.package_manager
+                                    ))
+                                    .build(),
+                            );
+                        }
+                    } else if !py_info.workspace_packages.contains_key(&norm) {
+                        diagnostics.push(
+                            Diagnostic::builder("DEP-005", Severity::Warning, LanguageTarget::Python)
+                                .message(format!(
+                                    "Lockfile is out of sync: package '{}' declared in {} is missing from {}",
+                                    pkg_name, manifest_name, lock_name
+                                ))
+                                .file(&py_info.manifest_file)
+                                .explanation(
+                                    "A dependency is declared in project configuration but does not exist in the lockfile.",
+                                )
+                                .remediation(format!(
+                                    "Run '{} lock' to update and sync your lockfile.",
+                                    py_info.package_manager
+                                ))
+                                .build(),
+                        );
+                    }
+                }
+            } else if manifest_name == "pyproject.toml"
+                && (!py_info.direct_dependencies.is_empty() || !py_info.dev_dependencies.is_empty())
+            {
                 diagnostics.push(
                     Diagnostic::builder("DEP-005", Severity::Warning, LanguageTarget::Python)
                         .message("Missing lockfile (uv.lock / poetry.lock) for pyproject.toml")

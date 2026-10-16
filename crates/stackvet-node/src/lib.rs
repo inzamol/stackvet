@@ -1,4 +1,7 @@
 pub mod builtins;
+pub mod lockfile;
+
+pub use lockfile::*;
 
 use anyhow::Result;
 use oxc_allocator::Allocator;
@@ -493,21 +496,61 @@ pub fn detect_node_project(root: &Path) -> Option<NodeProjectInfo> {
     if pkg_json.is_file() {
         if let Ok(content) = fs::read_to_string(&pkg_json) {
             if let Ok(mut info) = parse_package_json(&content, &pkg_json) {
-                // Detect lockfiles
+                // Discover local workspace packages
+                if let Ok(pkg_val) = serde_json::from_str::<serde_json::Value>(&content) {
+                    info.workspace_packages = discover_workspace_packages(root, &pkg_val);
+                }
+
+                // Detect and parse lockfiles
                 let pnpm_lock = root.join("pnpm-lock.yaml");
                 let yarn_lock = root.join("yarn.lock");
                 let npm_lock = root.join("package-lock.json");
+                let bun_text_lock = root.join("bun.lock");
                 let bun_lock = root.join("bun.lockb");
 
                 if pnpm_lock.is_file() {
-                    info.lock_file = Some(pnpm_lock);
+                    info.lock_file = Some(pnpm_lock.clone());
                     info.package_manager = "pnpm".to_string();
+                    if let Ok(lcontent) = fs::read_to_string(&pnpm_lock) {
+                        if let Ok(lock_data) = parse_pnpm_lock(&lcontent) {
+                            info.locked_packages = lock_data.locked_packages;
+                            info.locked_versions = lock_data.locked_versions;
+                            for (k, v) in lock_data.workspace_packages {
+                                info.workspace_packages.entry(k).or_insert(v);
+                            }
+                        }
+                    }
                 } else if yarn_lock.is_file() {
-                    info.lock_file = Some(yarn_lock);
+                    info.lock_file = Some(yarn_lock.clone());
                     info.package_manager = "yarn".to_string();
+                    if let Ok(lcontent) = fs::read_to_string(&yarn_lock) {
+                        let lock_data = parse_yarn_lock(&lcontent);
+                        info.locked_packages = lock_data.locked_packages;
+                        info.locked_versions = lock_data.locked_versions;
+                    }
                 } else if npm_lock.is_file() {
-                    info.lock_file = Some(npm_lock);
+                    info.lock_file = Some(npm_lock.clone());
                     info.package_manager = "npm".to_string();
+                    if let Ok(lcontent) = fs::read_to_string(&npm_lock) {
+                        if let Ok(lock_data) = parse_npm_lock(&lcontent) {
+                            info.locked_packages = lock_data.locked_packages;
+                            info.locked_versions = lock_data.locked_versions;
+                            for (k, v) in lock_data.workspace_packages {
+                                info.workspace_packages.entry(k).or_insert(v);
+                            }
+                        }
+                    }
+                } else if bun_text_lock.is_file() {
+                    info.lock_file = Some(bun_text_lock.clone());
+                    info.package_manager = "bun".to_string();
+                    if let Ok(lcontent) = fs::read_to_string(&bun_text_lock) {
+                        let lock_data = parse_bun_lock(&lcontent);
+                        info.locked_packages = lock_data.locked_packages;
+                        info.locked_versions = lock_data.locked_versions;
+                        for (k, v) in lock_data.workspace_packages {
+                            info.workspace_packages.entry(k).or_insert(v);
+                        }
+                    }
                 } else if bun_lock.is_file() {
                     info.lock_file = Some(bun_lock);
                     info.package_manager = "bun".to_string();

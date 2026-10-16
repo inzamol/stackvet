@@ -749,6 +749,14 @@ pub static ALL_RULES: &[RuleMeta] = &[
         remediation: "Move package from devDependencies to dependencies in package.json.",
     },
     RuleMeta {
+        id: "NDEP-006",
+        category: "node",
+        title: "Inconsistent Dependency Version",
+        severity: "WARN",
+        description: "Dependency versions across packages, workspace members, or lockfile resolutions are inconsistent or conflicting.",
+        remediation: "Align dependency version constraints across packages and synchronize the lockfile.",
+    },
+    RuleMeta {
         id: "NXT-001",
         category: "nextjs",
         title: "Server Component Client API",
