@@ -291,8 +291,28 @@ impl Analyzer for PythonDependencyAnalyzer {
 
                 for (pkg_name, req_spec) in all_manifest_deps {
                     let norm = normalize_package_name(pkg_name);
-                    if let Some(locked_ver) = py_info.locked_packages.get(&norm) {
-                        if !pep_version_satisfies(req_spec, locked_ver) {
+                    let all_versions = py_info.locked_versions.get(&norm);
+                    let fallback_ver = py_info.locked_packages.get(&norm);
+
+                    let has_match = if let Some(versions) = all_versions {
+                        if !versions.is_empty() {
+                            versions.iter().any(|v| pep_version_satisfies(req_spec, v))
+                        } else if let Some(ver) = fallback_ver {
+                            pep_version_satisfies(req_spec, ver)
+                        } else {
+                            false
+                        }
+                    } else if let Some(ver) = fallback_ver {
+                        pep_version_satisfies(req_spec, ver)
+                    } else {
+                        false
+                    };
+
+                    let reported_ver =
+                        fallback_ver.or_else(|| all_versions.and_then(|v| v.first()));
+
+                    if let Some(locked_ver) = reported_ver {
+                        if !has_match {
                             diagnostics.push(
                                 Diagnostic::builder("DEP-005", Severity::Warning, LanguageTarget::Python)
                                     .message(format!(

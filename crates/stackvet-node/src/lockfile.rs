@@ -1,3 +1,4 @@
+use crate::strip_json_comments;
 use anyhow::Result;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
@@ -52,16 +53,23 @@ pub fn parse_npm_lock(content: &str) -> Result<LockfileData> {
                 .and_then(|l| l.as_bool())
                 .unwrap_or(false);
 
-            if pkg_path.contains("node_modules/") {
-                if let Some(name) = extract_pkg_name_from_node_modules_path(pkg_path) {
+            let clean_pkg_path = pkg_path.replace('\\', "/");
+            let clean_pkg_path = clean_pkg_path.strip_prefix("./").unwrap_or(&clean_pkg_path);
+            if clean_pkg_path.contains("node_modules/") {
+                if let Some(name) = extract_pkg_name_from_node_modules_path(clean_pkg_path) {
                     if let Some(ver) = pkg_info.get("version").and_then(|v| v.as_str()) {
-                        let is_top_level = !pkg_path[13..].contains("/node_modules/");
+                        let is_top_level = clean_pkg_path.starts_with("node_modules/")
+                            && !clean_pkg_path["node_modules/".len()..].contains("/node_modules/");
                         data.locked_versions
                             .entry(name.clone())
                             .or_default()
                             .push(ver.to_string());
-                        if is_top_level || !data.locked_packages.contains_key(&name) {
-                            data.locked_packages.insert(name, ver.to_string());
+                        if is_top_level {
+                            data.locked_packages.insert(name.clone(), ver.to_string());
+                        } else {
+                            data.locked_packages
+                                .entry(name.clone())
+                                .or_insert_with(|| ver.to_string());
                         }
                     } else if is_link {
                         // Symlinked workspace package
@@ -318,14 +326,72 @@ pub fn parse_yarn_lock(content: &str) -> LockfileData {
     data
 }
 
-/// Parses bun.lock (text) or JSON-based bun lockfile.
+/// Parses bun.lock (Bun 1.2+ JSONC format directly).
 pub fn parse_bun_lock(content: &str) -> LockfileData {
-    if let Ok(data) = parse_npm_lock(content) {
-        if !data.locked_packages.is_empty() {
-            return data;
+    let mut data = LockfileData::default();
+    let cleaned = strip_json_comments(content);
+    let val: serde_json::Value = match serde_json::from_str(&cleaned) {
+        Ok(v) => v,
+        Err(_) => return data,
+    };
+
+    if let Some(packages) = val.get("packages").and_then(|p| p.as_object()) {
+        for (key, val) in packages {
+            if key.is_empty() {
+                // Root package entry
+                continue;
+            }
+
+            // In Bun, packages map entry is typically an array where element 0 is "name@version"
+            // e.g. "react": ["react@18.2.0", ...]
+            // or "packages/ui": ["@myorg/ui@workspace:packages/ui", ...]
+            let specifier_opt = if let Some(arr) = val.as_array() {
+                arr.first().and_then(|v| v.as_str())
+            } else if let Some(s) = val.as_str() {
+                Some(s)
+            } else if let Some(obj) = val.as_object() {
+                obj.get("version").and_then(|v| v.as_str())
+            } else {
+                None
+            };
+
+            let Some(specifier) = specifier_opt else {
+                continue;
+            };
+
+            // Parse specifier: "name@version" or "@scope/pkg@version"
+            let (name, ver) = if let Some(stripped) = specifier.strip_prefix('@') {
+                if let Some(at_idx) = stripped.find('@') {
+                    (format!("@{}", &stripped[..at_idx]), &stripped[at_idx + 1..])
+                } else {
+                    continue;
+                }
+            } else if let Some(at_idx) = specifier.find('@') {
+                (specifier[..at_idx].to_string(), &specifier[at_idx + 1..])
+            } else {
+                (key.clone(), specifier)
+            };
+
+            if ver.starts_with("workspace:") || ver.starts_with("link:") {
+                let ws_clean = ver.strip_prefix("workspace:").unwrap_or(ver).trim();
+                let recorded_ver = if ws_clean.is_empty() || ws_clean == "*" || ws_clean == "." {
+                    "0.0.0".to_string()
+                } else {
+                    ws_clean.to_string()
+                };
+                data.workspace_packages.insert(name.clone(), recorded_ver);
+            } else {
+                let clean_ver = clean_pnpm_version(ver);
+                data.locked_versions
+                    .entry(name.clone())
+                    .or_default()
+                    .push(clean_ver.clone());
+                data.locked_packages.insert(name, clean_ver);
+            }
         }
     }
-    parse_yarn_lock(content)
+
+    data
 }
 
 /// Scans workspaces defined in package.json or pnpm-workspace.yaml to discover local packages.
@@ -559,6 +625,9 @@ mod tests {
                 "node_modules/@test/shared-ui": {
                     "resolved": "packages/shared-ui",
                     "link": true
+                },
+                "packages/shared-ui/node_modules/react": {
+                    "version": "17.0.2"
                 }
             }
         }"#;
@@ -578,6 +647,10 @@ mod tests {
                 .map(|s| s.as_str()),
             Some("2.0.0")
         );
+        // Verify locked_versions contains both versions
+        let react_versions = data.locked_versions.get("react").unwrap();
+        assert!(react_versions.contains(&"18.2.0".to_string()));
+        assert!(react_versions.contains(&"17.0.2".to_string()));
     }
 
     #[test]
@@ -641,6 +714,31 @@ packages:
             data.locked_packages.get("@types/react").map(|s| s.as_str()),
             Some("18.2.14")
         );
+    }
+
+    #[test]
+    fn test_parse_bun_lock() {
+        let content = r#"{
+            "lockfileVersion": 1,
+            // JSONC comments in bun.lock
+            "packages": {
+                "": ["my-app@workspace:."],
+                "react": ["react@18.2.0"],
+                "@types/react": ["@types/react@18.2.14"],
+                "packages/ui": ["@myorg/ui@workspace:packages/ui"],
+            }
+        }"#;
+
+        let data = parse_bun_lock(content);
+        assert_eq!(
+            data.locked_packages.get("react").map(|s| s.as_str()),
+            Some("18.2.0")
+        );
+        assert_eq!(
+            data.locked_packages.get("@types/react").map(|s| s.as_str()),
+            Some("18.2.14")
+        );
+        assert!(data.workspace_packages.contains_key("@myorg/ui"));
     }
 
     #[test]

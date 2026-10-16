@@ -263,8 +263,30 @@ impl Analyzer for NodeDependencyAnalyzer {
                     }
                 } else {
                     // Regular package: check stale entries and constraint drift
-                    if let Some(locked_ver) = node_info.locked_packages.get(dep_name) {
-                        if !npm_version_satisfies(constraint, locked_ver) {
+                    let all_versions = node_info.locked_versions.get(dep_name);
+                    let fallback_ver = node_info.locked_packages.get(dep_name);
+
+                    let has_match = if let Some(versions) = all_versions {
+                        if !versions.is_empty() {
+                            versions
+                                .iter()
+                                .any(|v| npm_version_satisfies(constraint, v))
+                        } else if let Some(ver) = fallback_ver {
+                            npm_version_satisfies(constraint, ver)
+                        } else {
+                            false
+                        }
+                    } else if let Some(ver) = fallback_ver {
+                        npm_version_satisfies(constraint, ver)
+                    } else {
+                        false
+                    };
+
+                    let reported_ver =
+                        fallback_ver.or_else(|| all_versions.and_then(|v| v.first()));
+
+                    if let Some(locked_ver) = reported_ver {
+                        if !has_match {
                             diagnostics.push(
                                 Diagnostic::builder("NDEP-004", Severity::Warning, LanguageTarget::Node)
                                     .message(format!(

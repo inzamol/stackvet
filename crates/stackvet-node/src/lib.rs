@@ -547,6 +547,9 @@ pub fn detect_node_project(root: &Path) -> Option<NodeProjectInfo> {
                         let lock_data = parse_bun_lock(&lcontent);
                         info.locked_packages = lock_data.locked_packages;
                         info.locked_versions = lock_data.locked_versions;
+                        for (k, v) in lock_data.workspace_packages {
+                            info.workspace_packages.entry(k).or_insert(v);
+                        }
                     }
                 } else if bun_lock.is_file() {
                     info.lock_file = Some(bun_lock);
