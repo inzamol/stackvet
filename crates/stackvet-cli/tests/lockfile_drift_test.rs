@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 struct TestDir(PathBuf);
 
 impl TestDir {
+    /// Creates an isolated temporary project directory for a lockfile scenario.
     fn new(name: &str) -> Self {
         let ts = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -20,17 +21,20 @@ impl TestDir {
         TestDir(path)
     }
 
+    /// Returns the temporary project's root path.
     fn path(&self) -> &Path {
         &self.0
     }
 }
 
 impl Drop for TestDir {
+    /// Removes the temporary project when its test fixture leaves scope.
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
     }
 }
 
+/// Scans a fixture project and runs dependency analyzers in offline mode.
 fn analyze_test_dir(dir: &Path) -> Vec<Diagnostic> {
     let scanner = ProjectScanner::new(dir);
     let mut ctx = scanner.build_context().expect("Failed to build context");
@@ -39,6 +43,7 @@ fn analyze_test_dir(dir: &Path) -> Vec<Diagnostic> {
     run_all_analyzers(&ctx, true).expect("Failed to run core analyzers")
 }
 
+/// Verifies declared npm dependencies without a lockfile produce NDEP-004.
 #[test]
 fn test_npm_missing_lockfile_triggers_ndep004() {
     let test_dir = TestDir::new("npm-missing");
@@ -64,6 +69,7 @@ fn test_npm_missing_lockfile_triggers_ndep004() {
     );
 }
 
+/// Verifies a matching npm lockfile produces no dependency drift warnings.
 #[test]
 fn test_npm_synced_lockfile_produces_zero_ndep004() {
     let test_dir = TestDir::new("npm-synced");
@@ -113,6 +119,7 @@ fn test_npm_synced_lockfile_produces_zero_ndep004() {
     );
 }
 
+/// Verifies a dependency absent from the npm lockfile produces NDEP-004.
 #[test]
 fn test_npm_stale_lockfile_entry_triggers_ndep004() {
     let test_dir = TestDir::new("npm-stale");
@@ -156,6 +163,7 @@ fn test_npm_stale_lockfile_entry_triggers_ndep004() {
     assert!(stale_diag.unwrap().message.contains("axios"));
 }
 
+/// Verifies an npm locked version outside its manifest constraint produces NDEP-004.
 #[test]
 fn test_npm_constraint_drift_triggers_ndep004() {
     let test_dir = TestDir::new("npm-drift");
@@ -200,6 +208,7 @@ fn test_npm_constraint_drift_triggers_ndep004() {
     assert!(msg.contains("^18.2.0"));
 }
 
+/// Verifies pnpm lockfile validation accepts matching versions and reports drift.
 #[test]
 fn test_pnpm_lockfile_sync_and_drift() {
     let test_dir = TestDir::new("pnpm-drift");
@@ -256,6 +265,7 @@ packages:
     assert!(pnpm_drift.is_some(), "Expected NDEP-004 pnpm drift");
 }
 
+/// Verifies Yarn lockfile validation accepts matching entries and reports missing ones.
 #[test]
 fn test_yarn_lockfile_sync_and_stale() {
     let test_dir = TestDir::new("yarn-test");
@@ -295,6 +305,7 @@ fn test_yarn_lockfile_sync_and_stale() {
     );
 }
 
+/// Verifies local workspace dependencies resolve and incompatible versions report drift.
 #[test]
 fn test_workspace_dependencies_resolved_and_drift() {
     let test_dir = TestDir::new("workspace-test");
@@ -403,6 +414,7 @@ fn test_workspace_dependencies_resolved_and_drift() {
     );
 }
 
+/// Verifies conflicting locked React major versions produce NDEP-006.
 #[test]
 fn test_inconsistent_dependency_versions_ndep006() {
     let test_dir = TestDir::new("inconsistent-vers");
@@ -447,6 +459,7 @@ fn test_inconsistent_dependency_versions_ndep006() {
     assert!(ndep006.unwrap().message.contains("18.2.0"));
 }
 
+/// Verifies missing uv lockfiles, absent packages, and version drift produce DEP-005.
 #[test]
 fn test_python_uv_lock_missing_stale_and_drift() {
     let test_dir = TestDir::new("py-uv-drift");
@@ -549,6 +562,7 @@ dependencies = [
     assert!(msg.contains(">=2.31.0"));
 }
 
+/// Verifies Poetry lockfile validation accepts matching versions and reports drift.
 #[test]
 fn test_python_poetry_lock_sync_and_drift() {
     let test_dir = TestDir::new("py-poetry-drift");
@@ -605,6 +619,7 @@ fastapi = "^0.120.0"
     );
 }
 
+/// Verifies Bun JSONC lockfile validation accepts matching versions and reports drift.
 #[test]
 fn test_bun_lock_jsonc_sync_and_drift() {
     let test_dir = TestDir::new("bun-jsonc");
@@ -661,6 +676,7 @@ fn test_bun_lock_jsonc_sync_and_drift() {
     assert!(drift.is_some(), "Expected NDEP-004 for bun.lock drift");
 }
 
+/// Verifies Python drift checks accept any locked version satisfying the requirement.
 #[test]
 fn test_python_multi_version_satisfaction() {
     let test_dir = TestDir::new("py-multi-ver");

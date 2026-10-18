@@ -33,6 +33,7 @@ impl Analyzer for NodeDependencyAnalyzer {
         LanguageTarget::Node
     }
 
+    /// Checks Node imports, dependency declarations, and lockfile versions for drift.
     fn analyze(&self, ctx: &ProjectContext) -> Result<Vec<Diagnostic>> {
         let mut diagnostics = Vec::new();
         let node_info = match &ctx.node {

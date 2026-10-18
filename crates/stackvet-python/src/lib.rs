@@ -296,6 +296,7 @@ pub fn parse_requirements_txt(content: &str, path: &Path) -> PythonProjectInfo {
     info
 }
 
+/// Detects a Python project and loads its manifest and available lockfile metadata.
 pub fn detect_python_project(root: &Path) -> Option<PythonProjectInfo> {
     let pyproject = root.join("pyproject.toml");
     if pyproject.is_file() {

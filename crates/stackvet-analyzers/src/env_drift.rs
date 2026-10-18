@@ -12,12 +12,6 @@ impl EnvDriftAnalyzer {
     }
 }
 
-impl Default for EnvDriftAnalyzer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Analyzer for EnvDriftAnalyzer {
     fn name(&self) -> &'static str {
         "EnvDriftAnalyzer"

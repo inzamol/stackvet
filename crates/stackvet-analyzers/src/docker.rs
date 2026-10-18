@@ -268,12 +268,6 @@ impl DockerAnalyzer {
     }
 }
 
-impl Default for DockerAnalyzer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Analyzer for DockerAnalyzer {
     fn name(&self) -> &'static str {
         "DockerAnalyzer"

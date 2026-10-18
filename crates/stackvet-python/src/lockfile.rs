@@ -225,6 +225,7 @@ pub fn pep_version_satisfies(req_str: &str, locked_version: &str) -> bool {
 mod tests {
     use super::*;
 
+    /// Verifies uv package versions and normalized workspace package names are retained.
     #[test]
     fn test_parse_uv_lock() {
         let content = r#"
@@ -260,6 +261,7 @@ source = { workspace = true }
         );
     }
 
+    /// Verifies Poetry versions and development workspace packages are retained.
     #[test]
     fn test_parse_poetry_lock() {
         let content = r#"
@@ -286,6 +288,7 @@ develop = true
         );
     }
 
+    /// Verifies Python bounds, exact pins, and compatible release constraints.
     #[test]
     fn test_pep_version_satisfies() {
         assert!(pep_version_satisfies(">=2.28.0", "2.28.2"));

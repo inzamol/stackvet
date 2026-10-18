@@ -82,6 +82,7 @@ impl Analyzer for PythonDependencyAnalyzer {
         LanguageTarget::Python
     }
 
+    /// Checks Python imports, dependency declarations, and lockfile versions for drift.
     fn analyze(&self, ctx: &ProjectContext) -> Result<Vec<Diagnostic>> {
         let mut diagnostics = Vec::new();
         let py_info = match &ctx.python {

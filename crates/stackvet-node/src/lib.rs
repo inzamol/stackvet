@@ -491,6 +491,7 @@ pub fn parse_package_json(content: &str, path: &Path) -> Result<NodeProjectInfo>
     Ok(info)
 }
 
+/// Detects a Node project and loads its manifest, workspace packages, and lockfile versions.
 pub fn detect_node_project(root: &Path) -> Option<NodeProjectInfo> {
     let pkg_json = root.join("package.json");
     if pkg_json.is_file() {

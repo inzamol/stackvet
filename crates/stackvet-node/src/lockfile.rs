@@ -107,6 +107,7 @@ pub fn parse_npm_lock(content: &str) -> Result<LockfileData> {
     Ok(data)
 }
 
+/// Recursively collects legacy npm dependency versions without replacing primary versions.
 fn parse_npm_v1_dependencies(
     deps: &serde_json::Map<String, serde_json::Value>,
     data: &mut LockfileData,
@@ -579,6 +580,7 @@ pub fn npm_version_satisfies(constraint: &str, locked_version: &str) -> bool {
 mod tests {
     use super::*;
 
+    /// Verifies package name extraction for scoped, nested, and workspace paths.
     #[test]
     fn test_extract_pkg_name_from_node_modules_path() {
         assert_eq!(
@@ -599,6 +601,7 @@ mod tests {
         );
     }
 
+    /// Verifies npm package entries retain root versions and linked workspace metadata.
     #[test]
     fn test_parse_npm_lock_v2_v3() {
         let json = r#"{
@@ -653,6 +656,7 @@ mod tests {
         assert!(react_versions.contains(&"17.0.2".to_string()));
     }
 
+    /// Verifies pnpm importer versions, peer suffix removal, and workspace links.
     #[test]
     fn test_parse_pnpm_lock_v6() {
         let yaml = r#"
@@ -690,6 +694,7 @@ packages:
         assert!(data.workspace_packages.contains_key("@test/shared-ui"));
     }
 
+    /// Verifies Yarn classic headers resolve regular and scoped package versions.
     #[test]
     fn test_parse_yarn_lock() {
         let content = r#"
@@ -716,6 +721,7 @@ packages:
         );
     }
 
+    /// Verifies Bun JSONC parsing accepts comments, trailing commas, and workspace entries.
     #[test]
     fn test_parse_bun_lock() {
         let content = r#"{
@@ -741,6 +747,7 @@ packages:
         assert!(data.workspace_packages.contains_key("@myorg/ui"));
     }
 
+    /// Verifies npm ranges, exact pins, and workspace constraints against locked versions.
     #[test]
     fn test_npm_version_satisfies() {
         assert!(npm_version_satisfies("^18.2.0", "18.2.0"));

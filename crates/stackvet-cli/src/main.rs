@@ -220,7 +220,7 @@ fn collect_all_diagnostics(
     let mut diagnostics = run_all_analyzers(ctx, offline)?;
     let mut fw_diags = run_all_framework_analyzers(ctx)?;
     diagnostics.append(&mut fw_diags);
-    diagnostics.sort_by_key(|a| std::cmp::Reverse(a.severity));
+    diagnostics.sort_by(|a, b| b.severity.cmp(&a.severity));
     Ok(diagnostics)
 }
 
