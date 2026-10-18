@@ -2031,7 +2031,10 @@ dependencies = [
  "oxc_ast",
  "oxc_parser",
  "oxc_span",
+ "semver",
+ "serde",
  "serde_json",
+ "serde_yaml",
  "stackvet-core",
 ]
 
@@ -2043,7 +2046,9 @@ dependencies = [
  "get-size2",
  "ruff_python_ast",
  "ruff_python_parser",
+ "semver",
  "serde",
+ "serde_json",
  "stackvet-core",
  "toml",
 ]

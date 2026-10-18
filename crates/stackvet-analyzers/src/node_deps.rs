@@ -4,7 +4,8 @@ use stackvet_core::{
 };
 use stackvet_node::builtins::is_node_builtin;
 use stackvet_node::{
-    extract_package_name, is_tsconfig_alias, parse_node_imports, resolve_aliased_import,
+    extract_package_name, is_tsconfig_alias, npm_version_satisfies, parse_node_imports,
+    resolve_aliased_import,
 };
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -32,6 +33,7 @@ impl Analyzer for NodeDependencyAnalyzer {
         LanguageTarget::Node
     }
 
+    /// Checks Node imports, dependency declarations, and lockfile versions for drift.
     fn analyze(&self, ctx: &ProjectContext) -> Result<Vec<Diagnostic>> {
         let mut diagnostics = Vec::new();
         let node_info = match &ctx.node {
@@ -94,7 +96,10 @@ impl Analyzer for NodeDependencyAnalyzer {
 
         // NDEP-001: Missing Node Package
         for (pkg_name, occurrences) in &imported_packages {
-            if !all_deps.contains(pkg_name.as_str()) && !all_dev_deps.contains(pkg_name.as_str()) {
+            if !all_deps.contains(pkg_name.as_str())
+                && !all_dev_deps.contains(pkg_name.as_str())
+                && !node_info.workspace_packages.contains_key(pkg_name.as_str())
+            {
                 let (first_file, first_line) = occurrences[0];
                 diagnostics.push(
                     Diagnostic::builder("NDEP-001", Severity::Error, LanguageTarget::Node)
@@ -198,8 +203,168 @@ impl Analyzer for NodeDependencyAnalyzer {
             }
         }
 
-        // NDEP-004: Lockfile Out of Sync / Missing
-        if node_info.lock_file.is_none() {
+        // NDEP-004: Lockfile Out of Sync / Missing & Drift
+        if let Some(lock_file_path) = &node_info.lock_file {
+            let lock_name = lock_file_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy();
+
+            let mut all_manifest_deps: Vec<(&String, &String)> = Vec::new();
+            for (k, v) in &node_info.dependencies {
+                all_manifest_deps.push((k, v));
+            }
+            for (k, v) in &node_info.dev_dependencies {
+                all_manifest_deps.push((k, v));
+            }
+
+            for (dep_name, constraint) in all_manifest_deps {
+                let is_workspace_dep = constraint.starts_with("workspace:")
+                    || constraint.starts_with("file:")
+                    || constraint.starts_with("link:");
+
+                if is_workspace_dep {
+                    // Check workspace dependency resolution
+                    if let Some(ws_ver) = node_info.workspace_packages.get(dep_name) {
+                        if !npm_version_satisfies(constraint, ws_ver) {
+                            diagnostics.push(
+                                Diagnostic::builder("NDEP-004", Severity::Warning, LanguageTarget::Node)
+                                    .message(format!(
+                                        "Workspace dependency '{}' constraint '{}' in package.json does not match local package version '{}'",
+                                        dep_name, constraint, ws_ver
+                                    ))
+                                    .file(&node_info.package_json_path)
+                                    .explanation(
+                                        "The declared workspace dependency constraint conflicts with the actual version of the local package in the workspace.",
+                                    )
+                                    .remediation(format!(
+                                        "Update package.json constraint to match workspace package version '{}'.",
+                                        ws_ver
+                                    ))
+                                    .build(),
+                            );
+                        }
+                    } else if !node_info.locked_packages.contains_key(dep_name) {
+                        diagnostics.push(
+                            Diagnostic::builder("NDEP-004", Severity::Warning, LanguageTarget::Node)
+                                .message(format!(
+                                    "Workspace dependency '{}' declared in package.json cannot be resolved in workspace or lockfile",
+                                    dep_name
+                                ))
+                                .file(&node_info.package_json_path)
+                                .explanation(
+                                    "Workspace dependency references a local package that does not exist or is not linked in the lockfile.",
+                                )
+                                .remediation(format!(
+                                    "Verify package '{}' exists in workspace packages or run '{} install'.",
+                                    dep_name, node_info.package_manager
+                                ))
+                                .build(),
+                        );
+                    }
+                } else {
+                    // Regular package: check stale entries and constraint drift
+                    let all_versions = node_info.locked_versions.get(dep_name);
+                    let fallback_ver = node_info.locked_packages.get(dep_name);
+
+                    let has_match = if let Some(versions) = all_versions {
+                        if !versions.is_empty() {
+                            versions
+                                .iter()
+                                .any(|v| npm_version_satisfies(constraint, v))
+                        } else if let Some(ver) = fallback_ver {
+                            npm_version_satisfies(constraint, ver)
+                        } else {
+                            false
+                        }
+                    } else if let Some(ver) = fallback_ver {
+                        npm_version_satisfies(constraint, ver)
+                    } else {
+                        false
+                    };
+
+                    let reported_ver =
+                        fallback_ver.or_else(|| all_versions.and_then(|v| v.first()));
+
+                    if let Some(locked_ver) = reported_ver {
+                        if !has_match {
+                            diagnostics.push(
+                                Diagnostic::builder("NDEP-004", Severity::Warning, LanguageTarget::Node)
+                                    .message(format!(
+                                        "Lockfile dependency drift: package '{}' is locked at version '{}', which violates manifest constraint '{}'",
+                                        dep_name, locked_ver, constraint
+                                    ))
+                                    .file(&node_info.package_json_path)
+                                    .explanation(format!(
+                                        "The version locked in {} does not satisfy the constraint in package.json. Run '{} install' to align the lockfile with manifest declarations.",
+                                        lock_name, node_info.package_manager
+                                    ))
+                                    .remediation(format!(
+                                        "Run '{} install' to update {} to satisfy '{}'.",
+                                        node_info.package_manager, dep_name, constraint
+                                    ))
+                                    .build(),
+                            );
+                        }
+                    } else if !node_info.workspace_packages.contains_key(dep_name) {
+                        diagnostics.push(
+                            Diagnostic::builder("NDEP-004", Severity::Warning, LanguageTarget::Node)
+                                .message(format!(
+                                    "Lockfile is out of sync: package '{}' declared in package.json is missing from {}",
+                                    dep_name, lock_name
+                                ))
+                                .file(&node_info.package_json_path)
+                                .explanation(
+                                    "A dependency is declared in package.json but does not exist in the lockfile. This indicates an uncommitted package or out-of-sync lockfile.",
+                                )
+                                .remediation(format!(
+                                    "Run '{} install' to update and sync your lockfile.",
+                                    node_info.package_manager
+                                ))
+                                .build(),
+                        );
+                    }
+                }
+            }
+
+            // NDEP-006: Inconsistent Dependency Versions (Multiple conflicting versions of singleton packages)
+            let singletons = ["react", "react-dom", "@types/react", "vue", "graphql"];
+            for singleton in singletons {
+                if let Some(versions) = node_info.locked_versions.get(singleton) {
+                    let unique_versions: HashSet<&str> =
+                        versions.iter().map(|s| s.as_str()).collect();
+                    if unique_versions.len() > 1 {
+                        let major_versions: HashSet<&str> = unique_versions
+                            .iter()
+                            .filter_map(|v| v.split('.').next())
+                            .collect();
+                        if major_versions.len() > 1 {
+                            let mut sorted_vers: Vec<&str> = unique_versions.into_iter().collect();
+                            sorted_vers.sort();
+                            diagnostics.push(
+                                Diagnostic::builder("NDEP-006", Severity::Warning, LanguageTarget::Node)
+                                    .message(format!(
+                                        "Multiple conflicting versions of '{}' are locked in {}: {}",
+                                        singleton,
+                                        lock_name,
+                                        sorted_vers.join(", ")
+                                    ))
+                                    .file(lock_file_path)
+                                    .explanation(format!(
+                                        "Package '{}' relies on singleton runtime state. Having multiple distinct versions locked in the dependency tree leads to dual-instance bugs and invalid hook calls.",
+                                        singleton
+                                    ))
+                                    .remediation(format!(
+                                        "Deduplicate dependencies or align peer dependency requirements using '{} dedupe'.",
+                                        node_info.package_manager
+                                    ))
+                                    .build(),
+                            );
+                        }
+                    }
+                }
+            }
+        } else if !node_info.dependencies.is_empty() || !node_info.dev_dependencies.is_empty() {
             diagnostics.push(
                 Diagnostic::builder("NDEP-004", Severity::Warning, LanguageTarget::Node)
                     .message("No lockfile detected (pnpm-lock.yaml / package-lock.json / yarn.lock)")
