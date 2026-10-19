@@ -30,6 +30,14 @@ impl Severity {
         }
     }
 
+    /// Health score deduction points associated with this severity level.
+    ///
+    /// StackVet uses an additive penalty model subtracted from a base health score of 100:
+    /// - `Critical` (-20 pts): Catastrophic system failures, blocking event loops, fatal runtime breaks.
+    /// - `Error` (-8 pts): Definite runtime breakages, missing dependencies, circular imports.
+    /// - `Warning` (-2 pts): Transitive dependency risks, unpinned versions, runtime drift, anti-patterns.
+    /// - `Info` (0 pts): Non-penalizing informational observations and architecture insights.
+    /// - `Hint` (0 pts): Advisory recommendations.
     pub fn penalty_points(&self) -> i32 {
         match self {
             Severity::Critical => 20,
@@ -92,7 +100,7 @@ impl fmt::Display for LanguageTarget {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TextSpan {
     pub start_line: usize,
     pub start_col: usize,
@@ -115,7 +123,7 @@ impl TextSpan {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct DiagnosticLocation {
     pub file_path: PathBuf,
     pub span: Option<TextSpan>,
@@ -142,7 +150,7 @@ impl DiagnosticLocation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FixAction {
     pub description: String,
     pub file_path: PathBuf,
@@ -170,7 +178,7 @@ impl FixAction {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Diagnostic {
     pub rule_id: RuleId,
     pub message: String,
@@ -180,6 +188,49 @@ pub struct Diagnostic {
     pub suggested_remediation: String,
     pub fix: Option<FixAction>,
     pub language: LanguageTarget,
+}
+
+/// Contribution of an individual diagnostic to health score deduction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiagnosticContribution {
+    pub rule_id: String,
+    pub severity: Severity,
+    pub penalty: u32,
+    pub file_path: String,
+    pub line: Option<usize>,
+    pub message: String,
+}
+
+/// Aggregated contribution of a specific rule violation to health score deduction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuleScoreContribution {
+    pub rule_id: String,
+    pub severity: Severity,
+    pub penalty_per_finding: u32,
+    pub count: usize,
+    pub total_penalty: u32,
+    pub title: String,
+}
+
+/// Comprehensive, explainable breakdown of the health score calculation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HealthScoreExplanation {
+    /// Initial base score before deductions (standard: 100).
+    pub base_score: u32,
+    /// Final computed health score clamped between 0 and 100.
+    pub final_score: u32,
+    /// Letter grade representation (A, B, C, F).
+    pub grade: String,
+    /// Total points deducted from base score.
+    pub total_deductions: u32,
+    /// Count of unique diagnostics that contributed to the score.
+    pub unique_findings_count: usize,
+    /// Count of duplicate or redundant findings ignored during scoring.
+    pub duplicate_findings_ignored: usize,
+    /// Deductions grouped by rule ID.
+    pub rule_contributions: Vec<RuleScoreContribution>,
+    /// Exact diagnostics that incurred deductions.
+    pub diagnostic_details: Vec<DiagnosticContribution>,
 }
 
 impl Diagnostic {

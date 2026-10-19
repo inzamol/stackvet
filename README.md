@@ -157,9 +157,26 @@ stackvet diagnose
 # Fail CI with exit code 1 if health score is below 85
 stackvet doctor --min-score 85
 
+# Explain which diagnostics contributed to health score deductions
+stackvet doctor --explain
+
 # Output in standalone HTML report
 stackvet --format html doctor > health-report.html
 ```
+
+#### Health Scoring Weights & Grading Scale
+StackVet computes an objective, deterministic 0–100 health score subtracted from a base of 100:
+
+| Severity | Deduction | Description |
+|---|---|---|
+| **`CRITICAL`** | **-20 pts** | Blocking synchronous calls in async handlers, critical event loop freezes |
+| **`ERROR`** | **-8 pts** | Missing dependencies, circular imports, unresolved modules |
+| **`WARN`** | **-2 pts** | Lockfile drift, unused dependencies, version mismatches |
+| **`INFO` / `HINT`** | **0 pts** | Informational architecture advice and guidance |
+
+- **Letter Grades**: **A (90–100)** | **B (75–89)** | **C (50–74)** | **F (0–49)**
+- **Deduplication Safety**: Duplicate findings across identical files and lines are suppressed so redundant occurrences never distort the score.
+
 
 ---
 

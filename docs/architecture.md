@@ -139,22 +139,53 @@ A structured diagnostic finding:
 
 ## 5. Root Cause Engine & Health Scoring
 
-`stackvet` scores project health on a scale from **0 to 100**:
+`stackvet` computes an objective, deterministic project health score on a scale from **0 to 100**:
 
-$$\text{Health Score} = \max\left(0, 100 - \sum \text{Severity Penalties}\right)$$
+$$\text{Health Score} = \max\left(0, 100 - \sum_{d \in \text{Unique Findings}} \text{SeverityPenalty}(d)\right)$$
 
-### 5.1 Severity Penalties
+### 5.1 Severity Scoring Weights
 
-| Finding Severity | Base Penalty | Behavior in Strict / CI Mode |
-|---|---|---|
-| **`ERROR`** | **-15 points** | Fails scan immediately (exit code 1). |
-| **`WARNING`** | **-5 points** | Fails scan if `--strict` or `--ci` is enabled. |
-| **`INFO`** | **-1 point** | Non-blocking advisory finding. |
+Every unique finding deducts points based on its severity level:
 
-### 5.2 Score Color Thresholds
-- **Green (Healthy)**: $80 \le \text{Score} \le 100$
-- **Yellow (Degraded)**: $50 \le \text{Score} \le 79$
-- **Red (Critical)**: $0 \le \text{Score} \le 49$
+| Finding Severity | Penalty Points | Rationale & Description | Behavior in CI Mode (`stackvet check`) |
+|---|---|---|---|
+| **`CRITICAL`** | **-20 points** | Catastrophic system failures, event-loop blocking calls in async handlers, fatal runtime breaks. | Fails scan immediately (exit code 1). |
+| **`ERROR`** | **-8 points** | Definite runtime breakages, missing package declarations, unresolved imports, cyclic architecture dependencies. | Fails scan immediately (exit code 1). |
+| **`WARNING`** | **-2 points** | Transitive dependency risks, unpinned versions, lockfile drift, framework anti-patterns. | Fails scan if `--strict` is enabled. |
+| **`INFO`** | **0 points** | Informational observations and architecture insights; non-penalizing. | Advisory only. |
+| **`HINT`** | **0 points** | Contextual suggestions and best-practice recommendations; non-penalizing. | Advisory only. |
+
+### 5.2 Letter Grade Scale
+
+The numerical health score translates directly into four clear letter grades:
+
+| Score Bracket | Grade Label | Status | Description |
+|---|---|---|---|
+| **90 – 100** | **Grade A** | `A (Healthy)` | Pristine or near-pristine codebase; zero critical issues and minimal non-blocking warnings. |
+| **75 – 89** | **Grade B** | `B (Fair)` | Functioning project with minor lockfile drift, unpinned versions, or unused dependencies. |
+| **50 – 74** | **Grade C** | `C (Degraded)` | Multiple missing dependencies or framework anti-patterns that need remediation. |
+| **0 – 49** | **Grade F** | `F (Critical Issues)` | Severe architectural defects, blocking synchronous calls, or missing direct dependencies. |
+
+### 5.3 Deterministic Scoring & Zero-Distortion Deduplication
+
+To ensure that repeated scans produce consistent results without score drift:
+
+1. **Deterministic Discovery & Analysis**: All discovered source files, manifests, and Dockerfiles are sorted lexicographically prior to AST and dependency traversal. Analyzers iterate through dependency maps via ordered trees (`BTreeMap`), eliminating random hash iteration variances.
+2. **Finding Deduplication**: Diagnostics are deduplicated by composite key `(rule_id, file_path, line, message)`. If multiple analyzers or repeated passes flag the same underlying finding, duplicate occurrences are suppressed and recorded as ignored duplicates, preventing redundant penalties from distorting the health score.
+3. **Total Deterministic Diagnostic Ordering**: All emitted diagnostics are sorted by:
+   - Primary: `severity` descending (`CRITICAL` > `ERROR` > `WARN` > `INFO` > `HINT`)
+   - Secondary: `rule_id` ascending
+   - Tertiary: `file_path` ascending
+   - Quaternary: `line` ascending
+   - Quinary: `message` ascending
+
+### 5.4 Score Explainability & Attribution
+
+`stackvet` provides full transparency into how the health score is derived:
+
+- **CLI Breakdown (`stackvet doctor --explain`)**: Emits a formatted attribution scorecard listing the exact deductions per rule and an itemized table of contributing diagnostics.
+- **Structured JSON (`--json`)**: Includes the complete `score_breakdown` object (`HealthScoreExplanation`), detailing `base_score`, `final_score`, `total_deductions`, `unique_findings_count`, `duplicate_findings_ignored`, `rule_contributions`, and itemized `diagnostic_details`.
+- **HTML Dashboard (`--html`)**: Embeds deduction metrics and deduplication summary directly into the health score gauge card.
 
 ---
 

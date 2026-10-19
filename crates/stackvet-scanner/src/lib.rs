@@ -99,6 +99,12 @@ impl ProjectScanner {
             }
         }
 
+        result.source_files.sort();
+        result.manifest_files.sort();
+        result.config_files.sort();
+        result.dockerfiles.sort();
+        result.ci_workflows.sort();
+
         result
     }
 

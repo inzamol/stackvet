@@ -5,8 +5,12 @@ use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
 use comfy_table::{Cell, Color, Row, Table};
 use stackvet_analyzers::run_all_analyzers;
-use stackvet_core::{get_rule_meta, BaselineData, ProjectContext, Severity, ALL_RULES};
-use stackvet_correlation::{calculate_health_score, score_grade, CorrelationEngine};
+use stackvet_core::{
+    get_rule_meta, BaselineData, HealthScoreExplanation, ProjectContext, Severity, ALL_RULES,
+};
+use stackvet_correlation::{
+    calculate_health_score_explained, deduplicate_diagnostics, score_grade, CorrelationEngine,
+};
 use stackvet_frameworks::run_all_framework_analyzers;
 use stackvet_graph::ImportGraph;
 use stackvet_node::detect_node_project;
@@ -60,6 +64,12 @@ pub enum Commands {
             help = "Fail with exit code 1 if health score is below threshold"
         )]
         min_score: Option<u32>,
+
+        #[arg(
+            long,
+            help = "Display in-depth explanation and diagnostic contributions to the health score"
+        )]
+        explain: bool,
     },
 
     #[command(
@@ -216,12 +226,34 @@ fn build_full_context(root: &Path) -> Result<ProjectContext> {
 fn collect_all_diagnostics(
     ctx: &ProjectContext,
     offline: bool,
-) -> Result<Vec<stackvet_core::Diagnostic>> {
+) -> Result<(Vec<stackvet_core::Diagnostic>, usize)> {
     let mut diagnostics = run_all_analyzers(ctx, offline)?;
     let mut fw_diags = run_all_framework_analyzers(ctx)?;
     diagnostics.append(&mut fw_diags);
-    diagnostics.sort_by(|a, b| b.severity.cmp(&a.severity));
-    Ok(diagnostics)
+
+    // Deduplicate diagnostics to prevent duplicate findings from distorting scores or reports
+    let (mut deduped, duplicates_count) = deduplicate_diagnostics(&diagnostics);
+
+    // Deterministic sorting across repeated runs:
+    // Primary: severity descending (Critical > Error > Warning > Info > Hint)
+    // Secondary: rule_id ascending
+    // Tertiary: file_path ascending
+    // Quaternary: line ascending
+    // Quinary: message ascending
+    deduped.sort_by(|a, b| {
+        b.severity
+            .cmp(&a.severity)
+            .then_with(|| a.rule_id.0.cmp(&b.rule_id.0))
+            .then_with(|| a.location.file_path.cmp(&b.location.file_path))
+            .then_with(|| {
+                let a_line = a.location.span.as_ref().map(|s| s.start_line).unwrap_or(0);
+                let b_line = b.location.span.as_ref().map(|s| s.start_line).unwrap_or(0);
+                a_line.cmp(&b_line)
+            })
+            .then_with(|| a.message.cmp(&b.message))
+    });
+
+    Ok((deduped, duplicates_count))
 }
 
 fn print_rules_catalog(filter_term: Option<&str>) {
@@ -432,6 +464,84 @@ jobs:
     Ok(())
 }
 
+fn print_score_explanation_details(explanation: &HealthScoreExplanation) {
+    println!(
+        "\n{}",
+        "=======================================================================".cyan()
+    );
+    println!(
+        "{}",
+        "  Health Score Explanation & Diagnostic Attribution Details"
+            .cyan()
+            .bold()
+    );
+    println!(
+        "{}\n",
+        "=======================================================================".cyan()
+    );
+
+    println!("  Base Score:          {}", explanation.base_score);
+    println!(
+        "  Total Deductions:   -{} pts",
+        explanation.total_deductions
+    );
+    println!("  Final Score:         {} / 100", explanation.final_score);
+    println!("  Letter Grade:        {}", explanation.grade.bold());
+    println!(
+        "  Unique Findings:     {}",
+        explanation.unique_findings_count
+    );
+    println!(
+        "  Duplicates Ignored:  {}\n",
+        explanation.duplicate_findings_ignored
+    );
+
+    if !explanation.diagnostic_details.is_empty() {
+        println!("{}", "Contributing Diagnostics Breakdown:".bold());
+        let mut table = Table::new();
+        table
+            .load_preset(UTF8_FULL)
+            .apply_modifier(UTF8_ROUND_CORNERS)
+            .set_header(vec![
+                Cell::new("Rule").fg(Color::Cyan),
+                Cell::new("Severity"),
+                Cell::new("Penalty"),
+                Cell::new("Location"),
+                Cell::new("Message"),
+            ]);
+
+        for item in &explanation.diagnostic_details {
+            let sev_cell = match item.severity {
+                Severity::Critical => Cell::new("CRITICAL").fg(Color::DarkRed),
+                Severity::Error => Cell::new("ERROR").fg(Color::Red),
+                Severity::Warning => Cell::new("WARN").fg(Color::Yellow),
+                _ => Cell::new("INFO").fg(Color::Blue),
+            };
+
+            let loc_str = if let Some(line) = item.line {
+                format!("{}:{}", item.file_path, line)
+            } else {
+                item.file_path.clone()
+            };
+
+            table.add_row(Row::from(vec![
+                Cell::new(&item.rule_id),
+                sev_cell,
+                Cell::new(format!("-{} pts", item.penalty)),
+                Cell::new(loc_str),
+                Cell::new(&item.message),
+            ]));
+        }
+
+        println!("{}\n", table);
+    } else {
+        println!(
+            "  {}\n",
+            "No diagnostic deductions applied. Project health score is 100%!".green()
+        );
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -483,8 +593,10 @@ async fn main() -> Result<()> {
 
     // Build context
     let ctx = build_full_context(&root)?;
-    let diagnostics = collect_all_diagnostics(&ctx, cli.offline)?;
-    let score = calculate_health_score(&diagnostics);
+    let (diagnostics, duplicates_ignored) = collect_all_diagnostics(&ctx, cli.offline)?;
+    let mut explanation = calculate_health_score_explained(&diagnostics);
+    explanation.duplicate_findings_ignored = duplicates_ignored;
+    let score = explanation.final_score;
     let grade = score_grade(score);
 
     let correlator = CorrelationEngine::new();
@@ -494,18 +606,36 @@ async fn main() -> Result<()> {
     match &cli.command {
         None | Some(Commands::Doctor { .. }) => {
             let output = match cli.format {
-                OutputFormat::Text => {
-                    reporter.render_text(score, grade, &root_causes, &diagnostics)
-                }
-                OutputFormat::Json => {
-                    reporter.render_json(score, grade, &root_causes, &diagnostics)?
-                }
+                OutputFormat::Text => reporter.render_text(
+                    score,
+                    grade,
+                    &root_causes,
+                    &diagnostics,
+                    Some(&explanation),
+                ),
+                OutputFormat::Json => reporter.render_json(
+                    score,
+                    grade,
+                    &root_causes,
+                    &diagnostics,
+                    Some(&explanation),
+                )?,
                 OutputFormat::Sarif => reporter.render_sarif(&diagnostics)?,
-                OutputFormat::Html => {
-                    reporter.render_html(score, grade, &root_causes, &diagnostics)
-                }
+                OutputFormat::Html => reporter.render_html(
+                    score,
+                    grade,
+                    &root_causes,
+                    &diagnostics,
+                    Some(&explanation),
+                ),
             };
             println!("{}", output);
+
+            if let Some(Commands::Doctor { explain: true, .. }) = &cli.command {
+                if cli.format == OutputFormat::Text {
+                    print_score_explanation_details(&explanation);
+                }
+            }
 
             if let Some(Commands::Doctor {
                 min_score: Some(threshold),
@@ -570,7 +700,13 @@ async fn main() -> Result<()> {
                     exit(1);
                 }
             } else {
-                let json = reporter.render_json(score, grade, &root_causes, &diagnostics)?;
+                let json = reporter.render_json(
+                    score,
+                    grade,
+                    &root_causes,
+                    &diagnostics,
+                    Some(&explanation),
+                )?;
                 println!("{}", json);
                 if errors > 0 || (*strict && warnings > 0) {
                     exit(1);

@@ -4,7 +4,7 @@ use stackvet_core::{
 };
 use stackvet_python::stdlib::{is_pep594_removed, is_python_stdlib};
 use stackvet_python::{normalize_package_name, parse_python_imports, pep_version_satisfies};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 
 pub struct PythonDependencyAnalyzer {
@@ -98,8 +98,8 @@ impl Analyzer for PythonDependencyAnalyzer {
             .collect();
 
         // 1. Scan all imports in python files
-        let mut imported_packages: HashMap<String, Vec<(&std::path::PathBuf, usize)>> =
-            HashMap::new();
+        let mut imported_packages: BTreeMap<String, Vec<(&std::path::PathBuf, usize)>> =
+            BTreeMap::new();
 
         for file in &py_files {
             if let Ok(content) = fs::read_to_string(file) {
@@ -221,7 +221,9 @@ impl Analyzer for PythonDependencyAnalyzer {
         }
 
         // Check DEP-003: Unused Dependency
-        for declared_pkg in py_info.direct_dependencies.keys() {
+        let mut declared_pkgs: Vec<&String> = py_info.direct_dependencies.keys().collect();
+        declared_pkgs.sort();
+        for declared_pkg in declared_pkgs {
             let norm_declared = normalize_package_name(declared_pkg);
             let matches_import = imported_packages.contains_key(&norm_declared)
                 || stackvet_python::stdlib::KNOWN_IMPORT_TO_PYPI
@@ -289,6 +291,7 @@ impl Analyzer for PythonDependencyAnalyzer {
                 for (k, v) in &py_info.dev_dependencies {
                     all_manifest_deps.push((k, v));
                 }
+                all_manifest_deps.sort_by(|a, b| a.0.cmp(b.0));
 
                 for (pkg_name, req_spec) in all_manifest_deps {
                     let norm = normalize_package_name(pkg_name);

@@ -120,15 +120,16 @@ Run `stackvet explain SQL-014` for details.
 
 | Option | Description |
 |---|---|
+| `--min-score <SCORE>` | Fail CI with exit code 1 if health score is below threshold (e.g. `--min-score 85`) |
+| `--explain` | Displays detailed breakdown and diagnostic attribution explaining health score deductions |
 | `--strict` | Promotes warnings to errors (fails CI if any warnings exist) |
 | `--ci` | Runs non-interactively with strict mode enabled |
 | `--baseline <FILE>` | Filter findings against an established baseline file (ignores pre-existing issues) |
-| `--json` | Emits doctor health scorecard as structured JSON |
+| `--json` | Emits doctor health scorecard and `score_breakdown` as structured JSON |
 | `--sarif` | Emits scan results as standard SARIF v2.1.0 format |
 | `--top <N>` | Number of top problems to highlight (default: 3) |
-| `--format`, `-f <FORMAT>` | Specify output format (`terminal`, `json`, `sarif`, `html`, `text`) |
-| `--html <FILE>` | Generates an interactive, standalone HTML dashboard |
-| `--github-annotations` | Emits GitHub Actions inline PR workflow annotations |
+| `--format`, `-f <FORMAT>` | Specify output format (`text`, `json`, `sarif`, `html`) |
+| `--html` | Generates an interactive, standalone HTML dashboard with health score breakdown |
 | `--offline` | Disables remote vulnerability/CVE queries (airgapped mode) |
 | `--output`, `-o <FILE>` | Writes output directly to a file |
 
