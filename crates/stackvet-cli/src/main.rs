@@ -6,7 +6,8 @@ use comfy_table::presets::UTF8_FULL;
 use comfy_table::{Cell, Color, Row, Table};
 use stackvet_analyzers::run_all_analyzers;
 use stackvet_core::{
-    get_rule_meta, BaselineData, HealthScoreExplanation, ProjectContext, Severity, ALL_RULES,
+    config::parse_severity, get_rule_meta, BaselineData, ConfigError, ExitCode,
+    HealthScoreExplanation, ProjectContext, Severity, StackvetConfig, ALL_RULES,
 };
 use stackvet_correlation::{
     calculate_health_score_explained, deduplicate_diagnostics, score_grade, CorrelationEngine,
@@ -20,7 +21,6 @@ use stackvet_reporter::Reporter;
 use stackvet_scanner::ProjectScanner;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::exit;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -41,6 +41,9 @@ pub struct Cli {
         help = "Output report format"
     )]
     pub format: OutputFormat,
+
+    #[arg(short, long, help = "Path to custom configuration file (.toml)")]
+    pub config: Option<PathBuf>,
 
     #[arg(long, help = "Run offline without querying vulnerability databases")]
     pub offline: bool,
@@ -70,6 +73,9 @@ pub enum Commands {
             help = "Display in-depth explanation and diagnostic contributions to the health score"
         )]
         explain: bool,
+
+        #[arg(long, help = "Path to baseline file to compare against")]
+        baseline: Option<PathBuf>,
     },
 
     #[command(
@@ -80,8 +86,26 @@ pub enum Commands {
         #[arg(help = "Target project directory [default: .]")]
         path: Option<PathBuf>,
 
-        #[arg(long, help = "Treat warnings as errors")]
+        #[arg(
+            long,
+            help = "Treat warnings as errors (equivalent to --fail-on warning)"
+        )]
         strict: bool,
+
+        #[arg(
+            long,
+            help = "Fail CI if findings meet or exceed this severity: hint, info, warning, error, critical"
+        )]
+        fail_on: Option<String>,
+
+        #[arg(long, help = "Path to baseline file to compare against")]
+        baseline: Option<PathBuf>,
+
+        #[arg(
+            long,
+            help = "Update baseline file with current findings and remove resolved issues"
+        )]
+        update_baseline: bool,
     },
 
     #[command(
@@ -190,13 +214,24 @@ pub enum BaselineAction {
         #[arg(
             short,
             long,
-            default_value = ".stackvet-baseline.json",
-            help = "Baseline filepath to check against"
+            help = "Baseline filepath to check against [default: .stackvet-baseline.json]"
         )]
-        baseline: PathBuf,
+        baseline: Option<PathBuf>,
 
         #[arg(long, help = "Treat warnings as errors")]
         strict: bool,
+
+        #[arg(
+            long,
+            help = "Fail CI if findings meet or exceed this severity: hint, info, warning, error, critical"
+        )]
+        fail_on: Option<String>,
+
+        #[arg(
+            long,
+            help = "Update baseline file with current findings and remove resolved issues"
+        )]
+        update: bool,
     },
 }
 
@@ -347,7 +382,7 @@ fn print_rule_explanation(rule_id: &str) {
             .red()
             .bold()
         );
-        exit(1);
+        ExitCode::ConfigurationError.exit();
     }
 }
 
@@ -395,14 +430,18 @@ name = "my-application"
 min_score = 80
 strict = false
 
-[analyzers]
-python = true
-node = true
-docker = true
-frameworks = true
+[thresholds]
+fail_on = "error"
+min_score = 80
 
-[ignore]
-rules = []
+[ci]
+fail_on = "error"
+strict = false
+
+[rules]
+# Example per-rule overrides:
+# DEP-001 = "warning"
+# CEL-001 = "disabled"
 "#;
         fs::write(&config_file, default_config)?;
         println!(
@@ -583,17 +622,90 @@ async fn main() -> Result<()> {
                 .red()
                 .bold()
         );
-        exit(1);
+        ExitCode::ExecutionError.exit();
     }
+
+    // Load project configuration (explicit path or discovered in project directory)
+    let config = if let Some(cfg_path) = &cli.config {
+        let p = if cfg_path.is_absolute() {
+            cfg_path.clone()
+        } else {
+            root.join(cfg_path)
+        };
+        match StackvetConfig::from_file(&p) {
+            Ok(cfg) => cfg,
+            Err(ConfigError::NotFound(path_str)) => {
+                eprintln!(
+                    "{}",
+                    format!("Configuration file not found: {path_str}")
+                        .red()
+                        .bold()
+                );
+                ExitCode::ExecutionError.exit();
+            }
+            Err(ConfigError::IoError(e)) => {
+                eprintln!(
+                    "{}",
+                    format!("Failed to read configuration: {e}").red().bold()
+                );
+                ExitCode::ExecutionError.exit();
+            }
+            Err(ConfigError::ParseError(e)) | Err(ConfigError::ValidationError(e)) => {
+                eprintln!("{}", format!("Invalid configuration: {e}").red().bold());
+                ExitCode::ConfigurationError.exit();
+            }
+        }
+    } else {
+        match StackvetConfig::discover_in_dir(&root) {
+            Ok(Some(cfg)) => cfg,
+            Ok(None) => StackvetConfig::default(),
+            Err(ConfigError::ParseError(e)) | Err(ConfigError::ValidationError(e)) => {
+                eprintln!("{}", format!("Invalid configuration: {e}").red().bold());
+                ExitCode::ConfigurationError.exit();
+            }
+            Err(e) => {
+                eprintln!("{}", format!("Configuration error: {e}").red().bold());
+                ExitCode::ExecutionError.exit();
+            }
+        }
+    };
 
     // Command: init
     if let Some(Commands::Init { ci, .. }) = &cli.command {
-        return initialize_project(&root, *ci);
+        initialize_project(&root, *ci)?;
+        ExitCode::Success.exit();
     }
 
     // Build context
-    let ctx = build_full_context(&root)?;
-    let (diagnostics, duplicates_ignored) = collect_all_diagnostics(&ctx, cli.offline)?;
+    let ctx = match build_full_context(&root) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!(
+                "{}",
+                format!("Failed to analyze project context: {e}")
+                    .red()
+                    .bold()
+            );
+            ExitCode::ExecutionError.exit();
+        }
+    };
+    let (raw_diagnostics, duplicates_ignored) = match collect_all_diagnostics(&ctx, cli.offline) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!(
+                "{}",
+                format!("Failed to collect diagnostics: {e}").red().bold()
+            );
+            ExitCode::ExecutionError.exit();
+        }
+    };
+    let diagnostics = match config.apply_rule_overrides(raw_diagnostics) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("{}", format!("Invalid configuration: {e}").red().bold());
+            ExitCode::ConfigurationError.exit();
+        }
+    };
     let mut explanation = calculate_health_score_explained(&diagnostics);
     explanation.duplicate_findings_ignored = duplicates_ignored;
     let score = explanation.final_score;
@@ -605,6 +717,53 @@ async fn main() -> Result<()> {
 
     match &cli.command {
         None | Some(Commands::Doctor { .. }) => {
+            let (cli_min_score, explain_mode, cli_baseline) = match &cli.command {
+                Some(Commands::Doctor {
+                    min_score,
+                    explain,
+                    baseline,
+                    ..
+                }) => (*min_score, *explain, baseline.clone()),
+                _ => (None, false, None),
+            };
+
+            let min_score = config.resolve_min_score(cli_min_score);
+            let baseline_path = config.resolve_baseline(cli_baseline);
+
+            let mut baseline_diff = None;
+            if let Some(b_path) = &baseline_path {
+                let baseline_file = if b_path.is_absolute() {
+                    b_path.clone()
+                } else {
+                    root.join(b_path)
+                };
+                if !baseline_file.is_file() {
+                    eprintln!(
+                        "{}",
+                        format!("Baseline file not found: '{}'", baseline_file.display())
+                            .red()
+                            .bold()
+                    );
+                    ExitCode::ExecutionError.exit();
+                }
+                let baseline_data = match BaselineData::load_from_file(&baseline_file) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        eprintln!(
+                            "{}",
+                            format!(
+                                "Failed to load baseline file '{}': {e}",
+                                baseline_file.display()
+                            )
+                            .red()
+                            .bold()
+                        );
+                        ExitCode::ExecutionError.exit();
+                    }
+                };
+                baseline_diff = Some(baseline_data.diff_diagnostics(&diagnostics));
+            }
+
             let output = match cli.format {
                 OutputFormat::Text => reporter.render_text(
                     score,
@@ -631,18 +790,26 @@ async fn main() -> Result<()> {
             };
             println!("{}", output);
 
-            if let Some(Commands::Doctor { explain: true, .. }) = &cli.command {
+            if explain_mode && cli.format == OutputFormat::Text {
+                print_score_explanation_details(&explanation);
+            }
+
+            if let Some(diff) = &baseline_diff {
                 if cli.format == OutputFormat::Text {
-                    print_score_explanation_details(&explanation);
+                    println!(
+                        "{}",
+                        format!(
+                            "Baseline Status: {} legacy issue(s) tolerated, {} new issue(s), {} resolved.",
+                            diff.tolerated_issues.len(),
+                            diff.new_issues.len(),
+                            diff.resolved_fingerprints.len()
+                        ).cyan()
+                    );
                 }
             }
 
-            if let Some(Commands::Doctor {
-                min_score: Some(threshold),
-                ..
-            }) = &cli.command
-            {
-                if score < *threshold {
+            if let Some(threshold) = min_score {
+                if score < threshold {
                     eprintln!(
                         "{}",
                         format!(
@@ -652,64 +819,255 @@ async fn main() -> Result<()> {
                         .red()
                         .bold()
                     );
-                    exit(1);
+                    ExitCode::FindingsViolation.exit();
                 }
             }
-        }
-        Some(Commands::Check { strict, .. }) => {
-            let errors = diagnostics
-                .iter()
-                .filter(|d| d.severity == Severity::Error || d.severity == Severity::Critical)
-                .count();
-            let warnings = diagnostics
-                .iter()
-                .filter(|d| d.severity == Severity::Warning)
-                .count();
 
-            if cli.format == OutputFormat::Text {
-                if errors == 0 && (!*strict || warnings == 0) {
-                    println!(
-                        "{}",
-                        "✓ CI Check Passed: No critical issues or errors."
-                            .green()
-                            .bold()
-                    );
-                    exit(0);
+            ExitCode::Success.exit();
+        }
+        Some(Commands::Check {
+            strict,
+            fail_on,
+            baseline,
+            update_baseline,
+            ..
+        }) => {
+            let cli_fail_on = match fail_on.as_deref().map(parse_severity).transpose() {
+                Ok(sev) => sev,
+                Err(e) => {
+                    eprintln!("{}", format!("Invalid --fail-on: {e}").red().bold());
+                    ExitCode::ConfigurationError.exit();
+                }
+            };
+            let threshold = config.resolve_fail_on(cli_fail_on, *strict, Severity::Error);
+            let baseline_path = config.resolve_baseline(baseline.clone());
+
+            if let Some(b_path) = &baseline_path {
+                let baseline_file = if b_path.is_absolute() {
+                    b_path.clone()
                 } else {
+                    root.join(b_path)
+                };
+                if !baseline_file.is_file() {
                     eprintln!(
                         "{}",
                         format!(
-                            "✗ CI Check Failed: {} error(s), {} warning(s).",
-                            errors, warnings
+                            "Baseline file not found: '{}'. Run 'stackvet baseline record' first.",
+                            baseline_file.display()
                         )
                         .red()
                         .bold()
                     );
-                    for d in &diagnostics {
-                        if d.severity >= Severity::Error
-                            || (*strict && d.severity >= Severity::Warning)
-                        {
+                    ExitCode::ExecutionError.exit();
+                }
+
+                let mut baseline_data = match BaselineData::load_from_file(&baseline_file) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        eprintln!(
+                            "{}",
+                            format!(
+                                "Failed to load baseline file '{}': {e}",
+                                baseline_file.display()
+                            )
+                            .red()
+                            .bold()
+                        );
+                        ExitCode::ExecutionError.exit();
+                    }
+                };
+                let diff = baseline_data.diff_diagnostics(&diagnostics);
+                let violating_issues = diff.new_issues_above_threshold(threshold);
+
+                if *update_baseline {
+                    baseline_data.update_from_diagnostics(&diagnostics);
+                    if let Err(e) = baseline_data.save_to_file(&baseline_file) {
+                        eprintln!(
+                            "{}",
+                            format!(
+                                "Failed to save baseline file '{}': {e}",
+                                baseline_file.display()
+                            )
+                            .red()
+                            .bold()
+                        );
+                        ExitCode::ExecutionError.exit();
+                    }
+                    eprintln!(
+                        "{}",
+                        format!(
+                            "Baseline updated with current findings at '{}'.",
+                            baseline_file.display()
+                        )
+                        .green()
+                        .bold()
+                    );
+                }
+
+                if cli.format == OutputFormat::Text {
+                    if violating_issues.is_empty() {
+                        println!(
+                            "{}",
+                            format!("✓ Baseline CI Check Passed: No new regressions at or above {} threshold.", threshold)
+                                .green()
+                                .bold()
+                        );
+                        if !diff.tolerated_issues.is_empty() {
+                            println!(
+                                "  ({} legacy finding(s) tolerated by baseline)",
+                                diff.tolerated_issues.len()
+                            );
+                        }
+                        if !diff.resolved_fingerprints.is_empty() {
+                            println!(
+                                "{}",
+                                format!(
+                                    "✓ Resolved: {} legacy baseline finding(s) fixed!",
+                                    diff.resolved_fingerprints.len()
+                                )
+                                .green()
+                            );
+                        }
+                        ExitCode::Success.exit();
+                    } else {
+                        eprintln!(
+                            "{}",
+                            format!("✗ Baseline CI Check Failed: {} new regression finding(s) at or above {} threshold.", violating_issues.len(), threshold)
+                                .red()
+                                .bold()
+                        );
+                        for d in &violating_issues {
                             eprintln!(
                                 "  [{}] {}: {}",
                                 d.severity.as_str().red(),
                                 d.rule_id.as_str().cyan(),
                                 d.message
                             );
+                            if let Some(span) = &d.location.span {
+                                eprintln!(
+                                    "     at {}:{}",
+                                    d.location.file_path.display(),
+                                    span.start_line
+                                );
+                            }
                         }
+                        if !diff.tolerated_issues.is_empty() {
+                            eprintln!(
+                                "  ({} legacy finding(s) tolerated by baseline)",
+                                diff.tolerated_issues.len()
+                            );
+                        }
+                        if !diff.resolved_fingerprints.is_empty() {
+                            eprintln!(
+                                "{}",
+                                format!(
+                                    "✓ Resolved: {} legacy baseline finding(s) fixed!",
+                                    diff.resolved_fingerprints.len()
+                                )
+                                .green()
+                            );
+                        }
+                        ExitCode::FindingsViolation.exit();
                     }
-                    exit(1);
+                } else {
+                    let output = match cli.format {
+                        OutputFormat::Json => reporter.render_json(
+                            score,
+                            grade,
+                            &root_causes,
+                            &diagnostics,
+                            Some(&explanation),
+                        )?,
+                        OutputFormat::Sarif => reporter.render_sarif(&diagnostics)?,
+                        OutputFormat::Html => reporter.render_html(
+                            score,
+                            grade,
+                            &root_causes,
+                            &diagnostics,
+                            Some(&explanation),
+                        ),
+                        OutputFormat::Text => unreachable!(),
+                    };
+                    println!("{}", output);
+
+                    if !violating_issues.is_empty() {
+                        ExitCode::FindingsViolation.exit();
+                    } else {
+                        ExitCode::Success.exit();
+                    }
                 }
             } else {
-                let json = reporter.render_json(
-                    score,
-                    grade,
-                    &root_causes,
-                    &diagnostics,
-                    Some(&explanation),
-                )?;
-                println!("{}", json);
-                if errors > 0 || (*strict && warnings > 0) {
-                    exit(1);
+                let violating_issues: Vec<&stackvet_core::Diagnostic> = diagnostics
+                    .iter()
+                    .filter(|d| d.severity >= threshold)
+                    .collect();
+
+                if cli.format == OutputFormat::Text {
+                    if violating_issues.is_empty() {
+                        println!(
+                            "{}",
+                            format!(
+                                "✓ CI Check Passed: No findings at or above {} threshold.",
+                                threshold
+                            )
+                            .green()
+                            .bold()
+                        );
+                        ExitCode::Success.exit();
+                    } else {
+                        eprintln!(
+                            "{}",
+                            format!(
+                                "✗ CI Check Failed: {} finding(s) at or above {} threshold.",
+                                violating_issues.len(),
+                                threshold
+                            )
+                            .red()
+                            .bold()
+                        );
+                        for d in &violating_issues {
+                            eprintln!(
+                                "  [{}] {}: {}",
+                                d.severity.as_str().red(),
+                                d.rule_id.as_str().cyan(),
+                                d.message
+                            );
+                            if let Some(span) = &d.location.span {
+                                eprintln!(
+                                    "     at {}:{}",
+                                    d.location.file_path.display(),
+                                    span.start_line
+                                );
+                            }
+                        }
+                        ExitCode::FindingsViolation.exit();
+                    }
+                } else {
+                    let output = match cli.format {
+                        OutputFormat::Json => reporter.render_json(
+                            score,
+                            grade,
+                            &root_causes,
+                            &diagnostics,
+                            Some(&explanation),
+                        )?,
+                        OutputFormat::Sarif => reporter.render_sarif(&diagnostics)?,
+                        OutputFormat::Html => reporter.render_html(
+                            score,
+                            grade,
+                            &root_causes,
+                            &diagnostics,
+                            Some(&explanation),
+                        ),
+                        OutputFormat::Text => unreachable!(),
+                    };
+                    println!("{}", output);
+
+                    if !violating_issues.is_empty() {
+                        ExitCode::FindingsViolation.exit();
+                    } else {
+                        ExitCode::Success.exit();
+                    }
                 }
             }
         }
@@ -868,7 +1226,18 @@ async fn main() -> Result<()> {
                         output.clone()
                     };
                     let baseline_data = BaselineData::from_diagnostics(&diagnostics);
-                    baseline_data.save_to_file(&baseline_file)?;
+                    if let Err(e) = baseline_data.save_to_file(&baseline_file) {
+                        eprintln!(
+                            "{}",
+                            format!(
+                                "Failed to save baseline file '{}': {e}",
+                                baseline_file.display()
+                            )
+                            .red()
+                            .bold()
+                        );
+                        ExitCode::ExecutionError.exit();
+                    }
                     println!(
                         "{}",
                         format!(
@@ -879,61 +1248,149 @@ async fn main() -> Result<()> {
                         .green()
                         .bold()
                     );
+                    ExitCode::Success.exit();
                 }
                 BaselineAction::Verify {
-                    baseline, strict, ..
+                    baseline,
+                    strict,
+                    fail_on,
+                    update,
+                    ..
                 } => {
-                    let baseline_file = if baseline.is_absolute() || baseline.is_file() {
-                        baseline.clone()
-                    } else {
-                        root.join(baseline)
-                    };
+                    let resolved_baseline = config
+                        .resolve_baseline(baseline.clone())
+                        .unwrap_or_else(|| PathBuf::from(".stackvet-baseline.json"));
+                    let baseline_file =
+                        if resolved_baseline.is_absolute() || resolved_baseline.is_file() {
+                            resolved_baseline
+                        } else {
+                            root.join(resolved_baseline)
+                        };
                     if !baseline_file.is_file() {
-                        eprintln!("{}", format!("Baseline file not found: '{}'. Run 'stackvet baseline record' first.", baseline_file.display()).red().bold());
-                        exit(1);
+                        eprintln!(
+                            "{}",
+                            format!("Baseline file not found: '{}'. Run 'stackvet baseline record' first.", baseline_file.display())
+                                .red()
+                                .bold()
+                        );
+                        ExitCode::ExecutionError.exit();
                     }
 
-                    let baseline_data = BaselineData::load_from_file(&baseline_file)?;
-                    let new_issues = baseline_data.filter_new_issues(diagnostics);
+                    let cli_fail_on = match fail_on.as_deref().map(parse_severity).transpose() {
+                        Ok(sev) => sev,
+                        Err(e) => {
+                            eprintln!("{}", format!("Invalid --fail-on: {e}").red().bold());
+                            ExitCode::ConfigurationError.exit();
+                        }
+                    };
+                    let threshold = config.resolve_fail_on(cli_fail_on, *strict, Severity::Error);
 
-                    if new_issues.is_empty() {
+                    let mut baseline_data = match BaselineData::load_from_file(&baseline_file) {
+                        Ok(b) => b,
+                        Err(e) => {
+                            eprintln!(
+                                "{}",
+                                format!(
+                                    "Failed to load baseline file '{}': {e}",
+                                    baseline_file.display()
+                                )
+                                .red()
+                                .bold()
+                            );
+                            ExitCode::ExecutionError.exit();
+                        }
+                    };
+                    let diff = baseline_data.diff_diagnostics(&diagnostics);
+                    let violating_issues = diff.new_issues_above_threshold(threshold);
+
+                    if *update {
+                        baseline_data.update_from_diagnostics(&diagnostics);
+                        if let Err(e) = baseline_data.save_to_file(&baseline_file) {
+                            eprintln!(
+                                "{}",
+                                format!(
+                                    "Failed to save baseline file '{}': {e}",
+                                    baseline_file.display()
+                                )
+                                .red()
+                                .bold()
+                            );
+                            ExitCode::ExecutionError.exit();
+                        }
                         println!(
                             "{}",
-                            "✓ Baseline Verified: No new regressions detected."
+                            format!(
+                                "Baseline updated with current findings at '{}'.",
+                                baseline_file.display()
+                            )
+                            .green()
+                            .bold()
+                        );
+                    }
+
+                    if violating_issues.is_empty() {
+                        println!(
+                            "{}",
+                            format!("✓ Baseline Verified: No new regressions detected above {} threshold.", threshold)
                                 .green()
                                 .bold()
                         );
-                        exit(0);
+                        if !diff.tolerated_issues.is_empty() {
+                            println!(
+                                "  ({} legacy finding(s) tolerated)",
+                                diff.tolerated_issues.len()
+                            );
+                        }
+                        if !diff.resolved_fingerprints.is_empty() {
+                            println!(
+                                "{}",
+                                format!(
+                                    "✓ Resolved: {} legacy baseline finding(s) fixed!",
+                                    diff.resolved_fingerprints.len()
+                                )
+                                .green()
+                            );
+                        }
+                        ExitCode::Success.exit();
                     } else {
-                        let errors = new_issues
-                            .iter()
-                            .filter(|d| d.severity >= Severity::Error)
-                            .count();
-                        let warnings = new_issues
-                            .iter()
-                            .filter(|d| d.severity == Severity::Warning)
-                            .count();
-
                         eprintln!(
-                        "{}",
-                        format!("✗ Baseline Regression Detected: {} new error(s), {} new warning(s).", errors, warnings).red().bold()
-                    );
-                        for d in &new_issues {
-                            if d.severity >= Severity::Error
-                                || (*strict && d.severity >= Severity::Warning)
-                            {
+                            "{}",
+                            format!("✗ Baseline Regression Detected: {} new finding(s) at or above {} threshold.", violating_issues.len(), threshold)
+                                .red()
+                                .bold()
+                        );
+                        for d in &violating_issues {
+                            eprintln!(
+                                "  [{}] {}: {}",
+                                d.severity.as_str().red(),
+                                d.rule_id.as_str().cyan(),
+                                d.message
+                            );
+                            if let Some(span) = &d.location.span {
                                 eprintln!(
-                                    "  [{}] {}: {}",
-                                    d.severity.as_str().red(),
-                                    d.rule_id.as_str().cyan(),
-                                    d.message
+                                    "     at {}:{}",
+                                    d.location.file_path.display(),
+                                    span.start_line
                                 );
                             }
                         }
-
-                        if errors > 0 || (*strict && warnings > 0) {
-                            exit(1);
+                        if !diff.tolerated_issues.is_empty() {
+                            eprintln!(
+                                "  ({} legacy finding(s) tolerated)",
+                                diff.tolerated_issues.len()
+                            );
                         }
+                        if !diff.resolved_fingerprints.is_empty() {
+                            eprintln!(
+                                "{}",
+                                format!(
+                                    "✓ Resolved: {} legacy baseline finding(s) fixed!",
+                                    diff.resolved_fingerprints.len()
+                                )
+                                .green()
+                            );
+                        }
+                        ExitCode::FindingsViolation.exit();
                     }
                 }
             }

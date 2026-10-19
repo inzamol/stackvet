@@ -248,9 +248,44 @@ repos:
 
 ---
 
-## 4. Exit Codes for CI Pipelines
+## 4. Standardized Exit Codes for CI Automation
 
-- `0`: Success — no blocking findings.
-- `1`: Failure — errors found (or warnings in `--strict` / `--ci` mode).
-- `2`: Configuration error.
-- `3`: Runtime / Analysis failure.
+StackVet returns predictable exit codes across all commands and output formats (`text`, `json`, `sarif`, `html`):
+
+| Exit Code | Classification | Trigger Condition |
+|---|---|---|
+| `0` | **Success** | Scan passed with no findings at or above `--fail-on` threshold, health score meets `--min-score`, or all findings are tolerated legacy baseline issues. |
+| `1` | **Findings Violation** | Findings detected meeting or exceeding `--fail-on` threshold, health score below `--min-score`, or new regression findings introduced against baseline. |
+| `2` | **Configuration Error** | Configuration syntax error in `stackvet.toml` or `pyproject.toml`, unknown rule ID in `[rules]`, or unsupported severity override level. |
+| `3` | **Execution / I/O Error** | Target path does not exist, specified baseline file not found, or filesystem read/write error. |
+
+---
+
+## 5. Baseline-Aware CI Checks
+
+In existing or legacy codebases, failing CI on pre-existing technical debt blocks modernization. StackVet's differential baseline system allows teams to establish a baseline snapshot and fail CI only when new regressions are introduced:
+
+### Step 1: Establish Initial Baseline
+```bash
+# Record existing issues into .stackvet-baseline.json
+stackvet baseline record
+```
+Commit `.stackvet-baseline.json` into your Git repository.
+
+### Step 2: Enforce in CI
+```bash
+# In CI check: tolerate legacy baseline issues, fail only if new errors are introduced
+stackvet check --baseline .stackvet-baseline.json --fail-on error
+```
+If developers resolve existing debt, StackVet automatically reports the resolved findings:
+```text
+✓ Baseline CI Check Passed: No new regressions at or above ERROR threshold.
+  (42 legacy finding(s) tolerated by baseline)
+✓ Resolved: 3 legacy baseline finding(s) fixed!
+```
+
+### Step 3: Update Baseline When Debt is Paid Down
+```bash
+# Update baseline to remove resolved issues and reflect current state
+stackvet check --baseline .stackvet-baseline.json --update-baseline
+```
