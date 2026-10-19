@@ -4,7 +4,7 @@ use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
 use comfy_table::{Cell, Color, Row, Table};
 use serde::{Deserialize, Serialize};
-use stackvet_core::{Diagnostic, RootCause, Severity};
+use stackvet_core::{Diagnostic, HealthScoreExplanation, RootCause, Severity};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FullReport {
@@ -12,6 +12,8 @@ pub struct FullReport {
     pub grade: String,
     pub root_causes: Vec<RootCause>,
     pub diagnostics: Vec<Diagnostic>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub score_breakdown: Option<HealthScoreExplanation>,
 }
 
 pub struct Reporter;
@@ -21,13 +23,14 @@ impl Reporter {
         Self
     }
 
-    /// Renders text report with scorecard, root causes, and diagnostics table
+    /// Renders text report with scorecard, deduction breakdown, root causes, and diagnostics table
     pub fn render_text(
         &self,
         score: u32,
         grade: &str,
         root_causes: &[RootCause],
         diagnostics: &[Diagnostic],
+        explanation: Option<&HealthScoreExplanation>,
     ) -> String {
         let mut out = String::new();
 
@@ -60,7 +63,19 @@ impl Reporter {
         };
 
         out.push_str(&format!("  Health Score: {} / 100\n", score_colored));
-        out.push_str(&format!("  Overall Grade: {}\n\n", grade.bold()));
+        out.push_str(&format!("  Overall Grade: {}\n", grade.bold()));
+
+        if let Some(exp) = explanation {
+            out.push_str(&format!(
+                "  Calculation:   Base 100 - {} deductions ({} unique finding{}, {} duplicate{} ignored)\n",
+                exp.total_deductions,
+                exp.unique_findings_count,
+                if exp.unique_findings_count == 1 { "" } else { "s" },
+                exp.duplicate_findings_ignored,
+                if exp.duplicate_findings_ignored == 1 { "" } else { "s" }
+            ));
+        }
+        out.push_str("\n");
 
         // Counts
         let criticals = diagnostics
@@ -94,6 +109,35 @@ impl Reporter {
                 "0".green()
             }
         ));
+
+        // Score deduction breakdown
+        if let Some(exp) = explanation {
+            if !exp.rule_contributions.is_empty() {
+                out.push_str(
+                    &"--- Health Score Deduction Breakdown ---\n"
+                        .bold()
+                        .to_string(),
+                );
+                for contrib in &exp.rule_contributions {
+                    let sev_badge = match contrib.severity {
+                        Severity::Critical => "[CRITICAL]".red().bold(),
+                        Severity::Error => "[ERROR]".red(),
+                        Severity::Warning => "[WARN]".yellow(),
+                        _ => "[INFO]".cyan(),
+                    };
+                    out.push_str(&format!(
+                        "  • {} {}: -{} pts ({} finding{}) - {}\n",
+                        sev_badge,
+                        contrib.rule_id.bold(),
+                        contrib.total_penalty,
+                        contrib.count,
+                        if contrib.count == 1 { "" } else { "s" },
+                        contrib.title
+                    ));
+                }
+                out.push_str("\n");
+            }
+        }
 
         // Root causes section
         if !root_causes.is_empty() {
@@ -180,12 +224,14 @@ impl Reporter {
         grade: &str,
         root_causes: &[RootCause],
         diagnostics: &[Diagnostic],
+        explanation: Option<&HealthScoreExplanation>,
     ) -> Result<String> {
         let report = FullReport {
             health_score: score,
             grade: grade.to_string(),
             root_causes: root_causes.to_vec(),
             diagnostics: diagnostics.to_vec(),
+            score_breakdown: explanation.cloned(),
         };
         Ok(serde_json::to_string_pretty(&report)?)
     }
@@ -243,13 +289,14 @@ impl Reporter {
         Ok(serde_json::to_string_pretty(&sarif)?)
     }
 
-    /// Renders standalone responsive HTML report with dark mode
+    /// Renders standalone responsive HTML report with dark mode and score breakdown
     pub fn render_html(
         &self,
         score: u32,
         grade: &str,
         root_causes: &[RootCause],
         diagnostics: &[Diagnostic],
+        explanation: Option<&HealthScoreExplanation>,
     ) -> String {
         let mut rows = String::new();
         for d in diagnostics {
@@ -270,6 +317,17 @@ impl Reporter {
                 d.rule_id.as_str(), sev_color, d.severity.as_str(), d.language.as_str(), loc_str, d.message
             ));
         }
+
+        let breakdown_html = if let Some(exp) = explanation {
+            format!(
+                "<p style=\"color: #94a3b8; font-size: 0.95rem; margin-top: 0.5rem;\">Base 100 &minus; {} deductions ({} findings evaluated, {} duplicates ignored)</p>",
+                exp.total_deductions,
+                exp.unique_findings_count,
+                exp.duplicate_findings_ignored
+            )
+        } else {
+            String::new()
+        };
 
         format!(
             r#"<!DOCTYPE html>
@@ -302,6 +360,7 @@ impl Reporter {
     <div>
       <h2>Grade: {grade}</h2>
       <p>Total Diagnostics: {total} | Root Cause Clusters: {clusters}</p>
+      {breakdown_html}
     </div>
   </div>
   <h2>Diagnostics Details</h2>
@@ -320,6 +379,7 @@ impl Reporter {
             grade = grade,
             total = diagnostics.len(),
             clusters = root_causes.len(),
+            breakdown_html = breakdown_html,
             rows = rows
         )
     }

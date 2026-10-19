@@ -7,7 +7,7 @@ use stackvet_node::{
     extract_package_name, is_tsconfig_alias, npm_version_satisfies, parse_node_imports,
     resolve_aliased_import,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 
 pub struct NodeDependencyAnalyzer;
@@ -54,8 +54,8 @@ impl Analyzer for NodeDependencyAnalyzer {
             .collect();
 
         // 1. Collect all imports
-        let mut imported_packages: HashMap<String, Vec<(&std::path::PathBuf, usize)>> =
-            HashMap::new();
+        let mut imported_packages: BTreeMap<String, Vec<(&std::path::PathBuf, usize)>> =
+            BTreeMap::new();
 
         for file in &node_files {
             if let Ok(content) = fs::read_to_string(file) {
@@ -130,7 +130,9 @@ impl Analyzer for NodeDependencyAnalyzer {
         }
 
         // NDEP-002: Unused Node Package
-        for dep_name in node_info.dependencies.keys() {
+        let mut dep_names: Vec<&String> = node_info.dependencies.keys().collect();
+        dep_names.sort();
+        for dep_name in dep_names {
             let matches_import = imported_packages.contains_key(dep_name);
             // Ignore build tools, type definitions or runtime plugins often in dependencies
             let whitelist = [
@@ -164,7 +166,9 @@ impl Analyzer for NodeDependencyAnalyzer {
         }
 
         // NDEP-005: DevDependency in Production Source
-        for dev_pkg in node_info.dev_dependencies.keys() {
+        let mut dev_pkgs: Vec<&String> = node_info.dev_dependencies.keys().collect();
+        dev_pkgs.sort();
+        for dev_pkg in dev_pkgs {
             if let Some(occurrences) = imported_packages.get(dev_pkg) {
                 for (file, line) in occurrences {
                     let file_str = file.to_string_lossy().replace('\\', "/");
@@ -186,7 +190,7 @@ impl Analyzer for NodeDependencyAnalyzer {
                                 .location(
                                     DiagnosticLocation::new((*file).clone())
                                         .with_span(stackvet_core::TextSpan::single_line(*line, 1, 1)),
-                                )
+                                 )
                                 .explanation(format!(
                                     "Packages in devDependencies are not installed in production environments (NODE_ENV=production), causing runtime crash when '{}' is imported.",
                                     dev_pkg
@@ -217,6 +221,7 @@ impl Analyzer for NodeDependencyAnalyzer {
             for (k, v) in &node_info.dev_dependencies {
                 all_manifest_deps.push((k, v));
             }
+            all_manifest_deps.sort_by(|a, b| a.0.cmp(b.0));
 
             for (dep_name, constraint) in all_manifest_deps {
                 let is_workspace_dep = constraint.starts_with("workspace:")
