@@ -71,7 +71,7 @@ enabled = true
 
 ## 3. `stackvet init`
 
-Generates or updates project configuration (`.stackvet.toml` or `pyproject.toml`) without overwriting existing settings. Optionally generates a pre-configured CI workflow for GitHub Actions.
+Creates only a `.stackvet.toml` file when one does not exist, leaving any existing file unchanged. Optionally generates a pre-configured CI workflow for GitHub Actions.
 
 ```bash
 stackvet init [PATH] [OPTIONS]
@@ -301,7 +301,7 @@ stackvet baseline verify --update
 | `-b, --baseline <FILE>` | Path | Baseline filepath to check against [default: `.stackvet-baseline.json`] |
 | `--fail-on <SEVERITY>` | String | Fail CI if new findings meet or exceed severity (`hint`, `info`, `warning`, `error`, `critical`) |
 | `--strict` | Flag | Promotes warnings to failure threshold (equivalent to `--fail-on warning`) |
-| `-u, --update` | Flag | Update baseline file with current findings and remove resolved issues |
+| `--update` | Flag | Update baseline file with current findings and remove resolved issues |
 
 ---
 

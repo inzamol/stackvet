@@ -69,6 +69,7 @@ fn default_true() -> bool {
 pub enum RuleOverride {
     Disabled,
     Severity(Severity),
+    KeepNative,
 }
 
 impl RuleSetting {
@@ -81,8 +82,8 @@ impl RuleSetting {
                 } else if let Some(s) = severity {
                     parse_rule_action(s, rule_id)
                 } else {
-                    // Enabled with default severity
-                    Ok(RuleOverride::Severity(Severity::Warning))
+                    // Enabled without explicit severity preserves the rule's native severity
+                    Ok(RuleOverride::KeepNative)
                 }
             }
         }
@@ -225,6 +226,9 @@ impl StackvetConfig {
                         d.severity = sev;
                         result.push(d);
                     }
+                    RuleOverride::KeepNative => {
+                        result.push(d);
+                    }
                 }
             } else {
                 result.push(d);
@@ -308,6 +312,7 @@ mod tests {
 DEP-001 = "warning"
 CEL-001 = "disabled"
 ARC-001 = "error"
+SQL-001 = { enabled = true }
 "#;
         let config: StackvetConfig = toml::from_str(toml_str).unwrap();
         config.validate().unwrap();
@@ -317,10 +322,11 @@ ARC-001 = "error"
             make_diag("CEL-001", Severity::Error),
             make_diag("ARC-001", Severity::Warning),
             make_diag("FAP-001", Severity::Critical),
+            make_diag("SQL-001", Severity::Critical),
         ];
 
         let filtered = config.apply_rule_overrides(diags).unwrap();
-        assert_eq!(filtered.len(), 3); // CEL-001 dropped
+        assert_eq!(filtered.len(), 4); // CEL-001 dropped
 
         let dep = filtered
             .iter()
@@ -339,6 +345,12 @@ ARC-001 = "error"
             .find(|d| d.rule_id.as_str() == "FAP-001")
             .unwrap();
         assert_eq!(fap.severity, Severity::Critical); // Unchanged
+
+        let sql = filtered
+            .iter()
+            .find(|d| d.rule_id.as_str() == "SQL-001")
+            .unwrap();
+        assert_eq!(sql.severity, Severity::Critical); // Preserves native severity
     }
 
     #[test]

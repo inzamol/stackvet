@@ -436,6 +436,7 @@ min_score = 85
 [rules]
 DEP-001 = "warning"
 FAP-001 = "disabled"
+SQL-001 = { enabled = true }
 "#;
     let config = StackvetConfig::from_toml_str(config_toml).expect("parse toml");
 
@@ -460,14 +461,27 @@ FAP-001 = "disabled"
             fix: None,
             language: LanguageTarget::Python,
         },
+        Diagnostic {
+            rule_id: RuleId::new("SQL-001"),
+            message: "Unindexed query".to_string(),
+            severity: Severity::Critical,
+            location: DiagnosticLocation::new("main.py"),
+            explanation: "".to_string(),
+            suggested_remediation: "".to_string(),
+            fix: None,
+            language: LanguageTarget::Python,
+        },
     ];
 
     let processed = config.apply_rule_overrides(diags).expect("apply overrides");
     // FAP-001 disabled -> dropped!
-    assert_eq!(processed.len(), 1);
+    assert_eq!(processed.len(), 2);
     // DEP-001 downgraded to Warning
     assert_eq!(processed[0].rule_id.as_str(), "DEP-001");
     assert_eq!(processed[0].severity, Severity::Warning);
+    // SQL-001 enabled=true preserves native Critical severity
+    assert_eq!(processed[1].rule_id.as_str(), "SQL-001");
+    assert_eq!(processed[1].severity, Severity::Critical);
 
     // Verify precedence
     // CLI --fail-on critical overrides config fail_on = warning
