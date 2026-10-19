@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub mod rules_catalog;
 pub use rules_catalog::{get_rule_meta, RuleMeta, ALL_RULES};
@@ -181,6 +181,30 @@ impl Default for DiagnosticLocation {
             span: None,
             snippet: None,
         }
+    }
+}
+
+impl From<PathBuf> for DiagnosticLocation {
+    fn from(file_path: PathBuf) -> Self {
+        Self::new(file_path)
+    }
+}
+
+impl From<&Path> for DiagnosticLocation {
+    fn from(path: &Path) -> Self {
+        Self::new(path)
+    }
+}
+
+impl From<String> for DiagnosticLocation {
+    fn from(s: String) -> Self {
+        Self::new(s)
+    }
+}
+
+impl From<&str> for DiagnosticLocation {
+    fn from(s: &str) -> Self {
+        Self::new(s)
     }
 }
 
