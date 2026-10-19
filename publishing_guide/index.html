@@ -1,0 +1,1969 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Universal Project Health & Static Diagnostics Engine — understand root causes and get safe, actionable fixes in milliseconds.">
+      
+      
+        <meta name="author" content="Inzamul Hoque">
+      
+      
+        <link rel="canonical" href="https://inzamol.github.io/stackvet/publishing_guide/">
+      
+      
+        <link rel="prev" href="../pre_commit/">
+      
+      
+        <link rel="next" href="../contributing/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/favicon.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Publishing to npm & PyPI - StackVet</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="slate" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#publishing-guide-npm-pypi" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="StackVet" class="md-header__button md-logo" aria-label="StackVet" data-md-component="logo">
+      
+  <img src="../assets/logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            StackVet
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Publishing to npm & PyPI
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="slate" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="slate" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/inzamol/stackvet" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    inzamol/stackvet
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../getting_started/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../cli_reference/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../remediation/" class="md-tabs__link">
+          
+  
+  
+  Features
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../ci_integration/" class="md-tabs__link">
+          
+  
+  
+  Integration
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../contributing/" class="md-tabs__link">
+          
+  
+  
+  Community
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="StackVet" class="md-nav__button md-logo" aria-label="StackVet" data-md-component="logo">
+      
+  <img src="../assets/logo.svg" alt="logo">
+
+    </a>
+    StackVet
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/inzamol/stackvet" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    inzamol/stackvet
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting_started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli_reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Commands Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostic Rules Catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Features
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Features
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../remediation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Safe Automated Fixes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../html_report/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTML Report Dashboard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tree/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency & Import Tree
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integration
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Integration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ci_integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI/CD & GitHub Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pre_commit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pre-commit Hooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Publishing to npm & PyPI
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Publishing to npm & PyPI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#table-of-contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Table of Contents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-version-synchronization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Version Synchronization
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-publishing-to-npm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Publishing to npm
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Publishing to npm">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-prerequisites-npm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A. Prerequisites (npm)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b-automated-publishing-via-github-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B. Automated Publishing via GitHub Actions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="B. Automated Publishing via GitHub Actions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-configure-github-secret" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Configure GitHub Secret
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-trigger-publication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Trigger Publication
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#c-manual-publishing-via-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        C. Manual Publishing via CLI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#d-verifying-npm-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        D. Verifying npm Installation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-publishing-to-pypi" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Publishing to PyPI
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Publishing to PyPI">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-prerequisites-pypi" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A. Prerequisites (PyPI)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b-automated-publishing-via-github-actions-pypi" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B. Automated Publishing via GitHub Actions (PyPI)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="B. Automated Publishing via GitHub Actions (PyPI)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#setting-up-pypi-trusted-publishing-zero-token-oidc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Setting up PyPI Trusted Publishing (Zero-Token OIDC)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#triggering-publication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Triggering Publication
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#c-manual-publishing-via-cli-pypi" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        C. Manual Publishing via CLI (PyPI)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#d-verifying-pypi-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        D. Verifying PyPI Installation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-troubleshooting-faqs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Troubleshooting &amp; FAQs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Troubleshooting &amp; FAQs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#q-npm-err-403-forbidden-you-do-not-have-permission-to-publish-stackvet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Q: npm ERR! 403 Forbidden - You do not have permission to publish "stackvet"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#q-httperror-400-bad-request-from-pypi-file-already-exists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Q: HTTPError: 400 Bad Request from PyPI - File already exists
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#q-windows-error-os-error-32-file-in-use-during-local-cargo-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Q: Windows error: os error 32 (file in use) during local cargo build
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Community
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Community
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code_of_conduct/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code of Conduct
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#table-of-contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Table of Contents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-version-synchronization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Version Synchronization
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-publishing-to-npm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Publishing to npm
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Publishing to npm">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-prerequisites-npm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A. Prerequisites (npm)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b-automated-publishing-via-github-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B. Automated Publishing via GitHub Actions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="B. Automated Publishing via GitHub Actions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-configure-github-secret" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Configure GitHub Secret
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-trigger-publication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Trigger Publication
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#c-manual-publishing-via-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        C. Manual Publishing via CLI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#d-verifying-npm-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        D. Verifying npm Installation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-publishing-to-pypi" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Publishing to PyPI
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Publishing to PyPI">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-prerequisites-pypi" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A. Prerequisites (PyPI)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b-automated-publishing-via-github-actions-pypi" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B. Automated Publishing via GitHub Actions (PyPI)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="B. Automated Publishing via GitHub Actions (PyPI)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#setting-up-pypi-trusted-publishing-zero-token-oidc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Setting up PyPI Trusted Publishing (Zero-Token OIDC)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#triggering-publication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Triggering Publication
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#c-manual-publishing-via-cli-pypi" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        C. Manual Publishing via CLI (PyPI)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#d-verifying-pypi-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        D. Verifying PyPI Installation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-troubleshooting-faqs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Troubleshooting &amp; FAQs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Troubleshooting &amp; FAQs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#q-npm-err-403-forbidden-you-do-not-have-permission-to-publish-stackvet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Q: npm ERR! 403 Forbidden - You do not have permission to publish "stackvet"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#q-httperror-400-bad-request-from-pypi-file-already-exists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Q: HTTPError: 400 Bad Request from PyPI - File already exists
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#q-windows-error-os-error-32-file-in-use-during-local-cargo-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Q: Windows error: os error 32 (file in use) during local cargo build
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href=".." class="md-path__link">
+        
+  <span class="md-ellipsis">
+    Overview
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="../ci_integration/" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    Integration
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="publishing-guide-npm-pypi">Publishing Guide: npm &amp; PyPI</h1>
+<p>This guide walks you through publishing <strong>StackVet</strong> to both the <strong>npm Registry</strong> (for Node.js / JavaScript users) and <strong>PyPI</strong> (for Python users).</p>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#1-version-synchronization">Version Synchronization</a></li>
+<li><a href="#2-publishing-to-npm">Publishing to npm</a></li>
+<li><a href="#a-prerequisites-npm">Prerequisites</a></li>
+<li><a href="#b-automated-publishing-via-github-actions">Automated Publishing via GitHub Actions (Recommended)</a></li>
+<li><a href="#c-manual-publishing-via-cli">Manual Publishing via CLI</a></li>
+<li><a href="#d-verifying-npm-installation">Verifying npm Installation</a></li>
+<li><a href="#3-publishing-to-pypi">Publishing to PyPI</a></li>
+<li><a href="#a-prerequisites-pypi">Prerequisites</a></li>
+<li><a href="#b-automated-publishing-via-github-actions-pypi">Automated Publishing via GitHub Actions (Recommended)</a></li>
+<li><a href="#c-manual-publishing-via-cli-pypi">Manual Publishing via CLI</a></li>
+<li><a href="#d-verifying-pypi-installation">Verifying PyPI Installation</a></li>
+<li><a href="#4-troubleshooting-faqs">Troubleshooting &amp; FAQs</a></li>
+</ol>
+<hr />
+<h2 id="1-version-synchronization">1. Version Synchronization</h2>
+<p>Before releasing a new version, ensure the version number is synchronized across the project manifests:</p>
+<ol>
+<li><code>crates/stackvet-cli/Cargo.toml</code>: <code>version = "0.1.0"</code></li>
+<li><code>packages/npm/package.json</code>: <code>"version": "0.1.0"</code></li>
+<li><code>pyproject.toml</code>: <code>version = "0.1.0"</code></li>
+</ol>
+<p>Commit your version updates:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>add<span class="w"> </span>.
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"chore: bump version to 0.1.0"</span>
+</code></pre></div></p>
+<hr />
+<h2 id="2-publishing-to-npm">2. Publishing to npm</h2>
+<p>StackVet's npm distribution is located in <code>packages/npm/</code> and ships a cross-platform executable runner (<code>bin/stackvet.js</code>) bundled with the native Rust binary.</p>
+<h3 id="a-prerequisites-npm">A. Prerequisites (npm)</h3>
+<ol>
+<li>An active account at <a href="https://www.npmjs.com/">npmjs.com</a>.</li>
+<li>Enable Two-Factor Authentication (2FA).</li>
+<li>Generate an <strong>Automation Token</strong>:</li>
+<li>Go to <strong>npmjs.com</strong> -&gt; Click your Profile -&gt; <strong>Access Tokens</strong>.</li>
+<li>Click <strong>Generate New Token</strong> -&gt; Choose <strong>Classic Token</strong> -&gt; Select <strong>Automation</strong>.</li>
+<li>Copy the generated token (starts with <code>npm_...</code>).</li>
+</ol>
+<hr />
+<h3 id="b-automated-publishing-via-github-actions">B. Automated Publishing via GitHub Actions</h3>
+<p>The repository includes a ready-to-run workflow at <a href="https://github.com/inzamol/stackvet/blob/main/.github/workflows/publish-npm.yml"><code>.github/workflows/publish-npm.yml</code></a>.</p>
+<h4 id="step-1-configure-github-secret">Step 1: Configure GitHub Secret</h4>
+<ol>
+<li>Open your repository on GitHub.</li>
+<li>Go to <strong>Settings</strong> -&gt; <strong>Secrets and variables</strong> -&gt; <strong>Actions</strong>.</li>
+<li>Click <strong>New repository secret</strong>.</li>
+<li>Set:</li>
+<li><strong>Name</strong>: <code>NPM_TOKEN</code></li>
+<li><strong>Secret</strong>: Paste your npm automation token.</li>
+<li>Click <strong>Add secret</strong>.</li>
+</ol>
+<h4 id="step-2-trigger-publication">Step 2: Trigger Publication</h4>
+<p>Create and push a Git release tag:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>git<span class="w"> </span>tag<span class="w"> </span>v0.1.0
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.1.0
+</code></pre></div></p>
+<p>GitHub Actions will automatically:
+1. Compile the optimized native Rust binary.
+2. Bundle the binary into the npm package structure.
+3. Validate that <code>stackvet --version</code> executes cleanly.
+4. Publish <code>stackvet</code> to <code>https://registry.npmjs.org/</code> with public access.</p>
+<blockquote>
+<p><strong>Tip (Dry Run)</strong>: You can also manually trigger this workflow via the <strong>Actions</strong> tab on GitHub and check the <code>dry_run</code> option to test packaging without publishing.</p>
+</blockquote>
+<hr />
+<h3 id="c-manual-publishing-via-cli">C. Manual Publishing via CLI</h3>
+<p>To build and publish manually from your local machine:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># 1. Build and package the npm distribution</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>npm<span class="w"> </span>run<span class="w"> </span>build:npm
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># 2. Navigate to the npm package folder</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nb">cd</span><span class="w"> </span>packages/npm
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># 3. Log into npm (if not already logged in)</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>npm<span class="w"> </span>login
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="c1"># 4. Publish to registry</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>npm<span class="w"> </span>publish<span class="w"> </span>--access<span class="w"> </span>public
+</code></pre></div>
+<hr />
+<h3 id="d-verifying-npm-installation">D. Verifying npm Installation</h3>
+<p>After publishing, test running StackVet directly with <code>npx</code> (no prior installation needed):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Run instantly via npx</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>npx<span class="w"> </span>stackvet<span class="w"> </span>doctor
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># Or install globally</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>npm<span class="w"> </span>install<span class="w"> </span>-g<span class="w"> </span>stackvet
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>stackvet<span class="w"> </span>--version
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="c1"># Or install as a project devDependency</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>pnpm<span class="w"> </span>add<span class="w"> </span>-D<span class="w"> </span>stackvet
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="c1"># or</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>npm<span class="w"> </span>install<span class="w"> </span>--save-dev<span class="w"> </span>stackvet
+</code></pre></div>
+<hr />
+<h2 id="3-publishing-to-pypi">3. Publishing to PyPI</h2>
+<p>StackVet uses <a href="https://www.maturin.rs/">Maturin</a> (<code>bindings = "bin"</code>) to build native Python wheels containing the compiled binary for Linux, macOS, and Windows.</p>
+<h3 id="a-prerequisites-pypi">A. Prerequisites (PyPI)</h3>
+<ol>
+<li>An active account at <a href="https://pypi.org/">pypi.org</a>.</li>
+<li>Enable 2FA on PyPI.</li>
+</ol>
+<hr />
+<h3 id="b-automated-publishing-via-github-actions-pypi">B. Automated Publishing via GitHub Actions (PyPI)</h3>
+<p>The repository includes a multi-platform build workflow at <a href="https://github.com/inzamol/stackvet/blob/main/.github/workflows/publish-pypi.yml"><code>.github/workflows/publish-pypi.yml</code></a>.</p>
+<p>It uses PyPI's modern <strong>Trusted Publishing (OIDC)</strong>, eliminating the need to store long-lived API tokens.</p>
+<h4 id="setting-up-pypi-trusted-publishing-zero-token-oidc">Setting up PyPI Trusted Publishing (Zero-Token OIDC)</h4>
+<ol>
+<li>Log in to <a href="https://pypi.org/">pypi.org</a> and go to <strong>Account Settings</strong> -&gt; <strong>Publishing</strong>.</li>
+<li>Click <strong>Add a new pending publisher</strong>.</li>
+<li>Enter:</li>
+<li><strong>PyPI Project Name</strong>: <code>stackvet</code></li>
+<li><strong>Owner</strong>: Your GitHub username or organization (e.g. <code>inzamol</code>)</li>
+<li><strong>Repository name</strong>: <code>stackvet</code></li>
+<li><strong>Workflow name</strong>: <code>publish-pypi.yml</code></li>
+<li><strong>Environment name</strong>: <code>pypi</code></li>
+<li>Click <strong>Add</strong>.</li>
+</ol>
+<h4 id="triggering-publication">Triggering Publication</h4>
+<p>Push your version tag:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>git<span class="w"> </span>tag<span class="w"> </span>v0.1.0
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.1.0
+</code></pre></div></p>
+<p>GitHub Actions will automatically:
+1. Matrix build wheels for:
+   - Linux: <code>x86_64</code> and <code>aarch64</code>
+   - Windows: <code>x86_64</code>
+   - macOS: <code>x86_64</code> and <code>aarch64</code> (Apple Silicon)
+2. Build the source distribution (<code>sdist</code>).
+3. Securely upload all artifacts to PyPI via OIDC.</p>
+<blockquote>
+<p><strong>Alternative (API Token)</strong>: If you prefer an API token, create a token on PyPI and add it to GitHub Secrets as <code>PYPI_API_TOKEN</code>.</p>
+</blockquote>
+<hr />
+<h3 id="c-manual-publishing-via-cli-pypi">C. Manual Publishing via CLI (PyPI)</h3>
+<p>To manually build and upload the current platform's wheel and sdist:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># 1. Install maturin and twine</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>pip<span class="w"> </span>install<span class="w"> </span>maturin<span class="w"> </span>twine
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># 2. Build the wheel and source distribution</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>npm<span class="w"> </span>run<span class="w"> </span>build:pypi
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="c1"># Artifacts are written to dist/pypi/</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="c1"># 3. Verify packages</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>twine<span class="w"> </span>check<span class="w"> </span>dist/pypi/*
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="c1"># 4. Upload to PyPI</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>twine<span class="w"> </span>upload<span class="w"> </span>dist/pypi/*
+</code></pre></div>
+<hr />
+<h3 id="d-verifying-pypi-installation">D. Verifying PyPI Installation</h3>
+<p>Test running StackVet via Python tooling:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Run instantly with uvx (no install required)</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>uvx<span class="w"> </span>stackvet<span class="w"> </span>doctor
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># Or install with pip / pipx</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>pip<span class="w"> </span>install<span class="w"> </span>stackvet
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="c1"># or</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>pipx<span class="w"> </span>install<span class="w"> </span>stackvet
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>stackvet<span class="w"> </span>--version
+</code></pre></div>
+<hr />
+<h2 id="4-troubleshooting-faqs">4. Troubleshooting &amp; FAQs</h2>
+<h3 id="q-npm-err-403-forbidden-you-do-not-have-permission-to-publish-stackvet">Q: <code>npm ERR! 403 Forbidden - You do not have permission to publish "stackvet"</code></h3>
+<ul>
+<li>The package name <code>stackvet</code> may already be registered or reserved by someone else on npm.</li>
+<li>If the name is taken, you can publish under an npm organization scope (e.g. <code>@yourorg/stackvet</code>) by updating <code>"name": "@yourorg/stackvet"</code> in <code>packages/npm/package.json</code>.</li>
+</ul>
+<h3 id="q-httperror-400-bad-request-from-pypi-file-already-exists">Q: <code>HTTPError: 400 Bad Request from PyPI - File already exists</code></h3>
+<ul>
+<li>PyPI never allows re-uploading an existing version number. If a build failed or needs changes, increment the patch version (e.g. <code>0.1.1</code>) in <code>pyproject.toml</code> and <code>Cargo.toml</code>.</li>
+</ul>
+<h3 id="q-windows-error-os-error-32-file-in-use-during-local-cargo-build">Q: Windows <code>error: os error 32 (file in use)</code> during local cargo build</h3>
+<ul>
+<li>This occurs if Windows Defender or a file indexer holds a temporary <code>.rcgu.o</code> lock on the build directory.</li>
+<li>StackVet is configured with <code>.cargo/config.toml</code> targeting <code>~/.cargo-target/stackvet</code> outside watched directories to eliminate lock collisions.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../pre_commit/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Pre-commit Hooks">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Pre-commit Hooks
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../contributing/" class="md-footer__link md-footer__link--next" aria-label="Next: Contributing Guide">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Contributing Guide
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.top", "navigation.footer", "toc.follow", "content.code.copy", "content.code.annotate", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

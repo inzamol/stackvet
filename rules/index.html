@@ -1,0 +1,5117 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Universal Project Health & Static Diagnostics Engine — understand root causes and get safe, actionable fixes in milliseconds.">
+      
+      
+        <meta name="author" content="Inzamul Hoque">
+      
+      
+        <link rel="canonical" href="https://inzamol.github.io/stackvet/rules/">
+      
+      
+        <link rel="prev" href="../configuration/">
+      
+      
+        <link rel="next" href="../remediation/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/favicon.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Diagnostic Rules Catalog - StackVet</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="slate" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#diagnostic-rules-catalog" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="StackVet" class="md-header__button md-logo" aria-label="StackVet" data-md-component="logo">
+      
+  <img src="../assets/logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            StackVet
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Diagnostic Rules Catalog
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="slate" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="slate" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/inzamol/stackvet" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    inzamol/stackvet
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../getting_started/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../cli_reference/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../remediation/" class="md-tabs__link">
+          
+  
+  
+  Features
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../ci_integration/" class="md-tabs__link">
+          
+  
+  
+  Integration
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../contributing/" class="md-tabs__link">
+          
+  
+  
+  Community
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="StackVet" class="md-nav__button md-logo" aria-label="StackVet" data-md-component="logo">
+      
+  <img src="../assets/logo.svg" alt="logo">
+
+    </a>
+    StackVet
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/inzamol/stackvet" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    inzamol/stackvet
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting_started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli_reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Commands Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostic Rules Catalog
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostic Rules Catalog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-dependency-rules-dep-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Dependency Rules (DEP-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Dependency Rules (DEP-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-dep-001-dependency-constraint-conflict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 DEP-001: Dependency Constraint Conflict
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-dep-002-missing-dependency-declaration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 DEP-002: Missing Dependency Declaration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13-dep-003-no-direct-import-detected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 DEP-003: No Direct Import Detected
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#14-dep-004-python-compatibility-mismatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.4 DEP-004: Python Compatibility Mismatch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#15-dep-005-installeddeclaration-mismatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.5 DEP-005: Installed/Declaration Mismatch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#16-dep-006-vulnerable-transitive-dependency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.6 DEP-006: Vulnerable Transitive Dependency
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#17-dep-007-undeclared-transitive-dependency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.7 DEP-007: Undeclared Transitive Dependency
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-security-rules-sec-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Security Rules (SEC-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Security Rules (SEC-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-sec-001-security-analysis-unavailable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 SEC-001: Security Analysis Unavailable
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-environment-drift-rules-env-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Environment &amp; Drift Rules (ENV-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Environment &amp; Drift Rules (ENV-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-env-001-python-version-drift" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 ENV-001: Python Version Drift
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-env-002-docker-runtime-drift" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 ENV-002: Docker Runtime Drift
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-env-003-ci-runtime-drift" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 ENV-003: CI Runtime Drift
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-import-architecture-rules-imp-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Import &amp; Architecture Rules (IMP-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Import &amp; Architecture Rules (IMP-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-imp-001-circular-import-detected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 IMP-001: Circular Import Detected
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-imp-002-unresolved-local-import" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 IMP-002: Unresolved Local Import
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-imp-003-unused-orphan-local-module" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 IMP-003: Unused / Orphan Local Module
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-imp-004-deprecated-or-removed-standard-library-module" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4 IMP-004: Deprecated or Removed Standard Library Module
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#45-arc-001-architecture-layer-violation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.5 ARC-001: Architecture Layer Violation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#46-arc-002-architectural-circular-component-dependency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.6 ARC-002: Architectural Circular Component Dependency
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-packaging-rules-pkg-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Packaging Rules (PKG-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Packaging Rules (PKG-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-pkg-001-missing-package-metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 PKG-001: Missing Package Metadata
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-pkg-002-invalid-project-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 PKG-002: Invalid Project Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-fastapi-framework-rules-fap-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. FastAPI Framework Rules (FAP-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. FastAPI Framework Rules (FAP-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61-fap-001-blocking-call-or-cpu-bound-operation-in-async-endpoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 FAP-001: Blocking Call or CPU-Bound Operation in Async Endpoint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62-fap-002-blocking-dependency-in-async-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 FAP-002: Blocking Dependency in Async Path
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63-fap-003-missing-response-model-or-return-type-annotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 FAP-003: Missing Response Model or Return Type Annotation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#64-fap-004-insecure-cors-or-debug-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.4 FAP-004: Insecure CORS or Debug Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#65-fap-005-missing-http-client-timeout-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.5 FAP-005: Missing HTTP Client Timeout Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#66-fap-006-route-path-parameter-template-mismatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.6 FAP-006: Route Path Parameter Template Mismatch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#67-fap-007-unsafe-yield-dependency-without-tryfinally" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.7 FAP-007: Unsafe Yield Dependency Without Try/Finally
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#68-fap-008-deprecated-appon_event-lifecycle-hook" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.8 FAP-008: Deprecated @app.on_event Lifecycle Hook
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#69-fap-009-untyped-or-unvalidated-request-body" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.9 FAP-009: Untyped or Unvalidated Request Body
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#610-fap-010-shadowed-or-duplicate-route-endpoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.10 FAP-010: Shadowed or Duplicate Route Endpoint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#611-fap-011-mutable-default-value-in-route-parameter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.11 FAP-011: Mutable Default Value in Route Parameter
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#612-fap-012-invalid-exception-handler-signature" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.12 FAP-012: Invalid Exception Handler Signature
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#613-fap-013-untracked-asynciocreate_task-in-route-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.13 FAP-013: Untracked asyncio.create_task in Route Handler
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#614-fap-014-potential-path-traversal-in-fileresponse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.14 FAP-014: Potential Path Traversal in FileResponse
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#615-fap-015-blocking-file-io-in-async-endpoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.15 FAP-015: Blocking File I/O in Async Endpoint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#616-fap-016-sensitive-field-exposure-in-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.16 FAP-016: Sensitive Field Exposure in Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#617-fap-017-non-standard-http-status-code-on-post-or-delete" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.17 FAP-017: Non-Standard HTTP Status Code on POST or DELETE
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#618-fap-018-global-in-memory-state-mutation-in-route-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.18 FAP-018: Global In-Memory State Mutation in Route Handler
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#619-fap-019-insecure-cookie-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.19 FAP-019: Insecure Cookie Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#620-fap-020-potential-open-redirect-in-redirectresponse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.20 FAP-020: Potential Open Redirect in RedirectResponse
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#621-fap-021-router-included-without-tags-or-prefix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.21 FAP-021: Router Included Without Tags or Prefix
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#622-fap-022-websocket-route-missing-await-websocketaccept" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.22 FAP-022: WebSocket Route Missing Await websocket.accept()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#623-fap-023-deprecated-pydantic-v1-config-class" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.23 FAP-023: Deprecated Pydantic v1 Config Class
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#624-fap-024-redundant-duplicate-dependency-declaration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.24 FAP-024: Redundant Duplicate Dependency Declaration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#625-fap-025-returned-httpexception-instance-instead-of-raise" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.25 FAP-025: Returned HTTPException Instance Instead of Raise
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#626-fap-026-deprecated-pydantic-v1-validator-or-root_validator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.26 FAP-026: Deprecated Pydantic v1 @validator or @root_validator
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#627-fap-027-dependency-parameter-missing-type-annotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.27 FAP-027: Dependency Parameter Missing Type Annotation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#628-fap-028-raw-jsonloads-called-on-request-body" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.28 FAP-028: Raw json.loads Called on Request Body
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#629-fap-029-streamingresponse-initialized-without-media_type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.29 FAP-029: StreamingResponse Initialized Without media_type
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#630-fap-030-missing-route-summary-or-docstring-for-openapi-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.30 FAP-030: Missing Route Summary or Docstring for OpenAPI Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#631-fap-031-prefer-typingannotated-over-parameter-default-assignment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.31 FAP-031: Prefer typing.Annotated Over Parameter Default Assignment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#632-fap-032-redundant-jsonable_encoder-with-response_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.32 FAP-032: Redundant jsonable_encoder with response_model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#633-fap-033-missing-from_attributestrue-in-orm-response-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.33 FAP-033: Missing from_attributes=True in ORM Response Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#634-fap-034-missing-await-on-requestjson-or-requestbody" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.34 FAP-034: Missing Await on request.json() or request.body()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#635-fap-035-raw-exception-raised-instead-of-httpexception" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.35 FAP-035: Raw Exception Raised Instead of HTTPException
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#636-fap-036-mutating-appstate-inside-route-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.36 FAP-036: Mutating app.state Inside Route Handler
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#637-fap-037-securityscopes-declared-with-depends-instead-of-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.37 FAP-037: SecurityScopes Declared with Depends Instead of Security
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#638-fap-038-hardcoded-http-status-code-integer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.38 FAP-038: Hardcoded HTTP Status Code Integer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-sqlalchemy-sql-database-rules-sql-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. SQLAlchemy &amp; SQL Database Rules (SQL-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. SQLAlchemy &amp; SQL Database Rules (SQL-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71-sql-001-potential-n1-database-query-in-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.1 SQL-001: Potential N+1 Database Query in Loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72-sql-002-session-instantiated-without-context-manager-or-cleanup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.2 SQL-002: Session Instantiated Without Context Manager or Cleanup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#73-sql-003-synchronous-db-operation-in-async-event-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.3 SQL-003: Synchronous DB Operation in Async Event Loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#74-sql-004-raw-sql-string-interpolation-sql-injection-risk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.4 SQL-004: Raw SQL String Interpolation (SQL Injection Risk)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#75-sql-005-legacy-sqlalchemy-1x-sessionquery-syntax" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.5 SQL-005: Legacy SQLAlchemy 1.x session.query() Syntax
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#76-sql-006-missing-relationship-eager-loading-strategy-in-async-session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.6 SQL-006: Missing Relationship Eager Loading Strategy in Async Session
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#77-sql-007-uncommitted-transaction-in-mutation-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.7 SQL-007: Uncommitted Transaction in Mutation Function
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#78-sql-008-create_engine-missing-pool_pre_ping-connection-health-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.8 SQL-008: create_engine Missing pool_pre_ping Connection Health Check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#79-sql-009-expire_on_committrue-in-asyncsession" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.9 SQL-009: expire_on_commit=True in AsyncSession
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#710-sql-010-hardcoded-database-credentials-in-connection-url" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.10 SQL-010: Hardcoded Database Credentials in Connection URL
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#711-sql-011-unbounded-select-query-without-limit-or-pagination" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.11 SQL-011: Unbounded SELECT Query Without LIMIT or Pagination
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#712-sql-012-relationship-cascade-delete-without-foreignkey-ondelete-cascade" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.12 SQL-012: Relationship Cascade Delete Without ForeignKey ondelete CASCADE
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#713-sql-013-session-flush-or-commit-called-inside-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.13 SQL-013: Session Flush or Commit Called Inside Loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#714-sql-014-deprecated-declarative_base-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.14 SQL-014: Deprecated declarative_base() Function
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#715-sql-015-sqlite-engine-missing-check_same_threadfalse-in-multi-threaded-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.15 SQL-015: SQLite Engine Missing check_same_thread=False in Multi-Threaded Application
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#716-sql-016-missing-database-migration-configuration-alembic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.16 SQL-016: Missing Database Migration Configuration (Alembic)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#717-sql-017-mapped-attribute-missing-mapped_column-in-20-declarative-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.17 SQL-017: Mapped[...] Attribute Missing mapped_column() in 2.0 Declarative Model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#718-sql-018-excessive-connection-pool-size-in-single-application-instance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.18 SQL-018: Excessive Connection Pool Size in Single Application Instance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#719-sql-019-nullpool-configured-in-persistent-web-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.19 SQL-019: NullPool Configured in Persistent Web Application
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#720-sql-020-declarative-orm-model-missing-primary-key-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.20 SQL-020: Declarative ORM Model Missing Primary Key Definition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#721-sql-021-missing-sessionrollback-in-database-exception-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.21 SQL-021: Missing session.rollback() in Database Exception Handler
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#722-sql-022-large-binary-or-heavy-text-column-without-deferredload_only-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.22 SQL-022: Large Binary or Heavy Text Column Without deferred/load_only Strategy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#723-sql-023-foreignkey-column-defined-without-indextrue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.23 SQL-023: ForeignKey Column Defined Without index=True
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#724-sql-024-insecure-unencrypted-remote-database-connection-url" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.24 SQL-024: Insecure Unencrypted Remote Database Connection URL
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#725-sql-025-deprecated-engineexecute-or-enginescalar-direct-call" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.25 SQL-025: Deprecated engine.execute() or engine.scalar() Direct Call
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#726-sql-026-asyncsession-instantiated-without-async-context-manager-or-await-close" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.26 SQL-026: AsyncSession Instantiated Without Async Context Manager or Await close()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#727-sql-027-unsafe-concurrent-numeric-balance-or-counter-update-without-with_for_update" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.27 SQL-027: Unsafe Concurrent Numeric Balance or Counter Update Without with_for_update()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#728-sql-028-thread-local-scoped_session-used-in-async-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.28 SQL-028: Thread-Local scoped_session Used in Async Context
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#729-sql-029-declarative-orm-model-missing-tablename-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.29 SQL-029: Declarative ORM Model Missing tablename Definition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#730-sql-030-direct-dbapi-raw_connection-used-without-cleanup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.30 SQL-030: Direct DBAPI raw_connection() Used Without Cleanup
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-docker-container-rules-doc-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Docker &amp; Container Rules (DOC-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8. Docker &amp; Container Rules (DOC-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#81-doc-001-inefficient-docker-layer-caching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.1 DOC-001: Inefficient Docker Layer Caching
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#82-doc-002-root-user-container-execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.2 DOC-002: Root User Container Execution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#83-doc-003-unpinned-base-image-tag" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.3 DOC-003: Unpinned Base Image Tag
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#84-doc-004-missing-dockerignore-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.4 DOC-004: Missing .dockerignore File
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#85-doc-005-missing-no-cache-dir-in-pip-install" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.5 DOC-005: Missing --no-cache-dir in pip install
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#86-doc-006-sensitive-file-copied-into-docker-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.6 DOC-006: Sensitive File Copied into Docker Image
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#87-doc-007-missing-healthcheck-instruction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.7 DOC-007: Missing HEALTHCHECK Instruction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#88-doc-008-missing-pythonunbuffered-environment-variable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.8 DOC-008: Missing PYTHONUNBUFFERED Environment Variable
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#89-doc-009-deprecated-maintainer-instruction-used" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.9 DOC-009: Deprecated MAINTAINER Instruction Used
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#810-doc-010-unnecessary-sudo-usage-in-run-instruction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.10 DOC-010: Unnecessary sudo Usage in RUN Instruction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#811-doc-011-apt-get-install-without-cleanup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.11 DOC-011: apt-get install Without Cleanup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#812-doc-012-add-instruction-used-for-local-file-copy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.12 DOC-012: ADD Instruction Used for Local File Copy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#813-doc-013-missing-pythondontwritebytecode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.13 DOC-013: Missing PYTHONDONTWRITEBYTECODE
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#814-doc-014-web-server-entrypoint-missing-expose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.14 DOC-014: Web Server Entrypoint Missing EXPOSE
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-engine-execution-rules-eng-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Engine &amp; Execution Rules (ENG-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. Engine &amp; Execution Rules (ENG-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#91-eng-001-analyzer-execution-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.1 ENG-001: Analyzer Execution Failed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-discovery-parser-rules-disc-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Discovery &amp; Parser Rules (DISC-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="10. Discovery &amp; Parser Rules (DISC-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#101-disc-001-unreadable-source-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.1 DISC-001: Unreadable Source File
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#102-disc-002-python-syntax-error-in-source-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.2 DISC-002: Python Syntax Error in Source File
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-cicd-workflow-rules-ci-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. CI/CD Workflow Rules (CI-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="11. CI/CD Workflow Rules (CI-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#111-ci-001-ci-python-matrix-version-mismatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.1 CI-001: CI Python Matrix Version Mismatch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#112-ci-002-unfrozen-dependency-installation-in-ci" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.2 CI-002: Unfrozen Dependency Installation in CI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#113-ci-003-deprecated-or-outdated-ci-action-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.3 CI-003: Deprecated or Outdated CI Action Version
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#114-ci-004-missing-test-or-quality-gate-in-ci-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.4 CI-004: Missing Test or Quality Gate in CI Workflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#115-ci-005-insecure-secret-or-token-in-ci-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.5 CI-005: Insecure Secret or Token in CI Workflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#116-ci-006-missing-concurrency-cancellation-in-pr-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.6 CI-006: Missing Concurrency Cancellation in PR Workflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#12-django-framework-rules-djg-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12. Django Framework Rules (DJG-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="12. Django Framework Rules (DJG-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#121-djg-001-insecure-hardcoded-debug-true-in-django-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12.1 DJG-001: Insecure Hardcoded DEBUG = True in Django Settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#122-djg-002-hardcoded-secret_key-in-django-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12.2 DJG-002: Hardcoded SECRET_KEY in Django Settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#123-djg-003-insecure-wildcard-allowed_hosts-in-django-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12.3 DJG-003: Insecure Wildcard ALLOWED_HOSTS in Django Settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#124-djg-004-potential-n1-database-query-in-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12.4 DJG-004: Potential N+1 Database Query in Loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#125-djg-005-django-foreignkey-missing-explicit-on_delete" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12.5 DJG-005: Django ForeignKey Missing Explicit on_delete
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#126-djg-006-missing-csrf-protection-middleware" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12.6 DJG-006: Missing CSRF Protection Middleware
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#13-celery-framework-rules-cel-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13. Celery Framework Rules (CEL-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="13. Celery Framework Rules (CEL-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#131-cel-001-insecure-celery-pickle-serializer-enabled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13.1 CEL-001: Insecure Celery Pickle Serializer Enabled
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#132-cel-002-missing-task-timeout-limits-in-celery-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13.2 CEL-002: Missing Task Timeout Limits in Celery Task
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#133-cel-003-unbounded-retry-policy-on-celery-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13.3 CEL-003: Unbounded Retry Policy on Celery Task
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#134-cel-004-blocking-timesleep-in-asynchronous-celery-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13.4 CEL-004: Blocking time.sleep() in Asynchronous Celery Task
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Features
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Features
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../remediation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Safe Automated Fixes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../html_report/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTML Report Dashboard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tree/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency & Import Tree
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integration
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Integration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ci_integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CI/CD & GitHub Actions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pre_commit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pre-commit Hooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../publishing_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Publishing to npm & PyPI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Community
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Community
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code_of_conduct/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code of Conduct
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-dependency-rules-dep-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Dependency Rules (DEP-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Dependency Rules (DEP-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-dep-001-dependency-constraint-conflict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1 DEP-001: Dependency Constraint Conflict
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-dep-002-missing-dependency-declaration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2 DEP-002: Missing Dependency Declaration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#13-dep-003-no-direct-import-detected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3 DEP-003: No Direct Import Detected
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#14-dep-004-python-compatibility-mismatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.4 DEP-004: Python Compatibility Mismatch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#15-dep-005-installeddeclaration-mismatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.5 DEP-005: Installed/Declaration Mismatch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#16-dep-006-vulnerable-transitive-dependency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.6 DEP-006: Vulnerable Transitive Dependency
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#17-dep-007-undeclared-transitive-dependency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.7 DEP-007: Undeclared Transitive Dependency
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-security-rules-sec-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Security Rules (SEC-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Security Rules (SEC-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-sec-001-security-analysis-unavailable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 SEC-001: Security Analysis Unavailable
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-environment-drift-rules-env-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Environment &amp; Drift Rules (ENV-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Environment &amp; Drift Rules (ENV-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-env-001-python-version-drift" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 ENV-001: Python Version Drift
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-env-002-docker-runtime-drift" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 ENV-002: Docker Runtime Drift
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-env-003-ci-runtime-drift" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 ENV-003: CI Runtime Drift
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-import-architecture-rules-imp-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Import &amp; Architecture Rules (IMP-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Import &amp; Architecture Rules (IMP-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-imp-001-circular-import-detected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 IMP-001: Circular Import Detected
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-imp-002-unresolved-local-import" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 IMP-002: Unresolved Local Import
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-imp-003-unused-orphan-local-module" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 IMP-003: Unused / Orphan Local Module
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-imp-004-deprecated-or-removed-standard-library-module" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4 IMP-004: Deprecated or Removed Standard Library Module
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#45-arc-001-architecture-layer-violation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.5 ARC-001: Architecture Layer Violation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#46-arc-002-architectural-circular-component-dependency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.6 ARC-002: Architectural Circular Component Dependency
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-packaging-rules-pkg-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Packaging Rules (PKG-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Packaging Rules (PKG-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-pkg-001-missing-package-metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 PKG-001: Missing Package Metadata
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-pkg-002-invalid-project-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 PKG-002: Invalid Project Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-fastapi-framework-rules-fap-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. FastAPI Framework Rules (FAP-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. FastAPI Framework Rules (FAP-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61-fap-001-blocking-call-or-cpu-bound-operation-in-async-endpoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 FAP-001: Blocking Call or CPU-Bound Operation in Async Endpoint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62-fap-002-blocking-dependency-in-async-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 FAP-002: Blocking Dependency in Async Path
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63-fap-003-missing-response-model-or-return-type-annotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 FAP-003: Missing Response Model or Return Type Annotation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#64-fap-004-insecure-cors-or-debug-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.4 FAP-004: Insecure CORS or Debug Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#65-fap-005-missing-http-client-timeout-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.5 FAP-005: Missing HTTP Client Timeout Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#66-fap-006-route-path-parameter-template-mismatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.6 FAP-006: Route Path Parameter Template Mismatch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#67-fap-007-unsafe-yield-dependency-without-tryfinally" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.7 FAP-007: Unsafe Yield Dependency Without Try/Finally
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#68-fap-008-deprecated-appon_event-lifecycle-hook" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.8 FAP-008: Deprecated @app.on_event Lifecycle Hook
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#69-fap-009-untyped-or-unvalidated-request-body" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.9 FAP-009: Untyped or Unvalidated Request Body
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#610-fap-010-shadowed-or-duplicate-route-endpoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.10 FAP-010: Shadowed or Duplicate Route Endpoint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#611-fap-011-mutable-default-value-in-route-parameter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.11 FAP-011: Mutable Default Value in Route Parameter
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#612-fap-012-invalid-exception-handler-signature" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.12 FAP-012: Invalid Exception Handler Signature
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#613-fap-013-untracked-asynciocreate_task-in-route-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.13 FAP-013: Untracked asyncio.create_task in Route Handler
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#614-fap-014-potential-path-traversal-in-fileresponse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.14 FAP-014: Potential Path Traversal in FileResponse
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#615-fap-015-blocking-file-io-in-async-endpoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.15 FAP-015: Blocking File I/O in Async Endpoint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#616-fap-016-sensitive-field-exposure-in-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.16 FAP-016: Sensitive Field Exposure in Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#617-fap-017-non-standard-http-status-code-on-post-or-delete" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.17 FAP-017: Non-Standard HTTP Status Code on POST or DELETE
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#618-fap-018-global-in-memory-state-mutation-in-route-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.18 FAP-018: Global In-Memory State Mutation in Route Handler
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#619-fap-019-insecure-cookie-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.19 FAP-019: Insecure Cookie Configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#620-fap-020-potential-open-redirect-in-redirectresponse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.20 FAP-020: Potential Open Redirect in RedirectResponse
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#621-fap-021-router-included-without-tags-or-prefix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.21 FAP-021: Router Included Without Tags or Prefix
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#622-fap-022-websocket-route-missing-await-websocketaccept" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.22 FAP-022: WebSocket Route Missing Await websocket.accept()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#623-fap-023-deprecated-pydantic-v1-config-class" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.23 FAP-023: Deprecated Pydantic v1 Config Class
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#624-fap-024-redundant-duplicate-dependency-declaration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.24 FAP-024: Redundant Duplicate Dependency Declaration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#625-fap-025-returned-httpexception-instance-instead-of-raise" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.25 FAP-025: Returned HTTPException Instance Instead of Raise
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#626-fap-026-deprecated-pydantic-v1-validator-or-root_validator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.26 FAP-026: Deprecated Pydantic v1 @validator or @root_validator
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#627-fap-027-dependency-parameter-missing-type-annotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.27 FAP-027: Dependency Parameter Missing Type Annotation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#628-fap-028-raw-jsonloads-called-on-request-body" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.28 FAP-028: Raw json.loads Called on Request Body
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#629-fap-029-streamingresponse-initialized-without-media_type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.29 FAP-029: StreamingResponse Initialized Without media_type
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#630-fap-030-missing-route-summary-or-docstring-for-openapi-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.30 FAP-030: Missing Route Summary or Docstring for OpenAPI Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#631-fap-031-prefer-typingannotated-over-parameter-default-assignment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.31 FAP-031: Prefer typing.Annotated Over Parameter Default Assignment
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#632-fap-032-redundant-jsonable_encoder-with-response_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.32 FAP-032: Redundant jsonable_encoder with response_model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#633-fap-033-missing-from_attributestrue-in-orm-response-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.33 FAP-033: Missing from_attributes=True in ORM Response Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#634-fap-034-missing-await-on-requestjson-or-requestbody" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.34 FAP-034: Missing Await on request.json() or request.body()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#635-fap-035-raw-exception-raised-instead-of-httpexception" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.35 FAP-035: Raw Exception Raised Instead of HTTPException
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#636-fap-036-mutating-appstate-inside-route-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.36 FAP-036: Mutating app.state Inside Route Handler
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#637-fap-037-securityscopes-declared-with-depends-instead-of-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.37 FAP-037: SecurityScopes Declared with Depends Instead of Security
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#638-fap-038-hardcoded-http-status-code-integer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.38 FAP-038: Hardcoded HTTP Status Code Integer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-sqlalchemy-sql-database-rules-sql-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. SQLAlchemy &amp; SQL Database Rules (SQL-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. SQLAlchemy &amp; SQL Database Rules (SQL-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71-sql-001-potential-n1-database-query-in-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.1 SQL-001: Potential N+1 Database Query in Loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72-sql-002-session-instantiated-without-context-manager-or-cleanup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.2 SQL-002: Session Instantiated Without Context Manager or Cleanup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#73-sql-003-synchronous-db-operation-in-async-event-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.3 SQL-003: Synchronous DB Operation in Async Event Loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#74-sql-004-raw-sql-string-interpolation-sql-injection-risk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.4 SQL-004: Raw SQL String Interpolation (SQL Injection Risk)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#75-sql-005-legacy-sqlalchemy-1x-sessionquery-syntax" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.5 SQL-005: Legacy SQLAlchemy 1.x session.query() Syntax
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#76-sql-006-missing-relationship-eager-loading-strategy-in-async-session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.6 SQL-006: Missing Relationship Eager Loading Strategy in Async Session
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#77-sql-007-uncommitted-transaction-in-mutation-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.7 SQL-007: Uncommitted Transaction in Mutation Function
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#78-sql-008-create_engine-missing-pool_pre_ping-connection-health-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.8 SQL-008: create_engine Missing pool_pre_ping Connection Health Check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#79-sql-009-expire_on_committrue-in-asyncsession" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.9 SQL-009: expire_on_commit=True in AsyncSession
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#710-sql-010-hardcoded-database-credentials-in-connection-url" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.10 SQL-010: Hardcoded Database Credentials in Connection URL
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#711-sql-011-unbounded-select-query-without-limit-or-pagination" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.11 SQL-011: Unbounded SELECT Query Without LIMIT or Pagination
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#712-sql-012-relationship-cascade-delete-without-foreignkey-ondelete-cascade" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.12 SQL-012: Relationship Cascade Delete Without ForeignKey ondelete CASCADE
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#713-sql-013-session-flush-or-commit-called-inside-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.13 SQL-013: Session Flush or Commit Called Inside Loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#714-sql-014-deprecated-declarative_base-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.14 SQL-014: Deprecated declarative_base() Function
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#715-sql-015-sqlite-engine-missing-check_same_threadfalse-in-multi-threaded-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.15 SQL-015: SQLite Engine Missing check_same_thread=False in Multi-Threaded Application
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#716-sql-016-missing-database-migration-configuration-alembic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.16 SQL-016: Missing Database Migration Configuration (Alembic)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#717-sql-017-mapped-attribute-missing-mapped_column-in-20-declarative-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.17 SQL-017: Mapped[...] Attribute Missing mapped_column() in 2.0 Declarative Model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#718-sql-018-excessive-connection-pool-size-in-single-application-instance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.18 SQL-018: Excessive Connection Pool Size in Single Application Instance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#719-sql-019-nullpool-configured-in-persistent-web-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.19 SQL-019: NullPool Configured in Persistent Web Application
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#720-sql-020-declarative-orm-model-missing-primary-key-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.20 SQL-020: Declarative ORM Model Missing Primary Key Definition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#721-sql-021-missing-sessionrollback-in-database-exception-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.21 SQL-021: Missing session.rollback() in Database Exception Handler
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#722-sql-022-large-binary-or-heavy-text-column-without-deferredload_only-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.22 SQL-022: Large Binary or Heavy Text Column Without deferred/load_only Strategy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#723-sql-023-foreignkey-column-defined-without-indextrue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.23 SQL-023: ForeignKey Column Defined Without index=True
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#724-sql-024-insecure-unencrypted-remote-database-connection-url" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.24 SQL-024: Insecure Unencrypted Remote Database Connection URL
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#725-sql-025-deprecated-engineexecute-or-enginescalar-direct-call" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.25 SQL-025: Deprecated engine.execute() or engine.scalar() Direct Call
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#726-sql-026-asyncsession-instantiated-without-async-context-manager-or-await-close" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.26 SQL-026: AsyncSession Instantiated Without Async Context Manager or Await close()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#727-sql-027-unsafe-concurrent-numeric-balance-or-counter-update-without-with_for_update" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.27 SQL-027: Unsafe Concurrent Numeric Balance or Counter Update Without with_for_update()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#728-sql-028-thread-local-scoped_session-used-in-async-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.28 SQL-028: Thread-Local scoped_session Used in Async Context
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#729-sql-029-declarative-orm-model-missing-tablename-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.29 SQL-029: Declarative ORM Model Missing tablename Definition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#730-sql-030-direct-dbapi-raw_connection-used-without-cleanup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.30 SQL-030: Direct DBAPI raw_connection() Used Without Cleanup
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-docker-container-rules-doc-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Docker &amp; Container Rules (DOC-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="8. Docker &amp; Container Rules (DOC-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#81-doc-001-inefficient-docker-layer-caching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.1 DOC-001: Inefficient Docker Layer Caching
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#82-doc-002-root-user-container-execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.2 DOC-002: Root User Container Execution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#83-doc-003-unpinned-base-image-tag" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.3 DOC-003: Unpinned Base Image Tag
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#84-doc-004-missing-dockerignore-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.4 DOC-004: Missing .dockerignore File
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#85-doc-005-missing-no-cache-dir-in-pip-install" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.5 DOC-005: Missing --no-cache-dir in pip install
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#86-doc-006-sensitive-file-copied-into-docker-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.6 DOC-006: Sensitive File Copied into Docker Image
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#87-doc-007-missing-healthcheck-instruction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.7 DOC-007: Missing HEALTHCHECK Instruction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#88-doc-008-missing-pythonunbuffered-environment-variable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.8 DOC-008: Missing PYTHONUNBUFFERED Environment Variable
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#89-doc-009-deprecated-maintainer-instruction-used" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.9 DOC-009: Deprecated MAINTAINER Instruction Used
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#810-doc-010-unnecessary-sudo-usage-in-run-instruction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.10 DOC-010: Unnecessary sudo Usage in RUN Instruction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#811-doc-011-apt-get-install-without-cleanup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.11 DOC-011: apt-get install Without Cleanup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#812-doc-012-add-instruction-used-for-local-file-copy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.12 DOC-012: ADD Instruction Used for Local File Copy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#813-doc-013-missing-pythondontwritebytecode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.13 DOC-013: Missing PYTHONDONTWRITEBYTECODE
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#814-doc-014-web-server-entrypoint-missing-expose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8.14 DOC-014: Web Server Entrypoint Missing EXPOSE
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-engine-execution-rules-eng-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Engine &amp; Execution Rules (ENG-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="9. Engine &amp; Execution Rules (ENG-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#91-eng-001-analyzer-execution-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9.1 ENG-001: Analyzer Execution Failed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-discovery-parser-rules-disc-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Discovery &amp; Parser Rules (DISC-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="10. Discovery &amp; Parser Rules (DISC-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#101-disc-001-unreadable-source-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.1 DISC-001: Unreadable Source File
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#102-disc-002-python-syntax-error-in-source-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.2 DISC-002: Python Syntax Error in Source File
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-cicd-workflow-rules-ci-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. CI/CD Workflow Rules (CI-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="11. CI/CD Workflow Rules (CI-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#111-ci-001-ci-python-matrix-version-mismatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.1 CI-001: CI Python Matrix Version Mismatch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#112-ci-002-unfrozen-dependency-installation-in-ci" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.2 CI-002: Unfrozen Dependency Installation in CI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#113-ci-003-deprecated-or-outdated-ci-action-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.3 CI-003: Deprecated or Outdated CI Action Version
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#114-ci-004-missing-test-or-quality-gate-in-ci-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.4 CI-004: Missing Test or Quality Gate in CI Workflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#115-ci-005-insecure-secret-or-token-in-ci-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.5 CI-005: Insecure Secret or Token in CI Workflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#116-ci-006-missing-concurrency-cancellation-in-pr-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11.6 CI-006: Missing Concurrency Cancellation in PR Workflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#12-django-framework-rules-djg-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12. Django Framework Rules (DJG-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="12. Django Framework Rules (DJG-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#121-djg-001-insecure-hardcoded-debug-true-in-django-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12.1 DJG-001: Insecure Hardcoded DEBUG = True in Django Settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#122-djg-002-hardcoded-secret_key-in-django-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12.2 DJG-002: Hardcoded SECRET_KEY in Django Settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#123-djg-003-insecure-wildcard-allowed_hosts-in-django-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12.3 DJG-003: Insecure Wildcard ALLOWED_HOSTS in Django Settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#124-djg-004-potential-n1-database-query-in-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12.4 DJG-004: Potential N+1 Database Query in Loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#125-djg-005-django-foreignkey-missing-explicit-on_delete" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12.5 DJG-005: Django ForeignKey Missing Explicit on_delete
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#126-djg-006-missing-csrf-protection-middleware" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12.6 DJG-006: Missing CSRF Protection Middleware
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#13-celery-framework-rules-cel-xxx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13. Celery Framework Rules (CEL-xxx)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="13. Celery Framework Rules (CEL-xxx)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#131-cel-001-insecure-celery-pickle-serializer-enabled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13.1 CEL-001: Insecure Celery Pickle Serializer Enabled
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#132-cel-002-missing-task-timeout-limits-in-celery-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13.2 CEL-002: Missing Task Timeout Limits in Celery Task
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#133-cel-003-unbounded-retry-policy-on-celery-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13.3 CEL-003: Unbounded Retry Policy on Celery Task
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#134-cel-004-blocking-timesleep-in-asynchronous-celery-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        13.4 CEL-004: Blocking time.sleep() in Asynchronous Celery Task
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href=".." class="md-path__link">
+        
+  <span class="md-ellipsis">
+    Overview
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="../cli_reference/" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    Reference
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="diagnostic-rules-catalog">Diagnostic Rules Catalog</h1>
+<p><code>stackvet</code> rule IDs are stable public identifiers. This catalog lists all supported diagnostic checks, their default severities, and remediation strategies.</p>
+<hr />
+<h2 id="1-dependency-rules-dep-xxx">1. Dependency Rules (<code>DEP-xxx</code>)</h2>
+<h3 id="11-dep-001-dependency-constraint-conflict">1.1 DEP-001: Dependency Constraint Conflict</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Two or more declared or transitive dependencies have incompatible version constraints.</li>
+<li><strong>Remediation:</strong> Upgrade the conflicting package or loosen the version pin to satisfy all requirements.</li>
+</ul>
+<h3 id="12-dep-002-missing-dependency-declaration">1.2 DEP-002: Missing Dependency Declaration</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> A third-party package is imported in source code but is not declared in project dependencies.</li>
+<li><strong>Remediation:</strong> Add the missing package to your pyproject.toml or requirements.txt.</li>
+</ul>
+<h3 id="13-dep-003-no-direct-import-detected">1.3 DEP-003: No Direct Import Detected</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> A package is declared as a direct dependency, but no direct imports were detected across project source files. This detects the absence of a detected direct import, not proof that the dependency is unused. Dependencies may still be required at runtime through plugins, configuration, framework integration, CLI entrypoints, or indirect mechanisms.</li>
+<li><strong>Remediation:</strong> Verify if this dependency is used dynamically, required as a plugin/driver/runtime configuration, or can be safely removed.</li>
+</ul>
+<h3 id="14-dep-004-python-compatibility-mismatch">1.4 DEP-004: Python Compatibility Mismatch</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> A package requires a Python version incompatible with the target project runtime.</li>
+<li><strong>Remediation:</strong> Update your target Python version or install a version of the package compatible with your Python runtime.</li>
+</ul>
+<h3 id="15-dep-005-installeddeclaration-mismatch">1.5 DEP-005: Installed/Declaration Mismatch</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> The package version installed in the virtualenv does not match the pinned requirement in project declaration.</li>
+<li><strong>Remediation:</strong> Sync your virtual environment using your package manager (e.g. <code>uv sync</code> or <code>poetry install</code>).</li>
+</ul>
+<h3 id="16-dep-006-vulnerable-transitive-dependency">1.6 DEP-006: Vulnerable Transitive Dependency</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> A security vulnerability has been identified in a direct or transitive dependency.</li>
+<li><strong>Remediation:</strong> Update the vulnerable dependency or apply vendor security patches.</li>
+</ul>
+<h3 id="17-dep-007-undeclared-transitive-dependency">1.7 DEP-007: Undeclared Transitive Dependency</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> A package is imported in source code and provided transitively by a dependency, but is not declared directly in project dependencies.</li>
+<li><strong>Remediation:</strong> Add the transitive dependency directly to your pyproject.toml or requirements.txt.</li>
+</ul>
+<hr />
+<h2 id="2-security-rules-sec-xxx">2. Security Rules (<code>SEC-xxx</code>)</h2>
+<h3 id="21-sec-001-security-analysis-unavailable">2.1 SEC-001: Security Analysis Unavailable</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> The advisory database (OSV.dev) could not be reached to perform vulnerability checks.</li>
+<li><strong>Remediation:</strong> Check your internet connection or run with --offline to skip security checks.</li>
+</ul>
+<hr />
+<h2 id="3-environment-drift-rules-env-xxx">3. Environment &amp; Drift Rules (<code>ENV-xxx</code>)</h2>
+<h3 id="31-env-001-python-version-drift">3.1 ENV-001: Python Version Drift</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> The active Python interpreter version differs from the project's target runtime specification.</li>
+<li><strong>Remediation:</strong> Ensure the virtual environment is built using the configured target Python version.</li>
+</ul>
+<h3 id="32-env-002-docker-runtime-drift">3.2 ENV-002: Docker Runtime Drift</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> The Python version in Dockerfile/docker-compose differs from the project's target runtime.</li>
+<li><strong>Remediation:</strong> Update the base image tag in your Dockerfile to match your project's target Python version.</li>
+</ul>
+<h3 id="33-env-003-ci-runtime-drift">3.3 ENV-003: CI Runtime Drift</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> CI workflow test matrix does not cover or differs from declared project Python versions.</li>
+<li><strong>Remediation:</strong> Align your CI matrix with the Python versions specified in pyproject.toml.</li>
+</ul>
+<hr />
+<h2 id="4-import-architecture-rules-imp-xxx">4. Import &amp; Architecture Rules (<code>IMP-xxx</code>)</h2>
+<h3 id="41-imp-001-circular-import-detected">4.1 IMP-001: Circular Import Detected</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> An import cycle exists between two or more modules, which may cause runtime initialization errors.</li>
+<li><strong>Remediation:</strong> Refactor shared dependencies into a separate module or use deferred/lazy imports.</li>
+</ul>
+<h3 id="42-imp-002-unresolved-local-import">4.2 IMP-002: Unresolved Local Import</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> A local module imported in source code could not be resolved on the project's Python path.</li>
+<li><strong>Remediation:</strong> Verify the module name and ensure source directory is marked on the PYTHONPATH or package root.</li>
+</ul>
+<h3 id="43-imp-003-unused-orphan-local-module">4.3 IMP-003: Unused / Orphan Local Module</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> A Python source file exists in the project but is never imported or referenced by any other module, entry point, or test file.</li>
+<li><strong>Remediation:</strong> Review if this module is obsolete and can be safely deleted or integrated into your package exports.</li>
+</ul>
+<h3 id="44-imp-004-deprecated-or-removed-standard-library-module">4.4 IMP-004: Deprecated or Removed Standard Library Module</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> A standard library module imported in source code was deprecated or completely removed in modern Python (PEP 594).</li>
+<li><strong>Remediation:</strong> Replace the removed stdlib module with its modern replacement (e.g. importlib instead of imp, subprocess instead of pipes).</li>
+</ul>
+<h3 id="45-arc-001-architecture-layer-violation">4.5 ARC-001: Architecture Layer Violation</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> A module in an upper architectural layer directly imports a lower layer bypassing intermediate abstraction layers (e.g. API importing Database directly instead of through Services/Repositories), or a lower layer imports an upper layer.</li>
+<li><strong>Remediation:</strong> Route access through the designated intermediate service/repository layer or invert the dependency using interfaces/events.</li>
+</ul>
+<h3 id="46-arc-002-architectural-circular-component-dependency">4.6 ARC-002: Architectural Circular Component Dependency</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> A circular dependency cycle exists between high-level architectural components or layers (e.g. Services → Utils → Services).</li>
+<li><strong>Remediation:</strong> Decouple the architectural components by extracting shared utilities, introducing an abstraction layer, or using dependency injection.</li>
+</ul>
+<hr />
+<h2 id="5-packaging-rules-pkg-xxx">5. Packaging Rules (<code>PKG-xxx</code>)</h2>
+<h3 id="51-pkg-001-missing-package-metadata">5.1 PKG-001: Missing Package Metadata</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Essential packaging metadata (such as project name, version, or description) is missing.</li>
+<li><strong>Remediation:</strong> Provide project name and version in pyproject.toml [project] table.</li>
+</ul>
+<h3 id="52-pkg-002-invalid-project-configuration">5.2 PKG-002: Invalid Project Configuration</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> The project configuration file contains syntax errors or invalid keys.</li>
+<li><strong>Remediation:</strong> Fix configuration syntax to conform to PEP 621 / tool specifications.</li>
+</ul>
+<hr />
+<h2 id="6-fastapi-framework-rules-fap-xxx">6. FastAPI Framework Rules (<code>FAP-xxx</code>)</h2>
+<h3 id="61-fap-001-blocking-call-or-cpu-bound-operation-in-async-endpoint">6.1 FAP-001: Blocking Call or CPU-Bound Operation in Async Endpoint</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Synchronous blocking operations (e.g. time.sleep, requests, subprocess, synchronous DB queries) or CPU-bound hashing called inside an async def FastAPI route handler block the asyncio event loop.</li>
+<li><strong>Remediation:</strong> Use non-blocking async alternatives (e.g. asyncio.sleep, httpx.AsyncClient) or run blocking/CPU calls in worker threads via anyio.to_thread.run_sync or fastapi.concurrency.run_in_threadpool.</li>
+</ul>
+<h3 id="62-fap-002-blocking-dependency-in-async-path">6.2 FAP-002: Blocking Dependency in Async Path</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> An async route handler depends on a dependency (via Depends) that executes blocking synchronous I/O or CPU operations.</li>
+<li><strong>Remediation:</strong> Refactor dependency to use async operations or execute in a worker threadpool.</li>
+</ul>
+<h3 id="63-fap-003-missing-response-model-or-return-type-annotation">6.3 FAP-003: Missing Response Model or Return Type Annotation</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> FastAPI route endpoint does not declare a response_model argument or return type annotation, disabling schema validation and response serialization.</li>
+<li><strong>Remediation:</strong> Add a return type annotation (-&gt; ResponseModel) or pass response_model to the route decorator.</li>
+</ul>
+<h3 id="64-fap-004-insecure-cors-or-debug-configuration">6.4 FAP-004: Insecure CORS or Debug Configuration</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> CORSMiddleware configured with allow_origins=['*'] and allow_credentials=True, or FastAPI instantiated with debug=True.</li>
+<li><strong>Remediation:</strong> Specify explicit trusted origins in allow_origins when credentials are enabled, and disable debug mode in production.</li>
+</ul>
+<h3 id="65-fap-005-missing-http-client-timeout-configuration">6.5 FAP-005: Missing HTTP Client Timeout Configuration</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> HTTP client (such as httpx.AsyncClient, httpx.Client, or aiohttp.ClientSession) instantiated without an explicit timeout.</li>
+<li><strong>Remediation:</strong> Configure an explicit timeout (e.g. timeout=10.0) to prevent hanging connections.</li>
+</ul>
+<h3 id="66-fap-006-route-path-parameter-template-mismatch">6.6 FAP-006: Route Path Parameter Template Mismatch</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> A path parameter defined in the route URL template (e.g. '/users/{user_id}') does not match any parameter in the handler function signature.</li>
+<li><strong>Remediation:</strong> Ensure all {param} placeholders in route URL decorators match parameter names in the endpoint function signature.</li>
+</ul>
+<h3 id="67-fap-007-unsafe-yield-dependency-without-tryfinally">6.7 FAP-007: Unsafe Yield Dependency Without Try/Finally</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> A generator dependency using yield does not wrap cleanup code in a try...finally block, causing resource and connection leaks on exceptions.</li>
+<li><strong>Remediation:</strong> Wrap the yield and teardown logic in a try...finally block to guarantee resource cleanup.</li>
+</ul>
+<h3 id="68-fap-008-deprecated-appon_event-lifecycle-hook">6.8 FAP-008: Deprecated @app.on_event Lifecycle Hook</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Using deprecated @app.on_event('startup' / 'shutdown') handlers instead of modern lifespan context managers.</li>
+<li><strong>Remediation:</strong> Migrate @app.on_event to '@asynccontextmanager async def lifespan(app: FastAPI)' and pass to FastAPI(lifespan=lifespan).</li>
+</ul>
+<h3 id="69-fap-009-untyped-or-unvalidated-request-body">6.9 FAP-009: Untyped or Unvalidated Request Body</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Route handler accepts a raw 'dict', 'Any', or untyped Body parameter instead of a Pydantic model, bypassing automatic request validation.</li>
+<li><strong>Remediation:</strong> Define a Pydantic BaseModel schema for the request payload to ensure type safety and validation.</li>
+</ul>
+<h3 id="610-fap-010-shadowed-or-duplicate-route-endpoint">6.10 FAP-010: Shadowed or Duplicate Route Endpoint</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Multiple route handlers are registered with the identical HTTP method and path on the same app/router, causing one to shadow the other.</li>
+<li><strong>Remediation:</strong> Ensure all routes have unique method and path combinations, or combine related logic into a single handler.</li>
+</ul>
+<h3 id="611-fap-011-mutable-default-value-in-route-parameter">6.11 FAP-011: Mutable Default Value in Route Parameter</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Route handler uses a mutable default argument (e.g. list or dict), which can leak state across concurrent requests.</li>
+<li><strong>Remediation:</strong> Use None as default (e.g. filters: list[str] | None = None) or use Field(default_factory=list).</li>
+</ul>
+<h3 id="612-fap-012-invalid-exception-handler-signature">6.12 FAP-012: Invalid Exception Handler Signature</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Custom @app.exception_handler function does not take the required (request, exc) parameters, causing runtime crashes.</li>
+<li><strong>Remediation:</strong> Ensure custom exception handlers accept exactly two parameters: '(request: Request, exc: Exception)'.</li>
+</ul>
+<h3 id="613-fap-013-untracked-asynciocreate_task-in-route-handler">6.13 FAP-013: Untracked asyncio.create_task in Route Handler</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Spawning raw asyncio.create_task inside route handlers without background task management can cause lost exceptions and unhandled crashes.</li>
+<li><strong>Remediation:</strong> Use FastAPI's built-in BackgroundTasks ('background_tasks.add_task(...)') for request-scoped background jobs.</li>
+</ul>
+<h3 id="614-fap-014-potential-path-traversal-in-fileresponse">6.14 FAP-014: Potential Path Traversal in FileResponse</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> FileResponse initialized directly with an unvalidated path variable from route parameters, risking arbitrary file read vulnerabilities.</li>
+<li><strong>Remediation:</strong> Validate and resolve the file path against a trusted base directory before passing to FileResponse.</li>
+</ul>
+<h3 id="615-fap-015-blocking-file-io-in-async-endpoint">6.15 FAP-015: Blocking File I/O in Async Endpoint</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Using synchronous open() or blocking file read/write operations inside an async def route handler blocks the event loop.</li>
+<li><strong>Remediation:</strong> Use 'aiofiles', 'anyio.Path', or run file I/O in a synchronous def route handler.</li>
+</ul>
+<h3 id="616-fap-016-sensitive-field-exposure-in-schema">6.16 FAP-016: Sensitive Field Exposure in Schema</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Pydantic model schema exposes sensitive password/secret fields without Field(exclude=True) or response filtering.</li>
+<li><strong>Remediation:</strong> Mark sensitive fields with 'Field(exclude=True)' or create a separate output schema (e.g. UserResponse).</li>
+</ul>
+<h3 id="617-fap-017-non-standard-http-status-code-on-post-or-delete">6.17 FAP-017: Non-Standard HTTP Status Code on POST or DELETE</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Mutation routes (POST/DELETE) return default 200 OK instead of standard REST status codes (201 Created or 204 No Content).</li>
+<li><strong>Remediation:</strong> Specify status_code=status.HTTP_201_CREATED on POST routes or status.HTTP_204_NO_CONTENT on DELETE routes.</li>
+</ul>
+<h3 id="618-fap-018-global-in-memory-state-mutation-in-route-handler">6.18 FAP-018: Global In-Memory State Mutation in Route Handler</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Route handler mutates global/module-level collections or variables without synchronization locks, causing concurrency bugs.</li>
+<li><strong>Remediation:</strong> Use a proper database, Redis cache, or an asyncio.Lock for shared state.</li>
+</ul>
+<h3 id="619-fap-019-insecure-cookie-configuration">6.19 FAP-019: Insecure Cookie Configuration</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> response.set_cookie() called without httponly=True or secure=True flags, exposing cookies to XSS or network interception.</li>
+<li><strong>Remediation:</strong> Set 'httponly=True' and 'secure=True' when storing sensitive session or auth cookies.</li>
+</ul>
+<h3 id="620-fap-020-potential-open-redirect-in-redirectresponse">6.20 FAP-020: Potential Open Redirect in RedirectResponse</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> RedirectResponse initialized directly with user-supplied URL parameter without domain whitelist validation.</li>
+<li><strong>Remediation:</strong> Validate that the redirect target is a relative path or matches an allowed domain whitelist.</li>
+</ul>
+<h3 id="621-fap-021-router-included-without-tags-or-prefix">6.21 FAP-021: Router Included Without Tags or Prefix</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> app.include_router() called without 'tags' or 'prefix', leading to unorganized OpenAPI documentation and URL clashes.</li>
+<li><strong>Remediation:</strong> Provide 'prefix' and 'tags' when including routers (e.g. app.include_router(user_router, prefix='/users', tags=['Users'])).</li>
+</ul>
+<h3 id="622-fap-022-websocket-route-missing-await-websocketaccept">6.22 FAP-022: WebSocket Route Missing Await websocket.accept()</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> WebSocket endpoint sends or receives data before calling 'await websocket.accept()', which causes runtime errors.</li>
+<li><strong>Remediation:</strong> Call 'await websocket.accept()' before reading or writing data to the WebSocket.</li>
+</ul>
+<h3 id="623-fap-023-deprecated-pydantic-v1-config-class">6.23 FAP-023: Deprecated Pydantic v1 Config Class</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Pydantic schema uses deprecated inner 'class Config:' instead of Pydantic v2 'model_config = ConfigDict(...)'.</li>
+<li><strong>Remediation:</strong> Migrate inner 'class Config:' to 'model_config = ConfigDict(...)'.</li>
+</ul>
+<h3 id="624-fap-024-redundant-duplicate-dependency-declaration">6.24 FAP-024: Redundant Duplicate Dependency Declaration</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Route handler declares multiple parameters resolving the exact same dependency callable.</li>
+<li><strong>Remediation:</strong> Consolidate duplicate dependencies into a single parameter.</li>
+</ul>
+<h3 id="625-fap-025-returned-httpexception-instance-instead-of-raise">6.25 FAP-025: Returned HTTPException Instance Instead of Raise</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Returning an HTTPException instance in a route handler returns a 200 OK HTTP response with the serialized exception object instead of raising an error.</li>
+<li><strong>Remediation:</strong> Use 'raise HTTPException(...)' instead of 'return HTTPException(...)'.</li>
+</ul>
+<h3 id="626-fap-026-deprecated-pydantic-v1-validator-or-root_validator">6.26 FAP-026: Deprecated Pydantic v1 @validator or @root_validator</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Using deprecated Pydantic v1 '@validator' or '@root_validator' decorators instead of Pydantic v2 '@field_validator' or '@model_validator'.</li>
+<li><strong>Remediation:</strong> Migrate to '@field_validator' or '@model_validator' from pydantic.</li>
+</ul>
+<h3 id="627-fap-027-dependency-parameter-missing-type-annotation">6.27 FAP-027: Dependency Parameter Missing Type Annotation</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Route parameter initialized with 'Depends(...)', 'Query(...)', or 'Path(...)' does not specify a type annotation, disabling FastAPI schema generation and static type checking.</li>
+<li><strong>Remediation:</strong> Add explicit type annotation: 'param: Type = Depends(...)' or 'param: Annotated[Type, Depends(...)]'.</li>
+</ul>
+<h3 id="628-fap-028-raw-jsonloads-called-on-request-body">6.28 FAP-028: Raw json.loads Called on Request Body</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Calling 'json.loads(await request.body())' or 'json.loads(request.body)' is an anti-pattern; FastAPI and Starlette provide an optimized built-in 'await request.json()' method.</li>
+<li><strong>Remediation:</strong> Replace 'json.loads(await request.body())' with 'await request.json()'.</li>
+</ul>
+<h3 id="629-fap-029-streamingresponse-initialized-without-media_type">6.29 FAP-029: StreamingResponse Initialized Without media_type</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Instantiating StreamingResponse without specifying 'media_type' can cause clients to misinterpret the streamed content format.</li>
+<li><strong>Remediation:</strong> Pass an explicit media_type argument (e.g. StreamingResponse(stream, media_type='application/json')).</li>
+</ul>
+<h3 id="630-fap-030-missing-route-summary-or-docstring-for-openapi-documentation">6.30 FAP-030: Missing Route Summary or Docstring for OpenAPI Documentation</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Public route endpoint does not provide a docstring, 'summary', or 'description', resulting in sparse and incomplete OpenAPI documentation.</li>
+<li><strong>Remediation:</strong> Add a function docstring or pass 'summary=...' in the route decorator.</li>
+</ul>
+<h3 id="631-fap-031-prefer-typingannotated-over-parameter-default-assignment">6.31 FAP-031: Prefer typing.Annotated Over Parameter Default Assignment</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> FastAPI strongly recommends using standard typing.Annotated[Type, Depends(...)] instead of parameter default values for cleaner typing and reusable dependencies.</li>
+<li><strong>Remediation:</strong> Refactor parameter to 'param: Annotated[Type, Depends(...)]' or 'param: Annotated[Type, Query(...)]'.</li>
+</ul>
+<h3 id="632-fap-032-redundant-jsonable_encoder-with-response_model">6.32 FAP-032: Redundant jsonable_encoder with response_model</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Calling jsonable_encoder() inside a route handler that already declares response_model causes double serialization, reducing throughput.</li>
+<li><strong>Remediation:</strong> Return raw objects or dicts directly and let FastAPI's response_model handle serialization.</li>
+</ul>
+<h3 id="633-fap-033-missing-from_attributestrue-in-orm-response-schema">6.33 FAP-033: Missing from_attributes=True in ORM Response Schema</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Pydantic response model for ORM/database objects is missing 'model_config = ConfigDict(from_attributes=True)', causing validation failures when serializing ORM instances.</li>
+<li><strong>Remediation:</strong> Add 'model_config = ConfigDict(from_attributes=True)' to the Pydantic schema.</li>
+</ul>
+<h3 id="634-fap-034-missing-await-on-requestjson-or-requestbody">6.34 FAP-034: Missing Await on request.json() or request.body()</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Calling request.json() or request.body() without 'await' inside an async def route handler assigns an un-awaited coroutine instead of parsed data.</li>
+<li><strong>Remediation:</strong> Add 'await' before 'request.json()' or 'request.body()'.</li>
+</ul>
+<h3 id="635-fap-035-raw-exception-raised-instead-of-httpexception">6.35 FAP-035: Raw Exception Raised Instead of HTTPException</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Raising generic Exception, ValueError, or RuntimeError in route handlers triggers uncaught 500 Internal Server Errors instead of structured REST HTTP error responses.</li>
+<li><strong>Remediation:</strong> Raise 'HTTPException(status_code=..., detail=...)' for predictable API client error responses.</li>
+</ul>
+<h3 id="636-fap-036-mutating-appstate-inside-route-handler">6.36 FAP-036: Mutating app.state Inside Route Handler</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Mutating request.app.state or app.state inside per-request route handlers introduces concurrency race conditions. Application state should be initialized in lifespan context managers.</li>
+<li><strong>Remediation:</strong> Initialize shared state in the lifespan context manager before startup rather than modifying app.state in route handlers.</li>
+</ul>
+<h3 id="637-fap-037-securityscopes-declared-with-depends-instead-of-security">6.37 FAP-037: SecurityScopes Declared with Depends Instead of Security</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> SecurityScopes parameter declared in a dependency using Depends(...) will not receive requested scopes. Use Security(dependency, scopes=[...]) instead.</li>
+<li><strong>Remediation:</strong> Use 'Security(dependency, scopes=[...])' when protecting endpoints with OAuth2 SecurityScopes.</li>
+</ul>
+<h3 id="638-fap-038-hardcoded-http-status-code-integer">6.38 FAP-038: Hardcoded HTTP Status Code Integer</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> Using integer literals for status_code (e.g. status_code=201) reduces readability compared to named constants like status.HTTP_201_CREATED.</li>
+<li><strong>Remediation:</strong> Import status from fastapi (or HTTPStatus from http) and use named constants (e.g. status.HTTP_201_CREATED).</li>
+</ul>
+<hr />
+<h2 id="7-sqlalchemy-sql-database-rules-sql-xxx">7. SQLAlchemy &amp; SQL Database Rules (<code>SQL-xxx</code>)</h2>
+<h3 id="71-sql-001-potential-n1-database-query-in-loop">7.1 SQL-001: Potential N+1 Database Query in Loop</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Executing database queries (session.execute, session.query, session.get, or select()) inside for/while loops causes N+1 performance degradation.</li>
+<li><strong>Remediation:</strong> Batch query objects using 'select(...).where(Model.id.in_(ids))' or eager relationship options (e.g. joinedload/selectinload).</li>
+</ul>
+<h3 id="72-sql-002-session-instantiated-without-context-manager-or-cleanup">7.2 SQL-002: Session Instantiated Without Context Manager or Cleanup</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Instantiating a Session without a with-statement context manager or try...finally session.close() causes database connection pool exhaustion.</li>
+<li><strong>Remediation:</strong> Use 'with SessionLocal() as session:' or wrap session lifecycle in a context manager / dependency yield.</li>
+</ul>
+<h3 id="73-sql-003-synchronous-db-operation-in-async-event-loop">7.3 SQL-003: Synchronous DB Operation in Async Event Loop</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Invoking synchronous database engine calls or synchronous session operations inside an async def function blocks the asyncio event loop.</li>
+<li><strong>Remediation:</strong> Use SQLAlchemy async extension ('create_async_engine' and 'AsyncSession') with async drivers (e.g. asyncpg, aiosqlite).</li>
+</ul>
+<h3 id="74-sql-004-raw-sql-string-interpolation-sql-injection-risk">7.4 SQL-004: Raw SQL String Interpolation (SQL Injection Risk)</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Constructing SQL queries using f-strings or string formatting with text() or cursor.execute() introduces severe SQL injection vulnerabilities.</li>
+<li><strong>Remediation:</strong> Use bound query parameters with text('SELECT ... WHERE id = :id'), {'id': user_val}.</li>
+</ul>
+<h3 id="75-sql-005-legacy-sqlalchemy-1x-sessionquery-syntax">7.5 SQL-005: Legacy SQLAlchemy 1.x session.query() Syntax</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Using legacy session.query(...) instead of modern SQLAlchemy 2.0 select() and session.scalars().</li>
+<li><strong>Remediation:</strong> Migrate from 'session.query(User).filter(...)' to 'session.scalars(select(User).where(...))'.</li>
+</ul>
+<h3 id="76-sql-006-missing-relationship-eager-loading-strategy-in-async-session">7.6 SQL-006: Missing Relationship Eager Loading Strategy in Async Session</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Accessing lazy-loaded ORM relationships without explicit joinedload/selectinload in async sessions triggers MissingGreenlet errors.</li>
+<li><strong>Remediation:</strong> Specify 'options(selectinload(Model.relation))' or set lazy='selectin' on relationship definition.</li>
+</ul>
+<h3 id="77-sql-007-uncommitted-transaction-in-mutation-function">7.7 SQL-007: Uncommitted Transaction in Mutation Function</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Session performs mutations (session.add / session.delete) but never executes session.commit() or enters a transaction with session.begin().</li>
+<li><strong>Remediation:</strong> Ensure mutations are committed with 'await session.commit()' or executed inside 'with session.begin():'.</li>
+</ul>
+<h3 id="78-sql-008-create_engine-missing-pool_pre_ping-connection-health-check">7.8 SQL-008: create_engine Missing pool_pre_ping Connection Health Check</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Creating a database engine without 'pool_pre_ping=True' can lead to runtime disconnect errors when idle connections are closed by firewalls/servers.</li>
+<li><strong>Remediation:</strong> Add 'pool_pre_ping=True' to create_engine() / create_async_engine().</li>
+</ul>
+<h3 id="79-sql-009-expire_on_committrue-in-asyncsession">7.9 SQL-009: expire_on_commit=True in AsyncSession</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Configuring AsyncSession or async_sessionmaker with expire_on_commit=True (the default) causes MissingGreenlet exceptions when accessing committed model attributes.</li>
+<li><strong>Remediation:</strong> Set 'expire_on_commit=False' when instantiating AsyncSession or async_sessionmaker.</li>
+</ul>
+<h3 id="710-sql-010-hardcoded-database-credentials-in-connection-url">7.10 SQL-010: Hardcoded Database Credentials in Connection URL</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Database URL contains plain-text passwords or secret credentials in source code instead of loading from environment variables.</li>
+<li><strong>Remediation:</strong> Read database connection strings from environment variables (e.g. os.getenv('DATABASE_URL')).</li>
+</ul>
+<h3 id="711-sql-011-unbounded-select-query-without-limit-or-pagination">7.11 SQL-011: Unbounded SELECT Query Without LIMIT or Pagination</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Calling .all() on queries against database tables without limit() or pagination clauses risks memory exhaustion on large datasets.</li>
+<li><strong>Remediation:</strong> Add '.limit(limit)' and pagination parameters to query statements.</li>
+</ul>
+<h3 id="712-sql-012-relationship-cascade-delete-without-foreignkey-ondelete-cascade">7.12 SQL-012: Relationship Cascade Delete Without ForeignKey ondelete CASCADE</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> Configuring relationship cascade='all, delete-orphan' without database-level ondelete='CASCADE' on ForeignKey forces slow Python-side row-by-row deletion.</li>
+<li><strong>Remediation:</strong> Add ondelete='CASCADE' to ForeignKey and passive_deletes=True to relationship for database-level cascading.</li>
+</ul>
+<h3 id="713-sql-013-session-flush-or-commit-called-inside-loop">7.13 SQL-013: Session Flush or Commit Called Inside Loop</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Calling session.flush() or session.commit() inside loops creates high database roundtrip overhead. Use bulk insert or single commit after loop.</li>
+<li><strong>Remediation:</strong> Move session.commit() outside the loop or use session.execute(insert(Model), batch_data).</li>
+</ul>
+<h3 id="714-sql-014-deprecated-declarative_base-function">7.14 SQL-014: Deprecated declarative_base() Function</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Using legacy declarative_base() instead of modern SQLAlchemy 2.0 class Base(DeclarativeBase): pass.</li>
+<li><strong>Remediation:</strong> Define 'class Base(DeclarativeBase): pass' from sqlalchemy.orm.</li>
+</ul>
+<h3 id="715-sql-015-sqlite-engine-missing-check_same_threadfalse-in-multi-threaded-application">7.15 SQL-015: SQLite Engine Missing check_same_thread=False in Multi-Threaded Application</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> SQLite engine initialized without connect_args={'check_same_thread': False} can cause ProgrammingError in multi-threaded web applications.</li>
+<li><strong>Remediation:</strong> Pass connect_args={'check_same_thread': False} to create_engine() when using SQLite in web applications.</li>
+</ul>
+<h3 id="716-sql-016-missing-database-migration-configuration-alembic">7.16 SQL-016: Missing Database Migration Configuration (Alembic)</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> SQLAlchemy database models are defined in the project, but no Alembic migrations directory or alembic.ini configuration exists.</li>
+<li><strong>Remediation:</strong> Initialize database migrations using 'alembic init alembic'.</li>
+</ul>
+<h3 id="717-sql-017-mapped-attribute-missing-mapped_column-in-20-declarative-model">7.17 SQL-017: Mapped[...] Attribute Missing mapped_column() in 2.0 Declarative Model</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Using legacy Column() or raw field assignment with Mapped[...] type annotations instead of SQLAlchemy 2.0's native mapped_column().</li>
+<li><strong>Remediation:</strong> Replace 'col: Mapped[int] = Column(Integer)' with 'col: Mapped[int] = mapped_column()'.</li>
+</ul>
+<h3 id="718-sql-018-excessive-connection-pool-size-in-single-application-instance">7.18 SQL-018: Excessive Connection Pool Size in Single Application Instance</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> create_engine configured with pool_size or max_overflow &gt; 50 in a single instance, risking database connection exhaustion.</li>
+<li><strong>Remediation:</strong> Keep pool_size between 5 and 20 per instance and use external connection poolers (e.g. pgBouncer) for scaling.</li>
+</ul>
+<h3 id="719-sql-019-nullpool-configured-in-persistent-web-application">7.19 SQL-019: NullPool Configured in Persistent Web Application</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Using NullPool in persistent web servers disables connection pooling and creates high latency TCP connection overhead on every request.</li>
+<li><strong>Remediation:</strong> Use default QueuePool or AsyncAdaptedQueuePool for persistent web applications; reserve NullPool for AWS Lambda/serverless.</li>
+</ul>
+<h3 id="720-sql-020-declarative-orm-model-missing-primary-key-definition">7.20 SQL-020: Declarative ORM Model Missing Primary Key Definition</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Declarative ORM model defined without at least one primary key column (primary_key=True), which will cause runtime ORM mapping failures.</li>
+<li><strong>Remediation:</strong> Define at least one column with 'primary_key=True' or 'mapped_column(primary_key=True)'.</li>
+</ul>
+<h3 id="721-sql-021-missing-sessionrollback-in-database-exception-handler">7.21 SQL-021: Missing session.rollback() in Database Exception Handler</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Catching exceptions around database queries/mutations without invoking session.rollback() leaves the session in an unusable invalid state.</li>
+<li><strong>Remediation:</strong> Add 'session.rollback()' in exception handlers or use 'with session.begin():' for automatic rollback on error.</li>
+</ul>
+<h3 id="722-sql-022-large-binary-or-heavy-text-column-without-deferredload_only-strategy">7.22 SQL-022: Large Binary or Heavy Text Column Without deferred/load_only Strategy</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> Model includes LargeBinary or Large Text column without deferred() loading, causing heavy memory consumption during full-table selects.</li>
+<li><strong>Remediation:</strong> Wrap large blob/text columns with 'deferred(Column(LargeBinary))' or use select(Model).options(load_only(...)).</li>
+</ul>
+<h3 id="723-sql-023-foreignkey-column-defined-without-indextrue">7.23 SQL-023: ForeignKey Column Defined Without index=True</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> ForeignKey column created without index=True, causing expensive sequential scans during joins, foreign key lookups, and cascade operations.</li>
+<li><strong>Remediation:</strong> Add 'index=True' to ForeignKey column definitions (e.g. Column(Integer, ForeignKey('users.id'), index=True)).</li>
+</ul>
+<h3 id="724-sql-024-insecure-unencrypted-remote-database-connection-url">7.24 SQL-024: Insecure Unencrypted Remote Database Connection URL</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Remote database connection URL targeting external hosts does not specify sslmode=require or ssl=true.</li>
+<li><strong>Remediation:</strong> Append '?sslmode=require' (PostgreSQL) or '?ssl=true' to production database connection strings.</li>
+</ul>
+<h3 id="725-sql-025-deprecated-engineexecute-or-enginescalar-direct-call">7.25 SQL-025: Deprecated engine.execute() or engine.scalar() Direct Call</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Calling engine.execute() or engine.scalar() directly is removed in SQLAlchemy 2.0.</li>
+<li><strong>Remediation:</strong> Use explicit connection contexts: 'with engine.connect() as conn: result = conn.execute(stmt)'.</li>
+</ul>
+<h3 id="726-sql-026-asyncsession-instantiated-without-async-context-manager-or-await-close">7.26 SQL-026: AsyncSession Instantiated Without Async Context Manager or Await close()</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> AsyncSession created without 'async with' context manager or explicit 'await session.close()', causing connection leaks in async tasks.</li>
+<li><strong>Remediation:</strong> Use 'async with AsyncSessionLocal() as session:' or ensure 'await session.close()' in a finally block.</li>
+</ul>
+<h3 id="727-sql-027-unsafe-concurrent-numeric-balance-or-counter-update-without-with_for_update">7.27 SQL-027: Unsafe Concurrent Numeric Balance or Counter Update Without with_for_update()</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Querying a record and updating numeric counters or balance fields without row-level locking (with_for_update()) causes lost update race conditions.</li>
+<li><strong>Remediation:</strong> Lock rows with 'select(...).with_for_update()' or use atomic SQL increments 'update(Account).values(balance=Account.balance - amt)'.</li>
+</ul>
+<h3 id="728-sql-028-thread-local-scoped_session-used-in-async-context">7.28 SQL-028: Thread-Local scoped_session Used in Async Context</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Using thread-local scoped_session in async applications causes session sharing across coroutines and race conditions.</li>
+<li><strong>Remediation:</strong> Use async_scoped_session(..., scopefunc=asyncio.current_task) or dependency injection per request.</li>
+</ul>
+<h3 id="729-sql-029-declarative-orm-model-missing-tablename-definition">7.29 SQL-029: Declarative ORM Model Missing <strong>tablename</strong> Definition</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Declarative model inheriting from Base/DeclarativeBase does not define <strong>tablename</strong> or <strong>table</strong>, causing mapping errors.</li>
+<li><strong>Remediation:</strong> Define '<strong>tablename</strong> = "table_name"' on concrete ORM classes (or set '<strong>abstract</strong> = True' for mixins).</li>
+</ul>
+<h3 id="730-sql-030-direct-dbapi-raw_connection-used-without-cleanup">7.30 SQL-030: Direct DBAPI raw_connection() Used Without Cleanup</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Calling engine.raw_connection() bypasses connection pool management and leaks connections if not closed explicitly.</li>
+<li><strong>Remediation:</strong> Always close raw DBAPI connections in a try...finally block: 'raw_conn = engine.raw_connection(); try: ... finally: raw_conn.close()'.</li>
+</ul>
+<hr />
+<h2 id="8-docker-container-rules-doc-xxx">8. Docker &amp; Container Rules (<code>DOC-xxx</code>)</h2>
+<h3 id="81-doc-001-inefficient-docker-layer-caching">8.1 DOC-001: Inefficient Docker Layer Caching</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Source code is copied before package dependencies are installed (<code>COPY . .</code> before <code>RUN pip install ...</code> or <code>RUN uv sync</code>), invalidating the build cache on every code change.</li>
+<li><strong>Remediation:</strong> Copy dependency manifests (e.g. <code>pyproject.toml</code>, <code>requirements.txt</code>, <code>uv.lock</code>) and install packages before copying the full project directory (<code>COPY . .</code>).</li>
+</ul>
+<h3 id="82-doc-002-root-user-container-execution">8.2 DOC-002: Root User Container Execution</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> The Dockerfile configures an execution entrypoint (<code>CMD</code>/<code>ENTRYPOINT</code>) without specifying a non-root <code>USER</code>.</li>
+<li><strong>Remediation:</strong> Create and switch to a non-privileged user (e.g. <code>RUN useradd -m -u 1000 appuser &amp;&amp; USER appuser</code>) before the container entrypoint.</li>
+</ul>
+<h3 id="83-doc-003-unpinned-base-image-tag">8.3 DOC-003: Unpinned Base Image Tag</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> The base image uses <code>:latest</code> or an unpinned tag, which leads to non-reproducible and unpredictable builds.</li>
+<li><strong>Remediation:</strong> Pin the base image to a specific version or hash (e.g. <code>python:3.12-slim-bookworm</code>).</li>
+</ul>
+<h3 id="84-doc-004-missing-dockerignore-file">8.4 DOC-004: Missing .dockerignore File</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> A Dockerfile exists in the project but no <code>.dockerignore</code> file is present, risking baking local virtualenvs, credentials, and temp files into the image.</li>
+<li><strong>Remediation:</strong> Create a <code>.dockerignore</code> file in the repository root excluding <code>.git</code>, <code>.venv</code>, <code>__pycache__</code>, and sensitive files.</li>
+</ul>
+<h3 id="85-doc-005-missing-no-cache-dir-in-pip-install">8.5 DOC-005: Missing --no-cache-dir in pip install</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> <code>pip install</code> inside Dockerfile runs without <code>--no-cache-dir</code>, which unnecessarily bloats the container layer with cached wheels.</li>
+<li><strong>Remediation:</strong> Add <code>--no-cache-dir</code> to pip install commands (e.g. <code>pip install --no-cache-dir -r requirements.txt</code>).</li>
+</ul>
+<h3 id="86-doc-006-sensitive-file-copied-into-docker-image">8.6 DOC-006: Sensitive File Copied into Docker Image</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> The Dockerfile explicitly copies sensitive files (<code>.env</code>, private keys, or credentials) into the container image layer.</li>
+<li><strong>Remediation:</strong> Remove sensitive files from <code>COPY</code> instructions and use Docker BuildKit secrets (<code>--mount=type=secret</code>) or runtime environment variables instead.</li>
+</ul>
+<h3 id="87-doc-007-missing-healthcheck-instruction">8.7 DOC-007: Missing HEALTHCHECK Instruction</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> The Dockerfile configures a network service or entrypoint without defining a container <code>HEALTHCHECK</code>.</li>
+<li><strong>Remediation:</strong> Add a <code>HEALTHCHECK</code> instruction (e.g. <code>HEALTHCHECK --interval=30s CMD curl -f http://localhost:8000/health || exit 1</code>).</li>
+</ul>
+<h3 id="88-doc-008-missing-pythonunbuffered-environment-variable">8.8 DOC-008: Missing PYTHONUNBUFFERED Environment Variable</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> Python buffers stdout/stderr by default, which delays or prevents real-time container log streaming.</li>
+<li><strong>Remediation:</strong> Add <code>ENV PYTHONUNBUFFERED=1</code> to your Dockerfile to ensure unbuffered real-time log output.</li>
+</ul>
+<h3 id="89-doc-009-deprecated-maintainer-instruction-used">8.9 DOC-009: Deprecated MAINTAINER Instruction Used</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> The <code>MAINTAINER</code> instruction is deprecated in Dockerfile syntax in favor of metadata labels.</li>
+<li><strong>Remediation:</strong> Replace <code>MAINTAINER &lt;author&gt;</code> with <code>LABEL maintainer="&lt;author&gt;"</code>.</li>
+</ul>
+<h3 id="810-doc-010-unnecessary-sudo-usage-in-run-instruction">8.10 DOC-010: Unnecessary sudo Usage in RUN Instruction</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Commands in Docker <code>RUN</code> instructions execute with root privileges by default, making <code>sudo</code> redundant and error-prone.</li>
+<li><strong>Remediation:</strong> Remove <code>sudo</code> from <code>RUN</code> instructions during image build.</li>
+</ul>
+<h3 id="811-doc-011-apt-get-install-without-cleanup">8.11 DOC-011: apt-get install Without Cleanup</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> <code>apt-get install</code> inside Dockerfile leaves package lists and recommended dependencies in image layers, bloating image size.</li>
+<li><strong>Remediation:</strong> Use <code>apt-get install -y --no-install-recommends &lt;pkgs&gt; &amp;&amp; rm -rf /var/lib/apt/lists/*</code> in the same <code>RUN</code> layer.</li>
+</ul>
+<h3 id="812-doc-012-add-instruction-used-for-local-file-copy">8.12 DOC-012: ADD Instruction Used for Local File Copy</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> The <code>ADD</code> instruction was used to copy local files where <code>COPY</code> is preferred for predictability and security.</li>
+<li><strong>Remediation:</strong> Replace <code>ADD</code> with <code>COPY</code> unless automatic tar archive extraction or remote URL fetching is explicitly intended.</li>
+</ul>
+<h3 id="813-doc-013-missing-pythondontwritebytecode">8.13 DOC-013: Missing PYTHONDONTWRITEBYTECODE</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> Python creates <code>.pyc</code> bytecode cache files inside container layers that are usually unnecessary in ephemeral containers.</li>
+<li><strong>Remediation:</strong> Add <code>ENV PYTHONDONTWRITEBYTECODE=1</code> to prevent writing <code>.pyc</code> files to container filesystem layers.</li>
+</ul>
+<h3 id="814-doc-014-web-server-entrypoint-missing-expose">8.14 DOC-014: Web Server Entrypoint Missing EXPOSE</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> The container starts a web server but does not declare the listening network port via <code>EXPOSE</code>.</li>
+<li><strong>Remediation:</strong> Add <code>EXPOSE &lt;port&gt;</code> (e.g. <code>EXPOSE 8000</code>) to document the port on which the container listens.</li>
+</ul>
+<hr />
+<h2 id="9-engine-execution-rules-eng-xxx">9. Engine &amp; Execution Rules (<code>ENG-xxx</code>)</h2>
+<h3 id="91-eng-001-analyzer-execution-failed">9.1 ENG-001: Analyzer Execution Failed</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> An analyzer raised an unexpected exception during execution.</li>
+<li><strong>Remediation:</strong> Check the error message or report a bug to the analyzer maintainer.</li>
+</ul>
+<hr />
+<h2 id="10-discovery-parser-rules-disc-xxx">10. Discovery &amp; Parser Rules (<code>DISC-xxx</code>)</h2>
+<h3 id="101-disc-001-unreadable-source-file">10.1 DISC-001: Unreadable Source File</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> A source file could not be read during project discovery due to permissions or encoding errors.</li>
+<li><strong>Remediation:</strong> Check file read permissions and ensure file is encoded in valid UTF-8.</li>
+</ul>
+<h3 id="102-disc-002-python-syntax-error-in-source-file">10.2 DISC-002: Python Syntax Error in Source File</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> A Python source file contains invalid syntax and could not be parsed into an AST.</li>
+<li><strong>Remediation:</strong> Fix the syntax error in the source file.</li>
+</ul>
+<hr />
+<h2 id="11-cicd-workflow-rules-ci-xxx">11. CI/CD Workflow Rules (<code>CI-xxx</code>)</h2>
+<h3 id="111-ci-001-ci-python-matrix-version-mismatch">11.1 CI-001: CI Python Matrix Version Mismatch</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> CI workflow tests Python versions incompatible with declared project <code>requires-python</code> or classifiers in <code>pyproject.toml</code>.</li>
+<li><strong>Remediation:</strong> Align CI test matrix versions with supported project Python ranges.</li>
+</ul>
+<h3 id="112-ci-002-unfrozen-dependency-installation-in-ci">11.2 CI-002: Unfrozen Dependency Installation in CI</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> CI workflow installs dependencies without lockfiles or hash verification.</li>
+<li><strong>Remediation:</strong> Use lockfiles (e.g. <code>uv sync --frozen</code>, <code>poetry install --sync</code>, or <code>pip-sync</code>) in CI workflows.</li>
+</ul>
+<h3 id="113-ci-003-deprecated-or-outdated-ci-action-version">11.3 CI-003: Deprecated or Outdated CI Action Version</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> Workflow references a deprecated or end-of-life GitHub Actions version (e.g. <code>actions/checkout@v2</code>, <code>actions/setup-python@v3</code>).</li>
+<li><strong>Remediation:</strong> Upgrade GitHub Actions to current stable major releases (e.g. <code>actions/checkout@v4</code>, <code>actions/setup-python@v5</code>).</li>
+</ul>
+<h3 id="114-ci-004-missing-test-or-quality-gate-in-ci-workflow">11.4 CI-004: Missing Test or Quality Gate in CI Workflow</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> Pull request / push workflow contains no test suite, linter, or health checks.</li>
+<li><strong>Remediation:</strong> Add automated test or lint steps (e.g. <code>pytest</code>, <code>ruff</code>, <code>stackvet scan --ci</code>).</li>
+</ul>
+<h3 id="115-ci-005-insecure-secret-or-token-in-ci-workflow">11.5 CI-005: Insecure Secret or Token in CI Workflow</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Potential plaintext secret or token literal detected in workflow file.</li>
+<li><strong>Remediation:</strong> Store credentials in repository secrets (<code>${{ secrets.MY_SECRET }}</code>).</li>
+</ul>
+<h3 id="116-ci-006-missing-concurrency-cancellation-in-pr-workflow">11.6 CI-006: Missing Concurrency Cancellation in PR Workflow</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>INFO</code></li>
+<li><strong>Description:</strong> Pull request workflow lacks concurrency cancellation, causing redundant runner minutes on repeated pushes.</li>
+<li><strong>Remediation:</strong> Add concurrency group with <code>cancel-in-progress: true</code>.</li>
+</ul>
+<hr />
+<h2 id="12-django-framework-rules-djg-xxx">12. Django Framework Rules (<code>DJG-xxx</code>)</h2>
+<h3 id="121-djg-001-insecure-hardcoded-debug-true-in-django-settings">12.1 DJG-001: Insecure Hardcoded DEBUG = True in Django Settings</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Django settings hardcodes <code>DEBUG = True</code> without environment variable fallback, risking sensitive traceback exposure.</li>
+<li><strong>Remediation:</strong> Load DEBUG dynamically from an environment variable: <code>DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() == 'true'</code>.</li>
+</ul>
+<h3 id="122-djg-002-hardcoded-secret_key-in-django-settings">12.2 DJG-002: Hardcoded SECRET_KEY in Django Settings</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Hardcoded SECRET_KEY literal detected in settings. Secrets must be loaded from environment variables or vault.</li>
+<li><strong>Remediation:</strong> Load SECRET_KEY from environment: <code>SECRET_KEY = os.environ['DJANGO_SECRET_KEY']</code>.</li>
+</ul>
+<h3 id="123-djg-003-insecure-wildcard-allowed_hosts-in-django-settings">12.3 DJG-003: Insecure Wildcard ALLOWED_HOSTS in Django Settings</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> <code>ALLOWED_HOSTS</code> contains wildcard <code>'*'</code> allowing Host header poisoning in production.</li>
+<li><strong>Remediation:</strong> Explicitly define allowed domain names or load from environment.</li>
+</ul>
+<h3 id="124-djg-004-potential-n1-database-query-in-loop">12.4 DJG-004: Potential N+1 Database Query in Loop</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> QuerySet execution inside loop causes N+1 query overhead.</li>
+<li><strong>Remediation:</strong> Prefetch related relations before looping: <code>queryset.prefetch_related('...')</code> or <code>select_related('...')</code>.</li>
+</ul>
+<h3 id="125-djg-005-django-foreignkey-missing-explicit-on_delete">12.5 DJG-005: Django ForeignKey Missing Explicit on_delete</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> <code>models.ForeignKey</code> declared without required <code>on_delete</code> argument.</li>
+<li><strong>Remediation:</strong> Specify explicit on_delete behavior: <code>models.CASCADE</code>, <code>models.PROTECT</code>, or <code>models.SET_NULL</code>.</li>
+</ul>
+<h3 id="126-djg-006-missing-csrf-protection-middleware">12.6 DJG-006: Missing CSRF Protection Middleware</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> <code>MIDDLEWARE</code> list is missing <code>'django.middleware.csrf.CsrfViewMiddleware'</code>.</li>
+<li><strong>Remediation:</strong> Add <code>'django.middleware.csrf.CsrfViewMiddleware'</code> to <code>MIDDLEWARE</code>.</li>
+</ul>
+<hr />
+<h2 id="13-celery-framework-rules-cel-xxx">13. Celery Framework Rules (<code>CEL-xxx</code>)</h2>
+<h3 id="131-cel-001-insecure-celery-pickle-serializer-enabled">13.1 CEL-001: Insecure Celery Pickle Serializer Enabled</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>ERROR</code></li>
+<li><strong>Description:</strong> Celery serializer setting uses <code>'pickle'</code>, allowing arbitrary code execution if brokers are compromised.</li>
+<li><strong>Remediation:</strong> Use secure serialization formats like <code>'json'</code> or <code>'msgpack'</code>.</li>
+</ul>
+<h3 id="132-cel-002-missing-task-timeout-limits-in-celery-task">13.2 CEL-002: Missing Task Timeout Limits in Celery Task</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Celery task has no <code>time_limit</code> or <code>soft_time_limit</code> configured.</li>
+<li><strong>Remediation:</strong> Specify <code>time_limit</code> and <code>soft_time_limit</code> on task decorator: <code>@shared_task(time_limit=300, soft_time_limit=240)</code>.</li>
+</ul>
+<h3 id="133-cel-003-unbounded-retry-policy-on-celery-task">13.3 CEL-003: Unbounded Retry Policy on Celery Task</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Celery task permits unlimited retries, risking broker congestion and infinite retry loops.</li>
+<li><strong>Remediation:</strong> Set explicit <code>max_retries</code> (e.g. <code>max_retries=3, default_retry_delay=60</code>).</li>
+</ul>
+<h3 id="134-cel-004-blocking-timesleep-in-asynchronous-celery-task">13.4 CEL-004: Blocking time.sleep() in Asynchronous Celery Task</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> Async Celery task invokes <code>time.sleep()</code>, blocking the async event loop.</li>
+<li><strong>Remediation:</strong> Use <code>await asyncio.sleep()</code> instead of <code>time.sleep()</code>.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../configuration/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Configuration Guide">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Configuration Guide
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../remediation/" class="md-footer__link md-footer__link--next" aria-label="Next: Safe Automated Fixes">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Safe Automated Fixes
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.top", "navigation.footer", "toc.follow", "content.code.copy", "content.code.annotate", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
