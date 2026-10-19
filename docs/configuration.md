@@ -1,82 +1,103 @@
-# Configuration Guide
+# Project Configuration Guide
 
-`stackvet` is configured directly in your project's `pyproject.toml` file under the `[tool.stackvet]` table.
+StackVet automatically discovers and loads configuration from any of the following files in your project root:
+1. `stackvet.toml`
+2. `.stackvet.toml`
+3. `pyproject.toml` (under the `[tool.stackvet]` table)
+
+You can also explicitly specify a configuration file using `--config <PATH>`:
+```bash
+stackvet --config ./configs/custom-stackvet.toml check
+```
 
 ---
 
-## 1. Example `pyproject.toml`
+## 1. Configuration Schema
+
+Below is an annotated example of a complete `stackvet.toml` or `.stackvet.toml` file:
+
+```toml
+[project]
+name = "my-application"
+min_score = 80
+strict = false
+
+[thresholds]
+# Minimum severity that triggers CI failure: "hint", "info", "warning", "error", "critical"
+fail_on = "error"
+# Minimum health score required (0-100)
+min_score = 80
+
+[ci]
+baseline = ".stackvet-baseline.json"
+fail_on = "error"
+strict = false
+
+[rules]
+# Simple override syntax: set custom severity or disable rules
+DEP-001 = "warning"
+ARC-001 = "error"
+CEL-001 = "disabled"   # or "off"
+
+# Detailed table syntax with explicit enable/disable flag
+[rules.FAP-001]
+severity = "error"
+enabled = true
+```
+
+---
+
+## 2. Configuring via `pyproject.toml`
+
+For Python projects, you can embed your StackVet configuration directly in `pyproject.toml`:
 
 ```toml
 [tool.stackvet]
+min_severity = "warning"
+fail_on = "error"
+min_score = 80
 
-# Override individual rule severities (error, warning, info, off)
 [tool.stackvet.rules]
-DEP-001 = "error"
-DEP-002 = "error"
-DEP-003 = "warning"
-DEP-004 = "info"
-IMP-001 = "error"
-
-# Ignore specific rules entirely
-[tool.stackvet.ignore]
-rules = ["DEP-005"]
-
-# Customize path exclusions
-[tool.stackvet.paths]
-exclude = [
-    ".venv",
-    "build",
-    "dist",
-    "node_modules",
-    "legacy_scripts",
-]
-
-# Set expected Python runtime target
-[tool.stackvet.runtime]
-python = "3.12"
+DEP-001 = "warning"
+CEL-001 = "off"
 ```
 
 ---
 
-## 2. Severity Overrides
+## 3. Rule Overrides & Disabling
 
-You can adjust how strictly any rule is treated:
+You can customize how individual diagnostic rules are evaluated:
 
 | Value | Behavior |
 |---|---|
-| `"error"` | Causes scan to fail and exit with non-zero code |
-| `"warning"` | Displays warning; fails in `--strict` or `--ci` mode |
-| `"info"` | Informational finding; does not affect health score as severely |
-| `"off"` | Disables the check completely |
+| `"critical"` | Treats finding as Critical (-20 health score points, blocks CI if `fail_on` is critical/error/warning/info) |
+| `"error"` | Treats finding as Error (-8 health score points, blocks CI if `fail_on` is error/warning/info) |
+| `"warning"` / `"warn"` | Treats finding as Warning (-2 health score points, blocks CI if `--strict` or `fail_on = "warning"`) |
+| `"info"` | Informational observation (0 health score points deduction) |
+| `"hint"` | Advisory observation (0 health score points deduction) |
+| `"disabled"` / `"off"` | Disables the rule completely; omitted from scans, reports, and health score deductions |
+
+### Validation & Zero False Positives
+StackVet rigorously validates all rule IDs against the 132-rule catalog:
+- If an unknown rule ID (e.g. `NONEXISTENT-999`) is declared in `[rules]`, StackVet exits with **Exit Code 2 (Configuration Error)** and provides a clear error message.
+- If an unsupported severity string (e.g. `"catastrophic"`) is provided, StackVet exits with **Exit Code 2**.
 
 ---
 
-## 3. Ignore Rules and Dependencies
+## 4. Precedence Hierarchy
 
-### 3.1 Ignore Rules Globally
-To suppress specific diagnostic rule IDs that are not applicable to your workflow, list them under `[tool.stackvet.ignore]`:
+StackVet resolves settings deterministically using a strict 3-tier precedence hierarchy:
 
-```toml
-[tool.stackvet.ignore]
-rules = ["DEP-003", "ENV-002"]
+```text
+┌─────────────────────────────────────────────────────────┐
+│ 1. CLI Arguments (--fail-on, --strict, --min-score)     │  (Highest precedence)
+├─────────────────────────────────────────────────────────┤
+│ 2. Project Config (stackvet.toml / pyproject.toml)      │
+├─────────────────────────────────────────────────────────┤
+│ 3. Built-in Defaults (fail_on = Error, min_score = None)│  (Lowest precedence)
+└─────────────────────────────────────────────────────────┘
 ```
 
-### 3.2 Ignore Specific Packages (DEP-003)
-To ignore specific packages from unused dependency checks (`DEP-003`) (e.g. dynamic plugins, CLI drivers, or runtime dependencies), configure `[tool.stackvet.dependencies]`:
-
-```toml
-[tool.stackvet.dependencies]
-ignore = ["amqp", "psycopg2-binary", "gunicorn"]
-```
-
-Package names are automatically normalized, case-insensitive, and support version specifiers (e.g. `amqp>=1.0` or `amqp[extra]`). Ignoring a package only suppresses `DEP-003` for that package while keeping all other rules active.
-
----
-
-## 4. Precedence Order
-
-When resolving configuration, `stackvet` follows this precedence:
-
-1. **CLI Flags** (`--strict`, `--json`, `--sarif`) — highest precedence.
-2. **Project `pyproject.toml`** (`[tool.stackvet]`).
-3. **Default Built-in Rules** — lowest precedence.
+For example:
+- If `fail_on = "warning"` is configured in `stackvet.toml`, running `stackvet check` will fail on warnings.
+- Passing `stackvet check --fail-on critical` overrides the configuration file for that specific invocation.

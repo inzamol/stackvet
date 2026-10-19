@@ -173,9 +173,11 @@ stackvet scan [PATH] [OPTIONS]
 
 | Option | Description |
 |---|---|
-| `--strict` | Promotes warnings to errors (fails CI if any warnings exist) |
+| `--strict` | Promotes warnings to errors (equivalent to `--fail-on warning`) |
+| `--fail-on <SEVERITY>` | Fail CI if findings meet or exceed severity (`hint`, `info`, `warning`, `error`, `critical`) |
 | `--ci` | Runs non-interactively with strict mode enabled |
 | `--baseline <FILE>` | Filter findings against an established baseline file (ignores pre-existing issues) |
+| `--update-baseline` | Update baseline file with current findings and remove resolved issues |
 | `--json` | Emits scan results as structured JSON |
 | `--sarif` | Emits scan results as standard SARIF v2.1.0 format |
 | `--format`, `-f <FORMAT>` | Specify output format (`json`, `sarif`, `html`, `terminal`, `text`) |

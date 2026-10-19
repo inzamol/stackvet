@@ -42,6 +42,8 @@
   - [Celery Rules (`CEL-xxx`)](#celery-rules-cel-xxx)
   - [React & Next.js Rules (`RCT-xxx`, `NXT-xxx`)](#react--nextjs-rules-rct-xxx-nxt-xxx)
 - [Output Formats](#output-formats)
+- [Process Exit Codes](#process-exit-codes)
+- [Project Configuration (`stackvet.toml`)](#project-configuration)
 - [CI/CD Integration](#cicd-integration)
 - [Publishing to npm & PyPI](#publishing-to-npm--pypi)
 - [Architecture & Workspace Structure](#architecture--workspace-structure)
@@ -160,6 +162,9 @@ stackvet doctor --min-score 85
 # Explain which diagnostics contributed to health score deductions
 stackvet doctor --explain
 
+# Compare against an established baseline
+stackvet doctor --baseline .stackvet-baseline.json
+
 # Output in standalone HTML report
 stackvet --format html doctor > health-report.html
 ```
@@ -188,9 +193,18 @@ A fast gate optimized for pre-commit hooks and CI pipelines. Returns exit code `
 stackvet check ./backend
 stackvet scan ./backend
 
-# Strict mode (fails on WARNINGS as well)
+# Custom severity failure threshold (e.g. fail on warning or higher)
+stackvet check --fail-on warning
+
+# Strict mode (equivalent to --fail-on warning)
 stackvet check --strict
 stackvet audit --strict
+
+# Baseline-aware check: tolerates legacy issues, fails only on new regressions
+stackvet check --baseline .stackvet-baseline.json --fail-on error
+
+# Update baseline to record newly accepted findings
+stackvet check --baseline .stackvet-baseline.json --update-baseline
 
 # Output machine-readable JSON in CI
 stackvet --format json check
@@ -263,14 +277,23 @@ stackvet graph --style dot
 Records existing issues in legacy codebases to prevent CI failures on technical debt while blocking new regressions.
 
 ```bash
-# Record current diagnostics into baseline
+# Record current diagnostics into baseline (.stackvet-baseline.json)
 stackvet baseline record ./backend
+
+# Custom output filepath
+stackvet baseline record -o ./ci/baseline.json
 
 # Verify in CI that no new regressions were introduced
 stackvet baseline verify ./backend
 
+# Verify failing only on errors (tolerating new warnings)
+stackvet baseline verify ./backend --fail-on error
+
 # Strict verification (fails on new warnings too)
 stackvet baseline verify ./backend --strict
+
+# Accept resolved debt and new findings by updating the baseline file
+stackvet baseline verify ./backend --update
 ```
 
 ---
@@ -394,6 +417,61 @@ StackVet supports 4 built-in egress formats via `--format`:
 | `json` | Structured JSON with full diagnostics and root causes | `stackvet --format json check` |
 | `sarif` | OASIS SARIF v2.1.0 for GitHub Code Scanning tab | `stackvet --format sarif doctor > results.sarif` |
 | `html` | Standalone responsive dark-mode HTML report | `stackvet --format html doctor > report.html` |
+
+---
+
+## Process Exit Codes
+
+StackVet returns stable, predictable exit codes across all commands, checks, and output formats (`text`, `json`, `sarif`, `html`):
+
+| Exit Code | Classification | Trigger Condition |
+|---|---|---|
+| `0` | **Success** | Clean project, no findings meeting/exceeding `--fail-on` threshold, health score meets `--min-score`, or all findings are tolerated legacy baseline issues. |
+| `1` | **Findings Violation** | Findings detected meeting or exceeding `--fail-on` threshold, health score below `--min-score`, or new regression findings introduced against baseline. |
+| `2` | **Configuration Error** | Configuration syntax error in `stackvet.toml` or `pyproject.toml`, unknown rule ID in `[rules]`, or unsupported severity override level. |
+| `3` | **Execution / I/O Error** | Target path does not exist, specified baseline file not found, or filesystem read/write error. |
+
+---
+
+## Project Configuration
+
+StackVet automatically discovers and loads configuration from `stackvet.toml`, `.stackvet.toml`, or `pyproject.toml` (under `[tool.stackvet]`), or from an explicit file via `--config <PATH>`.
+
+### Precedence Hierarchy
+1. **CLI Arguments** (`--fail-on`, `--strict`, `--min-score`, `--baseline`) — Highest precedence.
+2. **Project Config File** (`stackvet.toml` / `.stackvet.toml` / `pyproject.toml`) — Overrides defaults.
+3. **Built-in Defaults** (`fail_on = "error"`, `min_score = None`) — Fallback.
+
+### Example `stackvet.toml`
+
+```toml
+[project]
+name = "my-application"
+min_score = 80
+strict = false
+
+[thresholds]
+# Minimum severity that triggers CI failure: "hint", "info", "warning", "error", "critical"
+fail_on = "error"
+# Minimum health score required (0-100)
+min_score = 80
+
+[ci]
+baseline = ".stackvet-baseline.json"
+fail_on = "error"
+strict = false
+
+[rules]
+# Override rule severities or disable rules entirely
+DEP-001 = "warning"
+CEL-001 = "disabled"   # or "off"
+ARC-001 = "error"
+
+# Detailed table syntax with explicit enable/disable flag
+[rules.FAP-001]
+severity = "error"
+enabled = true
+```
 
 ---
 
