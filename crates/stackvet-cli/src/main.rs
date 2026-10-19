@@ -226,13 +226,13 @@ fn build_full_context(root: &Path) -> Result<ProjectContext> {
 fn collect_all_diagnostics(
     ctx: &ProjectContext,
     offline: bool,
-) -> Result<Vec<stackvet_core::Diagnostic>> {
+) -> Result<(Vec<stackvet_core::Diagnostic>, usize)> {
     let mut diagnostics = run_all_analyzers(ctx, offline)?;
     let mut fw_diags = run_all_framework_analyzers(ctx)?;
     diagnostics.append(&mut fw_diags);
 
     // Deduplicate diagnostics to prevent duplicate findings from distorting scores or reports
-    let (mut deduped, _) = deduplicate_diagnostics(&diagnostics);
+    let (mut deduped, duplicates_count) = deduplicate_diagnostics(&diagnostics);
 
     // Deterministic sorting across repeated runs:
     // Primary: severity descending (Critical > Error > Warning > Info > Hint)
@@ -253,7 +253,7 @@ fn collect_all_diagnostics(
             .then_with(|| a.message.cmp(&b.message))
     });
 
-    Ok(deduped)
+    Ok((deduped, duplicates_count))
 }
 
 fn print_rules_catalog(filter_term: Option<&str>) {
@@ -593,8 +593,9 @@ async fn main() -> Result<()> {
 
     // Build context
     let ctx = build_full_context(&root)?;
-    let diagnostics = collect_all_diagnostics(&ctx, cli.offline)?;
-    let explanation = calculate_health_score_explained(&diagnostics);
+    let (diagnostics, duplicates_ignored) = collect_all_diagnostics(&ctx, cli.offline)?;
+    let mut explanation = calculate_health_score_explained(&diagnostics);
+    explanation.duplicate_findings_ignored = duplicates_ignored;
     let score = explanation.final_score;
     let grade = score_grade(score);
 

@@ -44,7 +44,8 @@ pub fn calculate_health_score_explained(diagnostics: &[Diagnostic]) -> HealthSco
 
     let base_score: u32 = 100;
     let mut diagnostic_details: Vec<DiagnosticContribution> = Vec::new();
-    let mut rule_map: BTreeMap<String, (Severity, u32, usize, String)> = BTreeMap::new();
+    // Maps rule_id -> (max_severity, max_penalty, count, total_penalty, title)
+    let mut rule_map: BTreeMap<String, (Severity, u32, usize, u32, String)> = BTreeMap::new();
     let mut total_deductions: u32 = 0;
 
     for d in &unique_diagnostics {
@@ -81,21 +82,30 @@ pub fn calculate_health_score_explained(diagnostics: &[Diagnostic]) -> HealthSco
 
             let entry = rule_map
                 .entry(d.rule_id.0.clone())
-                .or_insert((d.severity, penalty, 0, rule_title));
+                .or_insert((d.severity, penalty, 0, 0, rule_title));
+            if d.severity > entry.0 {
+                entry.0 = d.severity;
+            }
+            if penalty > entry.1 {
+                entry.1 = penalty;
+            }
             entry.2 += 1;
+            entry.3 = entry.3.saturating_add(penalty);
         }
     }
 
     let mut rule_contributions: Vec<RuleScoreContribution> = rule_map
         .into_iter()
         .map(
-            |(rule_id, (severity, penalty_per_finding, count, title))| RuleScoreContribution {
-                rule_id,
-                severity,
-                penalty_per_finding,
-                count,
-                total_penalty: penalty_per_finding.saturating_mul(count as u32),
-                title,
+            |(rule_id, (severity, penalty_per_finding, count, total_penalty, title))| {
+                RuleScoreContribution {
+                    rule_id,
+                    severity,
+                    penalty_per_finding,
+                    count,
+                    total_penalty,
+                    title,
+                }
             },
         )
         .collect();
@@ -550,5 +560,43 @@ mod tests {
         assert_eq!(rc_first[1].id, rc_second[1].id);
         assert_eq!(rc_first[0].id, "RC-MISSING-DEP-A_PKG");
         assert_eq!(rc_first[1].id, "RC-MISSING-DEP-B_PKG");
+    }
+
+    #[test]
+    fn test_rule_contribution_accumulated_sum_and_max_severity() {
+        let diags = vec![
+            Diagnostic {
+                rule_id: RuleId::new("FAP-001"),
+                message: "Finding with Warning severity".to_string(),
+                severity: Severity::Warning, // 2 pts
+                location: DiagnosticLocation::new(PathBuf::from("a.py")),
+                explanation: "".to_string(),
+                suggested_remediation: "".to_string(),
+                fix: None,
+                language: LanguageTarget::Python,
+            },
+            Diagnostic {
+                rule_id: RuleId::new("FAP-001"),
+                message: "Finding with Critical severity".to_string(),
+                severity: Severity::Critical, // 20 pts
+                location: DiagnosticLocation::new(PathBuf::from("b.py")),
+                explanation: "".to_string(),
+                suggested_remediation: "".to_string(),
+                fix: None,
+                language: LanguageTarget::Python,
+            },
+        ];
+
+        let exp = calculate_health_score_explained(&diags);
+        assert_eq!(exp.total_deductions, 22);
+        assert_eq!(exp.final_score, 78);
+        assert_eq!(exp.rule_contributions.len(), 1);
+
+        let contrib = &exp.rule_contributions[0];
+        assert_eq!(contrib.rule_id, "FAP-001");
+        assert_eq!(contrib.severity, Severity::Critical); // max severity
+        assert_eq!(contrib.penalty_per_finding, 20); // max penalty
+        assert_eq!(contrib.count, 2);
+        assert_eq!(contrib.total_penalty, 22); // accumulated sum: 2 + 20 = 22
     }
 }

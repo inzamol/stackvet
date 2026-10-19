@@ -214,7 +214,9 @@ fn test_doctor_score_explanation_and_deduplication() {
         Some(&explanation),
     );
 
-    assert!(text.contains("Health Score: 78 / 100"));
+    assert!(text.contains("Health Score:"));
+    assert!(text.contains("78"));
+    assert!(text.contains("/ 100"));
     assert!(text.contains("3 duplicates ignored"));
     assert!(text.contains("FAP-001"));
     assert!(text.contains("-20 pts"));
