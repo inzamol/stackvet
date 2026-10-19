@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#configuration-guide" class="md-skip">
+        <a href="#project-configuration-guide" class="md-skip">
           Skip to content
         </a>
       
@@ -638,10 +638,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-example-pyprojecttoml" class="md-nav__link">
+  <a href="#1-configuration-schema" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. Example pyproject.toml
+        1. Configuration Schema
       
     </span>
   </a>
@@ -649,10 +649,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-severity-overrides" class="md-nav__link">
+  <a href="#2-configuring-via-pyprojecttoml" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Severity Overrides
+        2. Configuring via pyproject.toml
       
     </span>
   </a>
@@ -660,33 +660,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#3-ignore-rules-and-dependencies" class="md-nav__link">
+  <a href="#3-rule-overrides-disabling" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Ignore Rules and Dependencies
+        3. Rule Overrides &amp; Disabling
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="3. Ignore Rules and Dependencies">
+    <nav class="md-nav" aria-label="3. Rule Overrides &amp; Disabling">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#31-ignore-rules-globally" class="md-nav__link">
+  <a href="#validation-zero-false-positives" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3.1 Ignore Rules Globally
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#32-ignore-specific-packages-dep-003" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3.2 Ignore Specific Packages (DEP-003)
+        Validation &amp; Zero False Positives
       
     </span>
   </a>
@@ -699,10 +688,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-precedence-order" class="md-nav__link">
+  <a href="#4-precedence-hierarchy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. Precedence Order
+        4. Precedence Hierarchy
       
     </span>
   </a>
@@ -1187,10 +1176,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-example-pyprojecttoml" class="md-nav__link">
+  <a href="#1-configuration-schema" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. Example pyproject.toml
+        1. Configuration Schema
       
     </span>
   </a>
@@ -1198,10 +1187,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-severity-overrides" class="md-nav__link">
+  <a href="#2-configuring-via-pyprojecttoml" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Severity Overrides
+        2. Configuring via pyproject.toml
       
     </span>
   </a>
@@ -1209,33 +1198,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#3-ignore-rules-and-dependencies" class="md-nav__link">
+  <a href="#3-rule-overrides-disabling" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Ignore Rules and Dependencies
+        3. Rule Overrides &amp; Disabling
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="3. Ignore Rules and Dependencies">
+    <nav class="md-nav" aria-label="3. Rule Overrides &amp; Disabling">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#31-ignore-rules-globally" class="md-nav__link">
+  <a href="#validation-zero-false-positives" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3.1 Ignore Rules Globally
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#32-ignore-specific-packages-dep-003" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3.2 Ignore Specific Packages (DEP-003)
+        Validation &amp; Zero False Positives
       
     </span>
   </a>
@@ -1248,10 +1226,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-precedence-order" class="md-nav__link">
+  <a href="#4-precedence-hierarchy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. Precedence Order
+        4. Precedence Hierarchy
       
     </span>
   </a>
@@ -1326,41 +1304,59 @@
   
 
 
-<h1 id="configuration-guide">Configuration Guide</h1>
-<p><code>stackvet</code> is configured directly in your project's <code>pyproject.toml</code> file under the <code>[tool.stackvet]</code> table.</p>
+<h1 id="project-configuration-guide">Project Configuration Guide</h1>
+<p>StackVet automatically discovers and loads configuration from any of the following files in your project root:
+1. <code>stackvet.toml</code>
+2. <code>.stackvet.toml</code>
+3. <code>pyproject.toml</code> (under the <code>[tool.stackvet]</code> table)</p>
+<p>You can also explicitly specify a configuration file using <code>--config &lt;PATH&gt;</code>:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>stackvet<span class="w"> </span>--config<span class="w"> </span>./configs/custom-stackvet.toml<span class="w"> </span>check
+</code></pre></div></p>
 <hr />
-<h2 id="1-example-pyprojecttoml">1. Example <code>pyproject.toml</code></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">[tool.stackvet]</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># Override individual rule severities (error, warning, info, off)</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">[tool.stackvet.rules]</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">DEP-001</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"error"</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">DEP-002</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"error"</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">DEP-003</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"warning"</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">DEP-004</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"info"</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">IMP-001</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"error"</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="c1"># Ignore specific rules entirely</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="k">[tool.stackvet.ignore]</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="n">rules</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"DEP-005"</span><span class="p">]</span>
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="c1"># Customize path exclusions</span>
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="k">[tool.stackvet.paths]</span>
-<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="n">exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
-<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">    </span><span class="s2">".venv"</span><span class="p">,</span>
-<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">    </span><span class="s2">"build"</span><span class="p">,</span>
-<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">    </span><span class="s2">"dist"</span><span class="p">,</span>
-<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="w">    </span><span class="s2">"node_modules"</span><span class="p">,</span>
-<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="w">    </span><span class="s2">"legacy_scripts"</span><span class="p">,</span>
-<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="p">]</span>
-<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>
-<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="c1"># Set expected Python runtime target</span>
-<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a><span class="k">[tool.stackvet.runtime]</span>
-<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a><span class="n">python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"3.12"</span>
+<h2 id="1-configuration-schema">1. Configuration Schema</h2>
+<p>Below is an annotated example of a complete <code>stackvet.toml</code> or <code>.stackvet.toml</code> file:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">[project]</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my-application"</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">min_score</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">80</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">strict</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="k">[thresholds]</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Minimum severity that triggers CI failure: "hint", "info", "warning", "error", "critical"</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">fail_on</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"error"</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="c1"># Minimum health score required (0-100)</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">min_score</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">80</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="k">[ci]</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">baseline</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">".stackvet-baseline.json"</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">fail_on</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"error"</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="n">strict</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="k">[rules]</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="c1"># Simple override syntax: set custom severity or disable rules</span>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="n">DEP-001</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"warning"</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="n">ARC-001</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"error"</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="n">CEL-001</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"disabled"</span><span class="w">   </span><span class="c1"># or "off"</span>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="c1"># Detailed table syntax with explicit enable/disable flag</span>
+<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a><span class="k">[rules.FAP-001]</span>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="n">severity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"error"</span>
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="n">enabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
 </code></pre></div>
 <hr />
-<h2 id="2-severity-overrides">2. Severity Overrides</h2>
-<p>You can adjust how strictly any rule is treated:</p>
+<h2 id="2-configuring-via-pyprojecttoml">2. Configuring via <code>pyproject.toml</code></h2>
+<p>For Python projects, you can embed your StackVet configuration directly in <code>pyproject.toml</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">[tool.stackvet]</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">min_severity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"warning"</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">fail_on</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"error"</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">min_score</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">80</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="k">[tool.stackvet.rules]</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="n">DEP-001</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"warning"</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">CEL-001</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"off"</span>
+</code></pre></div>
+<hr />
+<h2 id="3-rule-overrides-disabling">3. Rule Overrides &amp; Disabling</h2>
+<p>You can customize how individual diagnostic rules are evaluated:</p>
 <table>
 <thead>
 <tr>
@@ -1370,44 +1366,49 @@
 </thead>
 <tbody>
 <tr>
-<td><code>"error"</code></td>
-<td>Causes scan to fail and exit with non-zero code</td>
+<td><code>"critical"</code></td>
+<td>Treats finding as Critical (-20 health score points, blocks CI if <code>fail_on</code> is critical/error/warning/info)</td>
 </tr>
 <tr>
-<td><code>"warning"</code></td>
-<td>Displays warning; fails in <code>--strict</code> or <code>--ci</code> mode</td>
+<td><code>"error"</code></td>
+<td>Treats finding as Error (-8 health score points, blocks CI if <code>fail_on</code> is error/warning/info)</td>
+</tr>
+<tr>
+<td><code>"warning"</code> / <code>"warn"</code></td>
+<td>Treats finding as Warning (-2 health score points, blocks CI if <code>--strict</code> or <code>fail_on = "warning"</code>)</td>
 </tr>
 <tr>
 <td><code>"info"</code></td>
-<td>Informational finding; does not affect health score as severely</td>
+<td>Informational observation (0 health score points deduction)</td>
 </tr>
 <tr>
-<td><code>"off"</code></td>
-<td>Disables the check completely</td>
+<td><code>"hint"</code></td>
+<td>Advisory observation (0 health score points deduction)</td>
+</tr>
+<tr>
+<td><code>"disabled"</code> / <code>"off"</code></td>
+<td>Disables the rule completely; omitted from scans, reports, and health score deductions</td>
 </tr>
 </tbody>
 </table>
+<h3 id="validation-zero-false-positives">Validation &amp; Zero False Positives</h3>
+<p>StackVet rigorously validates all rule IDs against the 132-rule catalog:
+- If an unknown rule ID (e.g. <code>NONEXISTENT-999</code>) is declared in <code>[rules]</code>, StackVet exits with <strong>Exit Code 2 (Configuration Error)</strong> and provides a clear error message.
+- If an unsupported severity string (e.g. <code>"catastrophic"</code>) is provided, StackVet exits with <strong>Exit Code 2</strong>.</p>
 <hr />
-<h2 id="3-ignore-rules-and-dependencies">3. Ignore Rules and Dependencies</h2>
-<h3 id="31-ignore-rules-globally">3.1 Ignore Rules Globally</h3>
-<p>To suppress specific diagnostic rule IDs that are not applicable to your workflow, list them under <code>[tool.stackvet.ignore]</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">[tool.stackvet.ignore]</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">rules</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"DEP-003"</span><span class="p">,</span><span class="w"> </span><span class="s2">"ENV-002"</span><span class="p">]</span>
+<h2 id="4-precedence-hierarchy">4. Precedence Hierarchy</h2>
+<p>StackVet resolves settings deterministically using a strict 3-tier precedence hierarchy:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>┌─────────────────────────────────────────────────────────┐
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>│ 1. CLI Arguments (--fail-on, --strict, --min-score)     │  (Highest precedence)
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>├─────────────────────────────────────────────────────────┤
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>│ 2. Project Config (stackvet.toml / pyproject.toml)      │
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>├─────────────────────────────────────────────────────────┤
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>│ 3. Built-in Defaults (fail_on = Error, min_score = None)│  (Lowest precedence)
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>└─────────────────────────────────────────────────────────┘
 </code></pre></div>
-<h3 id="32-ignore-specific-packages-dep-003">3.2 Ignore Specific Packages (DEP-003)</h3>
-<p>To ignore specific packages from unused dependency checks (<code>DEP-003</code>) (e.g. dynamic plugins, CLI drivers, or runtime dependencies), configure <code>[tool.stackvet.dependencies]</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">[tool.stackvet.dependencies]</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">ignore</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"amqp"</span><span class="p">,</span><span class="w"> </span><span class="s2">"psycopg2-binary"</span><span class="p">,</span><span class="w"> </span><span class="s2">"gunicorn"</span><span class="p">]</span>
-</code></pre></div>
-<p>Package names are automatically normalized, case-insensitive, and support version specifiers (e.g. <code>amqp&gt;=1.0</code> or <code>amqp[extra]</code>). Ignoring a package only suppresses <code>DEP-003</code> for that package while keeping all other rules active.</p>
-<hr />
-<h2 id="4-precedence-order">4. Precedence Order</h2>
-<p>When resolving configuration, <code>stackvet</code> follows this precedence:</p>
-<ol>
-<li><strong>CLI Flags</strong> (<code>--strict</code>, <code>--json</code>, <code>--sarif</code>) — highest precedence.</li>
-<li><strong>Project <code>pyproject.toml</code></strong> (<code>[tool.stackvet]</code>).</li>
-<li><strong>Default Built-in Rules</strong> — lowest precedence.</li>
-</ol>
+<p>For example:
+- If <code>fail_on = "warning"</code> is configured in <code>stackvet.toml</code>, running <code>stackvet check</code> will fail on warnings.
+- Passing <code>stackvet check --fail-on critical</code> overrides the configuration file for that specific invocation.</p>
 
 
 

@@ -1050,13 +1050,63 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-exit-codes-for-ci-pipelines" class="md-nav__link">
+  <a href="#4-standardized-exit-codes-for-ci-automation" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. Exit Codes for CI Pipelines
+        4. Standardized Exit Codes for CI Automation
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-baseline-aware-ci-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Baseline-Aware CI Checks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Baseline-Aware CI Checks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-establish-initial-baseline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Establish Initial Baseline
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-enforce-in-ci" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Enforce in CI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-update-baseline-when-debt-is-paid-down" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Update Baseline When Debt is Paid Down
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1426,13 +1476,63 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-exit-codes-for-ci-pipelines" class="md-nav__link">
+  <a href="#4-standardized-exit-codes-for-ci-automation" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. Exit Codes for CI Pipelines
+        4. Standardized Exit Codes for CI Automation
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-baseline-aware-ci-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Baseline-Aware CI Checks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Baseline-Aware CI Checks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-establish-initial-baseline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1: Establish Initial Baseline
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-enforce-in-ci" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2: Enforce in CI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-update-baseline-when-debt-is-paid-down" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3: Update Baseline When Debt is Paid Down
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1791,13 +1891,60 @@
 </tbody>
 </table>
 <hr />
-<h2 id="4-exit-codes-for-ci-pipelines">4. Exit Codes for CI Pipelines</h2>
-<ul>
-<li><code>0</code>: Success — no blocking findings.</li>
-<li><code>1</code>: Failure — errors found (or warnings in <code>--strict</code> / <code>--ci</code> mode).</li>
-<li><code>2</code>: Configuration error.</li>
-<li><code>3</code>: Runtime / Analysis failure.</li>
-</ul>
+<h2 id="4-standardized-exit-codes-for-ci-automation">4. Standardized Exit Codes for CI Automation</h2>
+<p>StackVet returns predictable exit codes across all commands and output formats (<code>text</code>, <code>json</code>, <code>sarif</code>, <code>html</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Exit Code</th>
+<th>Classification</th>
+<th>Trigger Condition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0</code></td>
+<td><strong>Success</strong></td>
+<td>Scan passed with no findings at or above <code>--fail-on</code> threshold, health score meets <code>--min-score</code>, or all findings are tolerated legacy baseline issues.</td>
+</tr>
+<tr>
+<td><code>1</code></td>
+<td><strong>Findings Violation</strong></td>
+<td>Findings detected meeting or exceeding <code>--fail-on</code> threshold, health score below <code>--min-score</code>, or new regression findings introduced against baseline.</td>
+</tr>
+<tr>
+<td><code>2</code></td>
+<td><strong>Configuration Error</strong></td>
+<td>Configuration syntax error in <code>stackvet.toml</code> or <code>pyproject.toml</code>, unknown rule ID in <code>[rules]</code>, or unsupported severity override level.</td>
+</tr>
+<tr>
+<td><code>3</code></td>
+<td><strong>Execution / I/O Error</strong></td>
+<td>Target path does not exist, specified baseline file not found, or filesystem read/write error.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5-baseline-aware-ci-checks">5. Baseline-Aware CI Checks</h2>
+<p>In existing or legacy codebases, failing CI on pre-existing technical debt blocks modernization. StackVet's differential baseline system allows teams to establish a baseline snapshot and fail CI only when new regressions are introduced:</p>
+<h3 id="step-1-establish-initial-baseline">Step 1: Establish Initial Baseline</h3>
+<p><div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Record existing issues into .stackvet-baseline.json</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>stackvet<span class="w"> </span>baseline<span class="w"> </span>record
+</code></pre></div>
+Commit <code>.stackvet-baseline.json</code> into your Git repository.</p>
+<h3 id="step-2-enforce-in-ci">Step 2: Enforce in CI</h3>
+<p><div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># In CI check: tolerate legacy baseline issues, fail only if new errors are introduced</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>stackvet<span class="w"> </span>check<span class="w"> </span>--baseline<span class="w"> </span>.stackvet-baseline.json<span class="w"> </span>--fail-on<span class="w"> </span>error
+</code></pre></div>
+If developers resolve existing debt, StackVet automatically reports the resolved findings:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>✓ Baseline CI Check Passed: No new regressions at or above ERROR threshold.
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>  (42 legacy finding(s) tolerated by baseline)
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>✓ Resolved: 3 legacy baseline finding(s) fixed!
+</code></pre></div></p>
+<h3 id="step-3-update-baseline-when-debt-is-paid-down">Step 3: Update Baseline When Debt is Paid Down</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Update baseline to remove resolved issues and reflect current state</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>stackvet<span class="w"> </span>check<span class="w"> </span>--baseline<span class="w"> </span>.stackvet-baseline.json<span class="w"> </span>--update-baseline
+</code></pre></div>
 
 
 
