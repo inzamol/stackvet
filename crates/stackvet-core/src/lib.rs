@@ -174,6 +174,16 @@ impl DiagnosticLocation {
     }
 }
 
+impl Default for DiagnosticLocation {
+    fn default() -> Self {
+        Self {
+            file_path: PathBuf::new(),
+            span: None,
+            snippet: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FixAction {
     pub description: String,
