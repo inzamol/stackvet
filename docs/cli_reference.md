@@ -4,58 +4,78 @@
 
 ---
 
-## 1. Global Options
+## 1. Global Options & Exit Codes
 
 ```bash
 stackvet --help
 stackvet --version
+stackvet --config <PATH>
+```
+
+### Process Exit Codes
+
+`stackvet` uses stable, standardized exit codes across all commands, checks, and output formats (Text, JSON, SARIF, HTML):
+
+| Exit Code | Classification | Meaning |
+|---|---|---|
+| `0` | **Success** | Clean project, no findings meeting/exceeding `--fail-on` threshold, health score meets `--min-score`, or all findings are tolerated legacy baseline issues. |
+| `1` | **Findings Violation** | Findings detected meeting or exceeding the configured `--fail-on` threshold, health score below `--min-score`, or new regression findings introduced against baseline. |
+| `2` | **Configuration Error** | Invalid configuration syntax, unknown rule ID in `[rules]`, or unsupported severity override level. |
+| `3` | **Execution / I/O Error** | Target path not found, specified baseline file not found, or filesystem read/write error. |
+
+---
+
+## 2. Project Configuration (`stackvet.toml` / `pyproject.toml`)
+
+StackVet automatically discovers project configuration from `stackvet.toml`, `.stackvet.toml`, or `pyproject.toml` under `[tool.stackvet]`.
+
+### Precedence Hierarchy
+Settings are resolved deterministically using a 3-tier hierarchy:
+1. **CLI Arguments** (e.g. `--fail-on`, `--strict`, `--min-score`, `--baseline`) — Highest precedence.
+2. **Project Configuration File** (`stackvet.toml` / `.stackvet.toml` / `pyproject.toml`) — Overrides defaults.
+3. **Built-in Defaults** — Fallback.
+
+### Configuration Schema
+
+```toml
+# stackvet.toml or .stackvet.toml
+[project]
+name = "my-application"
+min_score = 80
+strict = false
+
+[thresholds]
+# Minimum severity that triggers CI failure: "hint", "info", "warning", "error", "critical"
+fail_on = "error"
+# Minimum health score required (0-100)
+min_score = 80
+
+[ci]
+baseline = ".stackvet-baseline.json"
+fail_on = "error"
+strict = false
+
+[rules]
+# Override rule severities or disable rules entirely
+DEP-001 = "warning"
+CEL-001 = "disabled"
+ARC-001 = "error"
+
+# Detailed syntax with explicit enable flag
+[rules.FAP-001]
+severity = "error"
+enabled = true
 ```
 
 ---
 
-## 2. `stackvet init`
+## 3. `stackvet init`
 
-Generates or updates the `[tool.stackvet]` configuration block in your `pyproject.toml` without overwriting existing settings. Optionally generates a pre-configured CI workflow for GitHub Actions.
+Generates or updates project configuration (`.stackvet.toml` or `pyproject.toml`) without overwriting existing settings. Optionally generates a pre-configured CI workflow for GitHub Actions.
 
 ```bash
 stackvet init [PATH] [OPTIONS]
 ```
-
-### Options
-
-| Option | Type | Description |
-|---|---|---|
-| `--ci [github]` | String | Generate a CI workflow file (`.github/workflows/stackvet.yml`) configured to run `stackvet scan --ci --github-annotations`. |
-| `-f, --force` | Flag | Overwrite existing `[tool.stackvet]` configuration or CI workflow. |
-| `--dry-run` | Flag | Preview generated configuration and workflow without writing changes to disk. |
-
-### Generated Configuration
-
-```toml
-[tool.stackvet]
-min_severity = "warning"
-
-[tool.stackvet.dependencies]
-ignore = [
-    "amqp",
-]
-
-[tool.stackvet.rules]
-DEP-003 = "warning"
-SQL-014 = "error"
-
-[tool.stackvet.paths]
-exclude = [
-    "tests",
-    "migrations",
-]
-```
-
-### Examples
-
-```bash
-# Initialize [tool.stackvet] in current directory
-stackvet init
 
 # Initialize in a specific project path
 stackvet init ./services/backend
@@ -259,14 +279,27 @@ stackvet baseline record -o custom-baseline.json
 ```
 
 #### `stackvet baseline verify`
-Verifies that no new diagnostic issues have been introduced beyond the baseline:
+Verifies that no new diagnostic issues have been introduced beyond the baseline, while tracking resolved debt:
 ```bash
 # Verify against default .stackvet-baseline.json
 stackvet baseline verify
 
+# Verify failing only on errors (tolerating new warnings or info)
+stackvet baseline verify --fail-on error
+
 # Verify in strict mode against a specific baseline file
 stackvet baseline verify -b custom-baseline.json --strict
+
+# Verify and update the baseline file to accept resolved and new issues
+stackvet baseline verify --update
 ```
+
+| Option | Type | Description |
+|---|---|---|
+| `-b, --baseline <FILE>` | Path | Baseline filepath to check against [default: `.stackvet-baseline.json`] |
+| `--fail-on <SEVERITY>` | String | Fail CI if new findings meet or exceed severity (`hint`, `info`, `warning`, `error`, `critical`) |
+| `--strict` | Flag | Promotes warnings to failure threshold (equivalent to `--fail-on warning`) |
+| `-u, --update` | Flag | Update baseline file with current findings and remove resolved issues |
 
 ---
 

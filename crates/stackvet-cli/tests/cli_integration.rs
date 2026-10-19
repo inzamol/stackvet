@@ -327,3 +327,165 @@ fn test_repeated_scans_are_deterministic() {
         }
     }
 }
+
+#[test]
+fn test_exit_codes_mapping() {
+    use stackvet_core::ExitCode;
+    assert_eq!(ExitCode::Success.as_i32(), 0);
+    assert_eq!(ExitCode::FindingsViolation.as_i32(), 1);
+    assert_eq!(ExitCode::ConfigurationError.as_i32(), 2);
+    assert_eq!(ExitCode::ExecutionError.as_i32(), 3);
+}
+
+#[test]
+fn test_baseline_aware_ci_workflow() {
+    use stackvet_core::{
+        BaselineData, Diagnostic, DiagnosticLocation, LanguageTarget, RuleId, Severity, TextSpan,
+    };
+
+    let d_legacy1 = Diagnostic {
+        rule_id: RuleId::new("DEP-001"),
+        message: "Legacy missing dep".to_string(),
+        severity: Severity::Error,
+        location: DiagnosticLocation::new("backend/legacy.py")
+            .with_span(TextSpan::new(10, 10, 1, 5)),
+        explanation: "".to_string(),
+        suggested_remediation: "".to_string(),
+        fix: None,
+        language: LanguageTarget::Python,
+    };
+    let d_legacy2 = Diagnostic {
+        rule_id: RuleId::new("FAP-001"),
+        message: "Legacy blocking call".to_string(),
+        severity: Severity::Critical,
+        location: DiagnosticLocation::new("backend/routes.py")
+            .with_span(TextSpan::new(20, 20, 1, 5)),
+        explanation: "".to_string(),
+        suggested_remediation: "".to_string(),
+        fix: None,
+        language: LanguageTarget::Python,
+    };
+
+    // Step 1: Record baseline from initial diagnostics
+    let initial_diags = vec![d_legacy1.clone(), d_legacy2.clone()];
+    let mut baseline = BaselineData::from_diagnostics(&initial_diags);
+    assert_eq!(baseline.issue_fingerprints.len(), 2);
+
+    // Step 2: In CI with no changes, baseline diff has 0 new issues and 2 tolerated
+    let diff_clean = baseline.diff_diagnostics(&initial_diags);
+    assert!(diff_clean.new_issues.is_empty());
+    assert_eq!(diff_clean.tolerated_issues.len(), 2);
+    assert!(diff_clean.resolved_fingerprints.is_empty());
+    assert!(diff_clean
+        .new_issues_above_threshold(Severity::Error)
+        .is_empty());
+
+    // Step 3: Developer fixes d_legacy1 (resolved!) and adds non-violating warning (d_warn)
+    let d_warn = Diagnostic {
+        rule_id: RuleId::new("SQL-001"),
+        message: "Unindexed query".to_string(),
+        severity: Severity::Warning,
+        location: DiagnosticLocation::new("backend/models.py")
+            .with_span(TextSpan::new(30, 30, 1, 5)),
+        explanation: "".to_string(),
+        suggested_remediation: "".to_string(),
+        fix: None,
+        language: LanguageTarget::Python,
+    };
+    let current_diags = vec![d_legacy2.clone(), d_warn.clone()];
+    let diff_progress = baseline.diff_diagnostics(&current_diags);
+
+    // d_legacy1 was fixed!
+    assert_eq!(diff_progress.resolved_fingerprints.len(), 1);
+    assert!(diff_progress.resolved_fingerprints[0].contains("DEP-001"));
+    // d_legacy2 tolerated
+    assert_eq!(diff_progress.tolerated_issues.len(), 1);
+    // d_warn is new, but with fail_on = Error, it does NOT violate threshold!
+    assert_eq!(diff_progress.new_issues.len(), 1);
+    assert!(diff_progress
+        .new_issues_above_threshold(Severity::Error)
+        .is_empty());
+    // With fail_on = Warning, it DOES violate threshold
+    assert_eq!(
+        diff_progress
+            .new_issues_above_threshold(Severity::Warning)
+            .len(),
+        1
+    );
+
+    // Step 4: Update baseline
+    baseline.update_from_diagnostics(&current_diags);
+    assert_eq!(baseline.issue_fingerprints.len(), 2);
+    let diff_after_update = baseline.diff_diagnostics(&current_diags);
+    assert!(diff_after_update.new_issues.is_empty());
+    assert_eq!(diff_after_update.tolerated_issues.len(), 2);
+    assert!(diff_after_update.resolved_fingerprints.is_empty());
+}
+
+#[test]
+fn test_config_rule_overrides_and_threshold_precedence() {
+    use stackvet_core::{
+        Diagnostic, DiagnosticLocation, LanguageTarget, RuleId, Severity, StackvetConfig,
+    };
+
+    let config_toml = r#"
+[thresholds]
+fail_on = "warning"
+min_score = 85
+
+[rules]
+DEP-001 = "warning"
+FAP-001 = "disabled"
+"#;
+    let config = StackvetConfig::from_toml_str(config_toml).expect("parse toml");
+
+    let diags = vec![
+        Diagnostic {
+            rule_id: RuleId::new("DEP-001"),
+            message: "Missing dependency".to_string(),
+            severity: Severity::Error,
+            location: DiagnosticLocation::new("main.py"),
+            explanation: "".to_string(),
+            suggested_remediation: "".to_string(),
+            fix: None,
+            language: LanguageTarget::Python,
+        },
+        Diagnostic {
+            rule_id: RuleId::new("FAP-001"),
+            message: "Blocking sleep".to_string(),
+            severity: Severity::Critical,
+            location: DiagnosticLocation::new("main.py"),
+            explanation: "".to_string(),
+            suggested_remediation: "".to_string(),
+            fix: None,
+            language: LanguageTarget::Python,
+        },
+    ];
+
+    let processed = config.apply_rule_overrides(diags).expect("apply overrides");
+    // FAP-001 disabled -> dropped!
+    assert_eq!(processed.len(), 1);
+    // DEP-001 downgraded to Warning
+    assert_eq!(processed[0].rule_id.as_str(), "DEP-001");
+    assert_eq!(processed[0].severity, Severity::Warning);
+
+    // Verify precedence
+    // CLI --fail-on critical overrides config fail_on = warning
+    assert_eq!(
+        config.resolve_fail_on(Some(Severity::Critical), false, Severity::Error),
+        Severity::Critical
+    );
+    // Config fail_on = warning overrides default Error
+    assert_eq!(
+        config.resolve_fail_on(None, false, Severity::Error),
+        Severity::Warning
+    );
+    // CLI --strict forces Warning
+    assert_eq!(
+        config.resolve_fail_on(None, true, Severity::Error),
+        Severity::Warning
+    );
+    // Min score
+    assert_eq!(config.resolve_min_score(Some(95)), Some(95));
+    assert_eq!(config.resolve_min_score(None), Some(85));
+}

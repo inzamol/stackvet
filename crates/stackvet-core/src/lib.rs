@@ -8,7 +8,13 @@ pub mod rules_catalog;
 pub use rules_catalog::{get_rule_meta, RuleMeta, ALL_RULES};
 
 pub mod baseline;
-pub use baseline::BaselineData;
+pub use baseline::{BaselineData, BaselineDiff, BaselineIssueEntry};
+
+pub mod config;
+pub use config::{ConfigError, StackvetConfig};
+
+pub mod exit_codes;
+pub use exit_codes::ExitCode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Severity {
@@ -51,6 +57,24 @@ impl Severity {
 impl fmt::Display for Severity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_str())
+    }
+}
+
+impl std::str::FromStr for Severity {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.trim().to_lowercase().as_str() {
+            "hint" => Ok(Severity::Hint),
+            "info" => Ok(Severity::Info),
+            "warn" | "warning" => Ok(Severity::Warning),
+            "error" => Ok(Severity::Error),
+            "critical" | "fatal" => Ok(Severity::Critical),
+            other => Err(format!(
+                "Unknown severity '{}'. Expected one of: hint, info, warning, error, critical",
+                other
+            )),
+        }
     }
 }
 
