@@ -142,25 +142,25 @@ impl Analyzer for PythonDependencyAnalyzer {
 
             // Check if matches a package directly or mapped via known PyPI distribution names
             let pypi_alts = stackvet_python::stdlib::get_known_pypi_packages(pkg_name);
+            let covered_by_member = |file: &std::path::Path| {
+                py_info.workspace_members.iter().any(|m| {
+                    let declares = |name: &str| {
+                        m.dependencies.contains_key(name) || m.dev_dependencies.contains_key(name)
+                    };
+                    file.starts_with(&m.root_dir)
+                        && (declares(pkg_name.as_str())
+                            || m.name == *pkg_name
+                            || pypi_alts.is_some_and(|alts| alts.iter().any(|alt| declares(alt))))
+                })
+            };
+
             let (first_file, first_line) = occurrences
                 .iter()
-                .find(|(file, _)| {
-                    !py_info.workspace_members.iter().any(|m| {
-                        file.starts_with(&m.root_dir)
-                            && (m.dependencies.contains_key(pkg_name.as_str())
-                                || m.dev_dependencies.contains_key(pkg_name.as_str())
-                                || m.name == *pkg_name)
-                    })
-                })
+                .find(|(file, _)| !covered_by_member(file))
                 .copied()
                 .unwrap_or(occurrences[0]);
 
-            let is_member_dep = py_info.workspace_members.iter().any(|m| {
-                first_file.starts_with(&m.root_dir)
-                    && (m.dependencies.contains_key(pkg_name.as_str())
-                        || m.dev_dependencies.contains_key(pkg_name.as_str())
-                        || m.name == *pkg_name)
-            });
+            let is_member_dep = covered_by_member(first_file);
 
             let is_declared = is_member_dep
                 || all_declared_direct.contains(pkg_name)
