@@ -142,6 +142,31 @@ pub fn parse_python_imports(content: &str, _file: &Path) -> Vec<PythonImport> {
     visitor.imports
 }
 
+struct StringLiteralVisitor {
+    literals: std::collections::HashSet<String>,
+}
+
+impl<'a> Visitor<'a> for StringLiteralVisitor {
+    fn visit_expr(&mut self, expr: &'a Expr) {
+        if let Expr::StringLiteral(ExprStringLiteral { value, .. }) = expr {
+            self.literals.insert(value.to_str().to_string());
+        }
+        walk_expr(self, expr);
+    }
+}
+
+pub fn parse_python_string_literals(content: &str) -> std::collections::HashSet<String> {
+    let mut visitor = StringLiteralVisitor {
+        literals: std::collections::HashSet::new(),
+    };
+    if let Ok(parsed) = parse_module(content) {
+        for stmt in parsed.suite() {
+            visitor.visit_stmt(stmt);
+        }
+    }
+    visitor.literals
+}
+
 /// Normalizes Python package names (PEP 503: lowercase, hyphens/underscores normalized)
 pub fn normalize_package_name(name: &str) -> String {
     name.to_lowercase().replace('_', "-")

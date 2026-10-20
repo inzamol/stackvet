@@ -1,11 +1,12 @@
 use anyhow::Result;
 use stackvet_core::{
-    Analyzer, Diagnostic, DiagnosticLocation, FixAction, LanguageTarget, ProjectContext, Severity,
+    Analyzer, Confidence, Diagnostic, DiagnosticLocation, FixAction, LanguageTarget,
+    ProjectContext, Severity,
 };
 use stackvet_python::stdlib::{is_pep594_removed, is_python_stdlib};
 use stackvet_python::{
     check_pep_constraints_compatibility, normalize_package_name, parse_python_imports,
-    pep_version_satisfies, ConstraintCompatibility,
+    parse_python_string_literals, pep_version_satisfies, ConstraintCompatibility,
 };
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
@@ -104,6 +105,7 @@ impl Analyzer for PythonDependencyAnalyzer {
         // 1. Scan all imports in python files
         let mut imported_packages: BTreeMap<String, Vec<(&std::path::PathBuf, usize)>> =
             BTreeMap::new();
+        let mut all_string_literals: HashSet<String> = HashSet::new();
 
         for file in &py_files {
             if let Ok(content) = fs::read_to_string(file) {
@@ -122,6 +124,7 @@ impl Analyzer for PythonDependencyAnalyzer {
                         .or_default()
                         .push((file, imp.line));
                 }
+                all_string_literals.extend(parse_python_string_literals(&content));
             }
         }
 
@@ -260,10 +263,18 @@ impl Analyzer for PythonDependencyAnalyzer {
                         pypi_matches && imported_packages.contains_key(&imp_norm)
                     });
 
+            if matches_import {
+                continue;
+            }
+
             // Whitelist common CLI / build / runner dependencies
             let cli_deps = [
                 "uvicorn",
                 "gunicorn",
+                "hypercorn",
+                "granian",
+                "waitress",
+                "daphne",
                 "pytest",
                 "black",
                 "ruff",
@@ -272,8 +283,80 @@ impl Analyzer for PythonDependencyAnalyzer {
                 "celery",
                 "pre-commit",
                 "watchfiles",
+                "flake8",
+                "isort",
+                "wheel",
+                "setuptools",
+                "twine",
+                "sphinx",
+                "coverage",
+                "tox",
             ];
-            if !matches_import && !cli_deps.contains(&declared_pkg.as_str()) {
+            if cli_deps.contains(&norm_declared.as_str()) {
+                continue;
+            }
+
+            // Check dynamic references in AST string literals (e.g. settings, django apps, database URLs)
+            let is_in_string_literals = all_string_literals.iter().any(|lit| {
+                lit == declared_pkg
+                    || lit == &norm_declared
+                    || lit.contains(&norm_declared)
+                    || lit
+                        .split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
+                        .any(|tok| normalize_package_name(tok) == norm_declared)
+            });
+            if is_in_string_literals {
+                continue;
+            }
+
+            // Check if dependency is a known plugin, extension, or database driver loaded dynamically
+            let is_plugin_or_driver = norm_declared.starts_with("django-")
+                || norm_declared.starts_with("pytest-")
+                || norm_declared.starts_with("flake8-")
+                || norm_declared.starts_with("sphinx-")
+                || norm_declared.starts_with("celery-")
+                || norm_declared.starts_with("pydantic-")
+                || matches!(
+                    norm_declared.as_str(),
+                    "asyncpg"
+                        | "psycopg"
+                        | "psycopg2"
+                        | "psycopg2-binary"
+                        | "pymysql"
+                        | "aiomysql"
+                        | "aiosqlite"
+                        | "cx-oracle"
+                        | "oracledb"
+                        | "pymssql"
+                        | "redis"
+                        | "kombu"
+                        | "pika"
+                        | "pydantic-settings"
+                        | "djangorestframework"
+                );
+
+            if is_plugin_or_driver {
+                // Ambiguous or framework-loaded dependency: mark with Medium confidence, DO NOT attach removal FixAction
+                diagnostics.push(
+                    Diagnostic::builder("DEP-003", Severity::Warning, LanguageTarget::Python)
+                        .message(format!(
+                            "Declared dependency '{}' appears unused but matches dynamic plugin, driver, or framework extension pattern",
+                            declared_pkg
+                        ))
+                        .file(&py_info.manifest_file)
+                        .confidence(Confidence::Medium)
+                        .explanation(format!(
+                            "Dependency '{}' is not directly imported, but belongs to a known plugin or driver ecosystem. Automatic removal is withheld to avoid breaking dynamic configuration.",
+                            declared_pkg
+                        ))
+                        .remediation(format!(
+                            "Verify whether '{}' is configured in runtime settings or environment plugins before manual removal.",
+                            declared_pkg
+                        ))
+                        .build(),
+                );
+            } else {
+                // Clear unused dependency: mark with High confidence and attach safe removal FixAction
                 diagnostics.push(
                     Diagnostic::builder("DEP-003", Severity::Warning, LanguageTarget::Python)
                         .message(format!(
@@ -281,6 +364,7 @@ impl Analyzer for PythonDependencyAnalyzer {
                             declared_pkg
                         ))
                         .file(&py_info.manifest_file)
+                        .confidence(Confidence::High)
                         .explanation(format!(
                             "Dependency '{}' adds bloat to docker images and build times without being directly referenced.",
                             declared_pkg
@@ -288,6 +372,11 @@ impl Analyzer for PythonDependencyAnalyzer {
                         .remediation(format!(
                             "Remove '{}' if it is no longer needed, or move to dev dependencies.",
                             declared_pkg
+                        ))
+                        .fix(FixAction::new(
+                            format!("Remove {} from dependencies", declared_pkg),
+                            py_info.manifest_file.clone(),
+                            declared_pkg.clone(),
                         ))
                         .build(),
                 );

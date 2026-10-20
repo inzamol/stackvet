@@ -14,6 +14,7 @@ fn test_doctor_full_flow() {
             suggested_remediation: "Use await asyncio.sleep()".to_string(),
             fix: None,
             language: LanguageTarget::Python,
+            ..Default::default()
         },
         Diagnostic {
             rule_id: RuleId::new("DEP-002"),
@@ -24,6 +25,7 @@ fn test_doctor_full_flow() {
             suggested_remediation: "Add requests to dependencies".to_string(),
             fix: None,
             language: LanguageTarget::Python,
+            ..Default::default()
         },
     ];
 
@@ -172,6 +174,7 @@ fn test_doctor_score_explanation_and_deduplication() {
         suggested_remediation: "Use async".to_string(),
         fix: None,
         language: LanguageTarget::Python,
+        ..Default::default()
     };
 
     let warn_diag = Diagnostic {
@@ -183,6 +186,7 @@ fn test_doctor_score_explanation_and_deduplication() {
         suggested_remediation: "Remove".to_string(),
         fix: None,
         language: LanguageTarget::Python,
+        ..Default::default()
     };
 
     // Include 4 duplicates of FAP-001 and 1 DEP-003
@@ -353,6 +357,7 @@ fn test_baseline_aware_ci_workflow() {
         suggested_remediation: "".to_string(),
         fix: None,
         language: LanguageTarget::Python,
+        ..Default::default()
     };
     let d_legacy2 = Diagnostic {
         rule_id: RuleId::new("FAP-001"),
@@ -364,6 +369,7 @@ fn test_baseline_aware_ci_workflow() {
         suggested_remediation: "".to_string(),
         fix: None,
         language: LanguageTarget::Python,
+        ..Default::default()
     };
 
     // Step 1: Record baseline from initial diagnostics
@@ -391,6 +397,7 @@ fn test_baseline_aware_ci_workflow() {
         suggested_remediation: "".to_string(),
         fix: None,
         language: LanguageTarget::Python,
+        ..Default::default()
     };
     let current_diags = vec![d_legacy2.clone(), d_warn.clone()];
     let diff_progress = baseline.diff_diagnostics(&current_diags);
@@ -450,6 +457,7 @@ SQL-001 = { enabled = true }
             suggested_remediation: "".to_string(),
             fix: None,
             language: LanguageTarget::Python,
+            ..Default::default()
         },
         Diagnostic {
             rule_id: RuleId::new("FAP-001"),
@@ -460,6 +468,7 @@ SQL-001 = { enabled = true }
             suggested_remediation: "".to_string(),
             fix: None,
             language: LanguageTarget::Python,
+            ..Default::default()
         },
         Diagnostic {
             rule_id: RuleId::new("SQL-001"),
@@ -470,6 +479,7 @@ SQL-001 = { enabled = true }
             suggested_remediation: "".to_string(),
             fix: None,
             language: LanguageTarget::Python,
+            ..Default::default()
         },
     ];
 
@@ -545,6 +555,7 @@ reason = "Valid temporary bypass"
         suggested_remediation: "".to_string(),
         fix: None,
         language: LanguageTarget::Python,
+        ..Default::default()
     };
 
     let d_ndep_match = Diagnostic {
@@ -556,6 +567,7 @@ reason = "Valid temporary bypass"
         suggested_remediation: "".to_string(),
         fix: None,
         language: LanguageTarget::Node,
+        ..Default::default()
     };
 
     let d_ndep_no_match = Diagnostic {
@@ -567,6 +579,7 @@ reason = "Valid temporary bypass"
         suggested_remediation: "".to_string(),
         fix: None,
         language: LanguageTarget::Node,
+        ..Default::default()
     };
 
     let d_sql_expired = Diagnostic {
@@ -578,6 +591,7 @@ reason = "Valid temporary bypass"
         suggested_remediation: "".to_string(),
         fix: None,
         language: LanguageTarget::Python,
+        ..Default::default()
     };
 
     let d_fap_unexpired = Diagnostic {
@@ -589,6 +603,7 @@ reason = "Valid temporary bypass"
         suggested_remediation: "".to_string(),
         fix: None,
         language: LanguageTarget::Python,
+        ..Default::default()
     };
 
     let diagnostics = vec![
@@ -697,6 +712,7 @@ export const dynamic = 'force-dynamic';
         suggested_remediation: "".to_string(),
         fix: None,
         language: LanguageTarget::Python,
+        ..Default::default()
     };
 
     let d2 = Diagnostic {
@@ -708,6 +724,7 @@ export const dynamic = 'force-dynamic';
         suggested_remediation: "".to_string(),
         fix: None,
         language: LanguageTarget::Python,
+        ..Default::default()
     };
 
     let d2_unsuppressed = Diagnostic {
@@ -719,6 +736,7 @@ export const dynamic = 'force-dynamic';
         suggested_remediation: "".to_string(),
         fix: None,
         language: LanguageTarget::Python,
+        ..Default::default()
     };
 
     let d3_file = Diagnostic {
@@ -730,6 +748,7 @@ export const dynamic = 'force-dynamic';
         suggested_remediation: "".to_string(),
         fix: None,
         language: LanguageTarget::Python,
+        ..Default::default()
     };
 
     let d_ts1 = Diagnostic {
@@ -741,6 +760,7 @@ export const dynamic = 'force-dynamic';
         suggested_remediation: "".to_string(),
         fix: None,
         language: LanguageTarget::Node,
+        ..Default::default()
     };
 
     let d_ts2 = Diagnostic {
@@ -752,6 +772,7 @@ export const dynamic = 'force-dynamic';
         suggested_remediation: "".to_string(),
         fix: None,
         language: LanguageTarget::Node,
+        ..Default::default()
     };
 
     let diags = vec![d1, d2, d2_unsuppressed.clone(), d3_file, d_ts1, d_ts2];

@@ -568,6 +568,7 @@ mod tests {
             suggested_remediation: "".to_string(),
             fix: None,
             language: LanguageTarget::Python,
+            confidence: crate::Confidence::High,
         }
     }
 

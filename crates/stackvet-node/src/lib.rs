@@ -488,6 +488,14 @@ pub fn parse_package_json(content: &str, path: &Path) -> Result<NodeProjectInfo>
         }
     }
 
+    if let Some(scripts) = val.get("scripts").and_then(|v| v.as_object()) {
+        for (k, v) in scripts {
+            if let Some(cmd) = v.as_str() {
+                info.scripts.insert(k.clone(), cmd.to_string());
+            }
+        }
+    }
+
     Ok(info)
 }
 
