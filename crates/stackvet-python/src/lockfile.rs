@@ -434,59 +434,10 @@ pub fn discover_python_workspace_members(
                         })
                         .map(|s| s.to_string());
 
-                    let mut dependencies = HashMap::new();
-                    if let Some(deps) = val
-                        .get("project")
-                        .and_then(|p| p.get("dependencies"))
-                        .and_then(|d| d.as_array())
-                    {
-                        for dep in deps {
-                            if let Some(s) = dep.as_str() {
-                                if let Some((n, v)) = crate::parse_requirement_spec(s) {
-                                    dependencies.insert(n, v);
-                                }
-                            }
-                        }
-                    } else if let Some(deps) = val
-                        .get("tool")
-                        .and_then(|t| t.get("poetry"))
-                        .and_then(|p| p.get("dependencies"))
-                        .and_then(|d| d.as_table())
-                    {
-                        for (k, v) in deps {
-                            if k != "python" {
-                                let ver_str = match v {
-                                    toml::Value::String(s) => s.clone(),
-                                    toml::Value::Table(t) => t
-                                        .get("version")
-                                        .and_then(|ver| ver.as_str())
-                                        .unwrap_or("")
-                                        .to_string(),
-                                    _ => String::new(),
-                                };
-                                dependencies.insert(normalize_package_name(k), ver_str);
-                            }
-                        }
-                    }
-
-                    let mut dev_dependencies = HashMap::new();
-                    if let Some(opt) = val
-                        .get("project")
-                        .and_then(|p| p.get("optional-dependencies"))
-                        .and_then(|o| o.as_table())
-                    {
-                        for (_, arr) in opt {
-                            if let Some(arr) = arr.as_array() {
-                                for dep in arr {
-                                    if let Some(s) = dep.as_str() {
-                                        if let Some((n, v)) = crate::parse_requirement_spec(s) {
-                                            dev_dependencies.insert(n, v);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    let parsed = crate::parse_pyproject_toml(&content, &manifest_path).ok();
+                    let (dependencies, dev_dependencies) = parsed
+                        .map(|p| (p.direct_dependencies, p.dev_dependencies))
+                        .unwrap_or_default();
 
                     members.push(WorkspaceMemberInfo {
                         name: norm_name,
