@@ -176,6 +176,21 @@ pub enum Commands {
 
         #[arg(long, help = "Rollback the last applied auto-fix session")]
         rollback: bool,
+
+        #[arg(
+            long,
+            help = "Verify fixes by re-running diagnostics and confirming resolution"
+        )]
+        verify: bool,
+    },
+
+    #[command(
+        about = "Verify that applied fixes resolved issues without introducing regressions",
+        aliases = ["check-fixes"]
+    )]
+    Verify {
+        #[arg(help = "Target project directory [default: .]")]
+        path: Option<PathBuf>,
     },
 
     #[command(
@@ -621,6 +636,84 @@ fn print_score_explanation_details(explanation: &HealthScoreExplanation) {
     }
 }
 
+fn scan_and_collect_diagnostics(
+    root: &Path,
+    cli_ignore: &[String],
+    offline: bool,
+    config: &StackvetConfig,
+) -> Result<Vec<stackvet_core::Diagnostic>> {
+    let ctx = build_full_context(root, config, cli_ignore, false)?;
+    let (raw, _) = collect_all_diagnostics(&ctx, offline)?;
+    let after_rules = config.apply_rule_overrides(raw)?;
+    let outcome = apply_suppressions(root, &config.suppressions, after_rules, None);
+    Ok(outcome.active_diagnostics)
+}
+
+fn print_verification_summary(result: &stackvet_remediation::FixVerificationResult) {
+    let mut table = Table::new();
+    table.load_preset(UTF8_FULL);
+    table.apply_modifier(UTF8_ROUND_CORNERS);
+    table.set_header(Row::from(vec![
+        Cell::new("Status").fg(Color::Cyan),
+        Cell::new("Rule").fg(Color::Cyan),
+        Cell::new("File").fg(Color::Cyan),
+        Cell::new("Details").fg(Color::Cyan),
+    ]));
+
+    for d in &result.resolved_diagnostics {
+        table.add_row(Row::from(vec![
+            Cell::new("RESOLVED").fg(Color::Green),
+            Cell::new(&d.rule_id.0),
+            Cell::new(d.location.file_path.display().to_string()),
+            Cell::new(&d.message),
+        ]));
+    }
+
+    for d in &result.unresolved_diagnostics {
+        table.add_row(Row::from(vec![
+            Cell::new("UNRESOLVED").fg(Color::Yellow),
+            Cell::new(&d.rule_id.0),
+            Cell::new(d.location.file_path.display().to_string()),
+            Cell::new(&d.message),
+        ]));
+    }
+
+    for d in &result.new_regressions {
+        table.add_row(Row::from(vec![
+            Cell::new("REGRESSION").fg(Color::Red),
+            Cell::new(&d.rule_id.0),
+            Cell::new(d.location.file_path.display().to_string()),
+            Cell::new(&d.message),
+        ]));
+    }
+
+    println!("\n{}", "--- Fix Verification Report ---".cyan().bold());
+    println!("{}\n", table);
+
+    if result.is_clean {
+        println!(
+            "{}",
+            format!(
+                "Verification SUCCESS: {} issue(s) confirmed resolved with 0 regressions.",
+                result.resolved_diagnostics.len()
+            )
+            .green()
+            .bold()
+        );
+    } else {
+        eprintln!(
+            "{}",
+            format!(
+                "Verification WARNING: {} unresolved issue(s), {} new regression(s) detected.",
+                result.unresolved_diagnostics.len(),
+                result.new_regressions.len()
+            )
+            .red()
+            .bold()
+        );
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -643,6 +736,7 @@ async fn main() -> Result<()> {
         Some(Commands::Check { path, .. }) => path.clone(),
         Some(Commands::Inspect { path, .. }) => path.clone(),
         Some(Commands::Fix { path, .. }) => path.clone(),
+        Some(Commands::Verify { path }) => path.clone(),
         Some(Commands::Graph { path, .. }) => path.clone(),
         Some(Commands::Init { path, .. }) => path.clone(),
         Some(Commands::Baseline { action }) => match action {
@@ -1256,20 +1350,20 @@ async fn main() -> Result<()> {
             yes,
             dry_run,
             rollback,
-            path,
+            verify,
+            ..
         }) => {
-            let root = path.as_deref().unwrap_or_else(|| Path::new("."));
             let engine = RemediationEngine::new();
 
             if *rollback {
-                if !engine.has_rollback_session(root) {
+                if !engine.has_rollback_session(&root) {
                     println!(
                         "{}",
                         "No active rollback session found in target directory.".yellow()
                     );
                     return Ok(());
                 }
-                let restored = engine.rollback_session(root)?;
+                let restored = engine.rollback_session(&root)?;
                 println!(
                     "{}",
                     format!("Successfully rolled back {} file(s):", restored.len())
@@ -1334,7 +1428,11 @@ async fn main() -> Result<()> {
                 return Ok(());
             }
 
-            let report = engine.apply_fixes_transactional(&fixable, Some(root))?;
+            let report = engine.apply_fixes_transactional_with_diagnostics(
+                &fixable,
+                Some(&root),
+                Some(&diagnostics),
+            )?;
             for fix in &fixable {
                 println!("Applied fix: {}", fix.description.green());
             }
@@ -1347,10 +1445,137 @@ async fn main() -> Result<()> {
                 .green()
                 .bold()
             );
+
+            if *verify {
+                println!("\n{}", "--- Running Fix Verification ---".cyan().bold());
+                let post_diagnostics =
+                    scan_and_collect_diagnostics(&root, &cli.ignore, cli.offline, &config)?;
+                let result = stackvet_remediation::FixVerificationResult::verify(
+                    &diagnostics,
+                    &post_diagnostics,
+                    &fixable,
+                );
+                print_verification_summary(&result);
+                if !result.is_clean {
+                    println!(
+                        "{}",
+                        "To revert these changes, run 'stackvet fix --rollback'.".cyan()
+                    );
+                    ExitCode::FindingsViolation.exit();
+                }
+            } else {
+                println!(
+                    "{}",
+                    "To revert these changes, run 'stackvet fix --rollback'.".cyan()
+                );
+            }
+        }
+        Some(Commands::Verify { .. }) => {
+            let engine = RemediationEngine::new();
+            if !engine.has_rollback_session(&root) {
+                println!(
+                    "{}",
+                    "No active rollback session found. Running full project diagnostic verification..."
+                        .yellow()
+                );
+                let current_diagnostics =
+                    scan_and_collect_diagnostics(&root, &cli.ignore, cli.offline, &config)?;
+                if current_diagnostics.is_empty() {
+                    println!(
+                        "{}",
+                        "Verification passed: 0 diagnostic findings.".green().bold()
+                    );
+                    return Ok(());
+                } else {
+                    println!(
+                        "{}",
+                        format!(
+                            "Verification complete: {} diagnostic finding(s) present.",
+                            current_diagnostics.len()
+                        )
+                        .yellow()
+                        .bold()
+                    );
+                    ExitCode::FindingsViolation.exit();
+                }
+            }
+
+            let snapshot = engine.read_rollback_snapshot(&root)?;
             println!(
                 "{}",
-                "To revert these changes, run 'stackvet fix --rollback'.".cyan()
+                format!(
+                    "Verifying {} fix(es) from session recorded at timestamp {}...",
+                    snapshot.descriptions.len(),
+                    snapshot.timestamp
+                )
+                .cyan()
+                .bold()
             );
+
+            let current_diagnostics =
+                scan_and_collect_diagnostics(&root, &cli.ignore, cli.offline, &config)?;
+
+            if snapshot.pre_diagnostics.is_empty() {
+                println!(
+                    "{}",
+                    "Rollback snapshot does not contain a pre-fix diagnostic baseline. Verifying current project status across modified files..."
+                        .yellow()
+                );
+                let modified_paths: std::collections::HashSet<PathBuf> =
+                    snapshot.backups.iter().map(|b| b.path.clone()).collect();
+                let remaining_in_modified: Vec<_> = current_diagnostics
+                    .iter()
+                    .filter(|d| modified_paths.contains(&d.location.file_path))
+                    .collect();
+
+                if remaining_in_modified.is_empty() {
+                    println!(
+                        "{}",
+                        format!(
+                            "Verification SUCCESS: 0 unresolved issues across {} modified file(s).",
+                            modified_paths.len()
+                        )
+                        .green()
+                        .bold()
+                    );
+                    return Ok(());
+                } else {
+                    eprintln!(
+                        "{}",
+                        format!(
+                            "Verification WARNING: {} unresolved issue(s) remaining in modified files.",
+                            remaining_in_modified.len()
+                        )
+                        .red()
+                        .bold()
+                    );
+                    ExitCode::FindingsViolation.exit();
+                }
+            }
+
+            let fixes_to_verify: Vec<stackvet_core::FixAction> = if !snapshot.fixes.is_empty() {
+                snapshot.fixes.clone()
+            } else {
+                snapshot
+                    .backups
+                    .iter()
+                    .zip(snapshot.descriptions.iter())
+                    .map(|(b, desc)| {
+                        stackvet_core::FixAction::new(desc.clone(), b.path.clone(), String::new())
+                    })
+                    .collect()
+            };
+
+            let result = stackvet_remediation::FixVerificationResult::verify(
+                &snapshot.pre_diagnostics,
+                &current_diagnostics,
+                &fixes_to_verify,
+            );
+            print_verification_summary(&result);
+            if !result.is_clean {
+                ExitCode::FindingsViolation.exit();
+            }
+            return Ok(());
         }
         Some(Commands::Graph { style, .. }) => {
             let graph = build_import_graph(&ctx);

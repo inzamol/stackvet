@@ -534,6 +534,7 @@ pub fn discover_python_workspace_members(
                         dev_dependencies,
                         peer_dependencies: HashMap::new(),
                         optional_dependencies: HashMap::new(),
+                        scripts: HashMap::new(),
                     });
                 }
             }

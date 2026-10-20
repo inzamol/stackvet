@@ -86,19 +86,24 @@ stackvet fix -i
 
 ## 5. Remediation Plan Inspection (Dry Run)
 
-Running `stackvet fix --dry-run` displays a structured table of planned actions:
+Running `stackvet fix --dry-run` displays available automated fixes and diff previews:
 
 ```text
-Found 2 actionable fix(es) (2 safe):
+Found 2 automated fix(es):
+1. pyproject.toml -> Add 'httpx' to project dependencies
+2. pyproject.toml -> Remove unused dependency 'requests'
 
-┌────────┬────────────────┬─────────────────────────────────────────────────┬──────────┐
-│ Rule   │ Target         │ Description                                     │ Type     │
-├────────┼────────────────┼─────────────────────────────────────────────────┼──────────┤
-│ DEP-002│ pyproject.toml │ Add 'httpx' to project dependencies             │ modify   │
-│ DEP-003│ pyproject.toml │ Remove unused requirement 'requests>=2.31.0'    │ modify   │
-└────────┴────────────────┴─────────────────────────────────────────────────┴──────────┘
+--- Proposed Changes (Preview) ---
 
-Dry-run mode enabled. No changes written to disk.
+File: pyproject.toml
+@@ -10,3 +10,4 @@
+ [project]
+ dependencies = [
++    "httpx",
+-    "requests",
+ ]
+
+Dry-run complete. No files were modified.
 ```
 
 ---

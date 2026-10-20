@@ -370,6 +370,7 @@ mod tests {
                 suggested_remediation: "".to_string(),
                 fix: None,
                 language: LanguageTarget::Python,
+                ..Default::default()
             },
             Diagnostic {
                 rule_id: RuleId::new("DEP-002"),
@@ -380,6 +381,7 @@ mod tests {
                 suggested_remediation: "".to_string(),
                 fix: None,
                 language: LanguageTarget::Python,
+                ..Default::default()
             },
             Diagnostic {
                 rule_id: RuleId::new("DEP-003"),
@@ -390,6 +392,7 @@ mod tests {
                 suggested_remediation: "".to_string(),
                 fix: None,
                 language: LanguageTarget::Python,
+                ..Default::default()
             },
         ];
 
@@ -409,6 +412,7 @@ mod tests {
             suggested_remediation: "Use async def or anyio".to_string(),
             fix: None,
             language: LanguageTarget::Python,
+            ..Default::default()
         };
 
         // Pass 5 identical duplicate diagnostics
@@ -449,6 +453,7 @@ mod tests {
                 suggested_remediation: "".to_string(),
                 fix: None,
                 language: LanguageTarget::Python,
+                ..Default::default()
             },
             Diagnostic {
                 rule_id: RuleId::new("DEP-002"),
@@ -459,6 +464,7 @@ mod tests {
                 suggested_remediation: "".to_string(),
                 fix: None,
                 language: LanguageTarget::Python,
+                ..Default::default()
             },
             Diagnostic {
                 rule_id: RuleId::new("DEP-003"),
@@ -469,6 +475,7 @@ mod tests {
                 suggested_remediation: "".to_string(),
                 fix: None,
                 language: LanguageTarget::Python,
+                ..Default::default()
             },
         ];
 
@@ -504,6 +511,7 @@ mod tests {
                 suggested_remediation: "".to_string(),
                 fix: None,
                 language: LanguageTarget::Python,
+                ..Default::default()
             });
         }
 
@@ -537,6 +545,7 @@ mod tests {
             suggested_remediation: "".to_string(),
             fix: None,
             language: LanguageTarget::Python,
+            ..Default::default()
         };
         let diag2 = Diagnostic {
             rule_id: RuleId::new("DEP-002"),
@@ -547,6 +556,7 @@ mod tests {
             suggested_remediation: "".to_string(),
             fix: None,
             language: LanguageTarget::Python,
+            ..Default::default()
         };
 
         // Correlate in order [diag1, diag2]
@@ -575,6 +585,7 @@ mod tests {
                 suggested_remediation: "".to_string(),
                 fix: None,
                 language: LanguageTarget::Python,
+                ..Default::default()
             },
             Diagnostic {
                 rule_id: RuleId::new("FAP-001"),
@@ -585,6 +596,7 @@ mod tests {
                 suggested_remediation: "".to_string(),
                 fix: None,
                 language: LanguageTarget::Python,
+                ..Default::default()
             },
         ];
 

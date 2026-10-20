@@ -520,6 +520,14 @@ pub fn discover_workspace_members(
                     let dev_dependencies = extract_deps_map(val.get("devDependencies"));
                     let peer_dependencies = extract_deps_map(val.get("peerDependencies"));
                     let optional_dependencies = extract_deps_map(val.get("optionalDependencies"));
+                    let mut scripts = HashMap::new();
+                    if let Some(s) = val.get("scripts").and_then(|v| v.as_object()) {
+                        for (sk, sv) in s {
+                            if let Some(cmd) = sv.as_str() {
+                                scripts.insert(sk.clone(), cmd.to_string());
+                            }
+                        }
+                    }
 
                     members.push(WorkspaceMemberInfo {
                         name,
@@ -530,6 +538,7 @@ pub fn discover_workspace_members(
                         dev_dependencies,
                         peer_dependencies,
                         optional_dependencies,
+                        scripts,
                     });
                 }
             }

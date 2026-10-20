@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use stackvet_core::{FixAction, TextSpan};
+use stackvet_core::{Diagnostic, FixAction, TextSpan};
 use std::fs;
 use std::path::{Path, PathBuf};
 use toml_edit::{Array, DocumentMut, Item, Value};
@@ -221,6 +221,192 @@ pub fn add_dependency_to_requirements_txt(
     Ok(out)
 }
 
+/// Removes dependency from pyproject.toml without altering formatting or unrelated comments
+pub fn remove_dependency_from_pyproject(content: &str, package: &str) -> Result<String> {
+    let mut doc: DocumentMut = content
+        .parse()
+        .context("Failed to parse pyproject.toml for editing: invalid TOML syntax")?;
+
+    let norm_pkg = normalize_python_package_name(package);
+
+    if let Some(project) = doc.get_mut("project").and_then(Item::as_table_mut) {
+        if let Some(deps_item) = project.get_mut("dependencies") {
+            if let Some(deps) = deps_item.as_array_mut() {
+                let mut idx_to_remove = None;
+                for (idx, v) in deps.iter().enumerate() {
+                    if let Some(s) = v.as_str() {
+                        let pkg_name = extract_python_package_name(s);
+                        if normalize_python_package_name(pkg_name) == norm_pkg {
+                            idx_to_remove = Some(idx);
+                            break;
+                        }
+                    }
+                }
+                if let Some(idx) = idx_to_remove {
+                    deps.remove(idx);
+                    return Ok(doc.to_string());
+                }
+            }
+        }
+    }
+
+    if let Some(tool) = doc.get_mut("tool").and_then(Item::as_table_mut) {
+        if let Some(poetry) = tool.get_mut("poetry").and_then(Item::as_table_mut) {
+            if let Some(deps) = poetry.get_mut("dependencies").and_then(Item::as_table_mut) {
+                let to_remove: Vec<String> = deps
+                    .iter()
+                    .filter(|(k, _)| normalize_python_package_name(k) == norm_pkg)
+                    .map(|(k, _)| k.to_string())
+                    .collect();
+                if !to_remove.is_empty() {
+                    for k in to_remove {
+                        deps.remove(&k);
+                    }
+                    return Ok(doc.to_string());
+                }
+            }
+        }
+    }
+
+    Ok(content.to_string())
+}
+
+/// Removes dependency from package.json while preserving indentation and ending newline
+pub fn remove_dependency_from_package_json(content: &str, package: &str) -> Result<String> {
+    let mut val: serde_json::Value =
+        serde_json::from_str(content).context("Failed to parse package.json for editing")?;
+
+    let mut removed = false;
+    if let Some(deps) = val.get_mut("dependencies").and_then(|d| d.as_object_mut()) {
+        if deps.remove(package).is_some() {
+            removed = true;
+        }
+    }
+    if let Some(dev_deps) = val
+        .get_mut("devDependencies")
+        .and_then(|d| d.as_object_mut())
+    {
+        if dev_deps.remove(package).is_some() {
+            removed = true;
+        }
+    }
+
+    if removed {
+        let mut buf = Vec::new();
+        let formatter = serde_json::ser::PrettyFormatter::with_indent(b"  ");
+        let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
+        val.serialize(&mut ser)?;
+        let mut res = String::from_utf8(buf)?;
+        if content.ends_with('\n') && !res.ends_with('\n') {
+            res.push('\n');
+        }
+        return Ok(res);
+    }
+
+    Ok(content.to_string())
+}
+
+/// Removes dependency from requirements.txt while preserving surrounding comments
+pub fn remove_dependency_from_requirements_txt(content: &str, package: &str) -> String {
+    let norm_target = normalize_python_package_name(package);
+    let mut lines = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') || trimmed.is_empty() {
+            lines.push(line.to_string());
+            continue;
+        }
+        let pkg_name = extract_python_package_name(trimmed);
+        if normalize_python_package_name(pkg_name) == norm_target {
+            continue;
+        }
+        lines.push(line.to_string());
+    }
+    let mut res = lines.join("\n");
+    if content.ends_with('\n') && !res.ends_with('\n') {
+        res.push('\n');
+    }
+    res
+}
+
+/// Verification result comparing pre-fix and post-fix diagnostics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixVerificationResult {
+    pub resolved_diagnostics: Vec<Diagnostic>,
+    pub unresolved_diagnostics: Vec<Diagnostic>,
+    pub new_regressions: Vec<Diagnostic>,
+    pub is_clean: bool,
+}
+
+impl FixVerificationResult {
+    /// Compares pre-fix diagnostics and post-fix diagnostics to determine resolved issues and regressions
+    pub fn verify(
+        pre_diagnostics: &[Diagnostic],
+        post_diagnostics: &[Diagnostic],
+        targeted_fixes: &[FixAction],
+    ) -> Self {
+        let diag_fingerprint = |d: &Diagnostic| -> String {
+            let path = d.location.file_path.to_string_lossy().replace('\\', "/");
+            let line = d.location.span.as_ref().map(|s| s.start_line).unwrap_or(0);
+            format!("{}:{}:{}:{}", d.rule_id.as_str(), path, line, d.message)
+        };
+
+        // Diagnostics that had automated fixes targeted
+        let targeted_pre: Vec<&Diagnostic> = pre_diagnostics
+            .iter()
+            .filter(|d| {
+                if targeted_fixes.is_empty() {
+                    d.fix.is_some()
+                } else if let Some(dfix) = &d.fix {
+                    targeted_fixes.iter().any(|tf| {
+                        tf.file_path == dfix.file_path
+                            && (tf.description == dfix.description
+                                || tf.replacement == dfix.replacement)
+                    }) || targeted_fixes
+                        .iter()
+                        .any(|tf| tf.description == dfix.description)
+                } else {
+                    false
+                }
+            })
+            .collect();
+
+        let post_fingerprints: std::collections::HashSet<String> =
+            post_diagnostics.iter().map(diag_fingerprint).collect();
+        let pre_fingerprints: std::collections::HashSet<String> =
+            pre_diagnostics.iter().map(diag_fingerprint).collect();
+
+        let mut resolved = Vec::new();
+        let mut unresolved = Vec::new();
+
+        for d in targeted_pre {
+            let fp = diag_fingerprint(d);
+            if post_fingerprints.contains(&fp) {
+                unresolved.push(d.clone());
+            } else {
+                resolved.push(d.clone());
+            }
+        }
+
+        let mut regressions = Vec::new();
+        for d in post_diagnostics {
+            let fp = diag_fingerprint(d);
+            if !pre_fingerprints.contains(&fp) {
+                regressions.push(d.clone());
+            }
+        }
+
+        let is_clean = regressions.is_empty() && unresolved.is_empty();
+
+        Self {
+            resolved_diagnostics: resolved,
+            unresolved_diagnostics: unresolved,
+            new_regressions: regressions,
+            is_clean,
+        }
+    }
+}
+
 /// Applies a surgical span replacement to a text document
 pub fn apply_span_replacement(content: &str, span: &TextSpan, replacement: &str) -> Result<String> {
     if span.start_line == 0 || span.end_line < span.start_line {
@@ -274,7 +460,24 @@ pub fn compute_file_fix(content: &str, fix: &FixAction) -> Result<String> {
         .map(|s| s.to_string_lossy())
         .unwrap_or_default();
 
-    if file_name == "pyproject.toml" {
+    let is_remove = fix.description.to_lowercase().starts_with("remove ");
+
+    if is_remove {
+        if file_name == "pyproject.toml" {
+            remove_dependency_from_pyproject(content, &fix.replacement)
+        } else if file_name == "package.json" {
+            remove_dependency_from_package_json(content, &fix.replacement)
+        } else if file_name == "requirements.txt" {
+            Ok(remove_dependency_from_requirements_txt(
+                content,
+                &fix.replacement,
+            ))
+        } else if let Some(span) = &fix.span {
+            apply_span_replacement(content, span, "")
+        } else {
+            Ok(content.to_string())
+        }
+    } else if file_name == "pyproject.toml" {
         add_dependency_to_pyproject(content, &fix.replacement, "")
     } else if file_name == "package.json" {
         add_dependency_to_package_json(content, &fix.replacement, "*")
@@ -369,6 +572,10 @@ pub struct RollbackSnapshot {
     pub timestamp: u64,
     pub backups: Vec<FileBackup>,
     pub descriptions: Vec<String>,
+    #[serde(default)]
+    pub pre_diagnostics: Vec<Diagnostic>,
+    #[serde(default)]
+    pub fixes: Vec<FixAction>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -463,6 +670,16 @@ impl RemediationEngine {
         fixes: &[FixAction],
         project_root: Option<&Path>,
     ) -> Result<RemediationReport> {
+        self.apply_fixes_transactional_with_diagnostics(fixes, project_root, None)
+    }
+
+    /// Transactionally applies a series of fixes, persisting pre-remediation diagnostics for verification.
+    pub fn apply_fixes_transactional_with_diagnostics(
+        &self,
+        fixes: &[FixAction],
+        project_root: Option<&Path>,
+        pre_diagnostics: Option<&[Diagnostic]>,
+    ) -> Result<RemediationReport> {
         if fixes.is_empty() {
             return Ok(RemediationReport::default());
         }
@@ -540,6 +757,8 @@ impl RemediationEngine {
                     .as_secs(),
                 backups,
                 descriptions: fixes.iter().map(|f| f.description.clone()).collect(),
+                pre_diagnostics: pre_diagnostics.map(|d| d.to_vec()).unwrap_or_default(),
+                fixes: fixes.to_vec(),
             };
             let snapshot_path = root.join(ROLLBACK_FILENAME);
             if let Ok(json) = serde_json::to_string_pretty(&snapshot) {
@@ -559,8 +778,8 @@ impl RemediationEngine {
         project_root.join(ROLLBACK_FILENAME).is_file()
     }
 
-    /// Reverts files changed in the last remediation session
-    pub fn rollback_session(&self, project_root: &Path) -> Result<Vec<PathBuf>> {
+    /// Reads active rollback snapshot
+    pub fn read_rollback_snapshot(&self, project_root: &Path) -> Result<RollbackSnapshot> {
         let snapshot_path = project_root.join(ROLLBACK_FILENAME);
         if !snapshot_path.is_file() {
             anyhow::bail!(
@@ -577,6 +796,12 @@ impl RemediationEngine {
         })?;
         let snapshot: RollbackSnapshot =
             serde_json::from_str(&content).context("Failed to parse rollback snapshot JSON")?;
+        Ok(snapshot)
+    }
+
+    /// Reverts files changed in the last remediation session
+    pub fn rollback_session(&self, project_root: &Path) -> Result<Vec<PathBuf>> {
+        let snapshot = self.read_rollback_snapshot(project_root)?;
 
         let mut restored = Vec::new();
         for backup in snapshot.backups {
@@ -589,6 +814,7 @@ impl RemediationEngine {
             restored.push(backup.path);
         }
 
+        let snapshot_path = project_root.join(ROLLBACK_FILENAME);
         let _ = fs::remove_file(&snapshot_path);
         Ok(restored)
     }
@@ -864,5 +1090,105 @@ dependencies = []
         let content_restored = fs::read_to_string(&file1).unwrap();
         assert_eq!(content_restored, orig_content);
         assert!(!engine.has_rollback_session(dir.path()));
+    }
+
+    #[test]
+    fn test_remove_dependency_from_pyproject() {
+        let orig = r#"[project]
+name = "sample"
+dependencies = [
+    "requests>=2.28.0",
+    "unused-pkg>=1.0.0",
+]
+"#;
+        let modified = remove_dependency_from_pyproject(orig, "unused_pkg").unwrap();
+        assert!(!modified.contains("unused-pkg"));
+        assert!(modified.contains("requests>=2.28.0"));
+
+        let poetry_orig = r#"[tool.poetry.dependencies]
+python = "^3.10"
+requests = "^2.28.0"
+unused-lib = "^1.0.0"
+"#;
+        let poetry_mod = remove_dependency_from_pyproject(poetry_orig, "unused_lib").unwrap();
+        assert!(!poetry_mod.contains("unused-lib"));
+        assert!(poetry_mod.contains("requests"));
+    }
+
+    #[test]
+    fn test_remove_dependency_from_package_json() {
+        let orig = r#"{
+  "name": "sample",
+  "dependencies": {
+    "axios": "^1.0.0",
+    "lodash": "^4.17.21"
+  }
+}
+"#;
+        let modified = remove_dependency_from_package_json(orig, "lodash").unwrap();
+        assert!(!modified.contains("lodash"));
+        assert!(modified.contains("axios"));
+    }
+
+    #[test]
+    fn test_remove_dependency_from_requirements_txt() {
+        let orig = "# Header\nrequests>=2.28.0\nunused-pkg==1.0.0\n# Footer\n";
+        let modified = remove_dependency_from_requirements_txt(orig, "unused_pkg");
+        assert!(!modified.contains("unused-pkg"));
+        assert!(modified.contains("requests>=2.28.0"));
+        assert!(modified.contains("# Header"));
+        assert!(modified.contains("# Footer"));
+    }
+
+    #[test]
+    fn test_fix_verification_result() {
+        use stackvet_core::{Diagnostic, DiagnosticLocation, RuleId, Severity};
+
+        let diag1 = Diagnostic {
+            rule_id: RuleId::new("DEP-002"),
+            message: "Missing requests".to_string(),
+            severity: Severity::Error,
+            location: DiagnosticLocation::new("main.py"),
+            fix: Some(FixAction::new("Add requests", "pyproject.toml", "requests")),
+            ..Default::default()
+        };
+        let diag2 = Diagnostic {
+            rule_id: RuleId::new("NDEP-002"),
+            message: "Unused lodash".to_string(),
+            severity: Severity::Warning,
+            location: DiagnosticLocation::new("package.json"),
+            fix: Some(FixAction::new("Remove lodash", "package.json", "lodash")),
+            ..Default::default()
+        };
+
+        let pre = vec![diag1.clone(), diag2.clone()];
+        // Post fix: diag1 is resolved, diag2 is still unresolved, and no new regressions
+        let post = vec![diag2.clone()];
+        let targeted = vec![diag1.fix.clone().unwrap(), diag2.fix.clone().unwrap()];
+
+        let res = FixVerificationResult::verify(&pre, &post, &targeted);
+        assert_eq!(res.resolved_diagnostics.len(), 1);
+        assert_eq!(res.resolved_diagnostics[0].rule_id.0, "DEP-002");
+        assert_eq!(res.unresolved_diagnostics.len(), 1);
+        assert_eq!(res.unresolved_diagnostics[0].rule_id.0, "NDEP-002");
+        assert!(res.new_regressions.is_empty());
+        assert!(!res.is_clean); // not clean because diag2 unresolved
+    }
+
+    #[test]
+    fn test_remove_dependency_from_poetry_with_project_table() {
+        let orig = r#"[project]
+name = "hybrid-app"
+version = "0.1.0"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+unused-poetry-pkg = "^1.2.0"
+requests = "^2.31.0"
+"#;
+        let modified = remove_dependency_from_pyproject(orig, "unused-poetry-pkg").unwrap();
+        assert!(!modified.contains("unused-poetry-pkg"));
+        assert!(modified.contains("requests = \"^2.31.0\""));
+        assert!(modified.contains("name = \"hybrid-app\""));
     }
 }

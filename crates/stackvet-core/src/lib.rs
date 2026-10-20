@@ -242,6 +242,32 @@ impl FixAction {
     }
 }
 
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
+pub enum Confidence {
+    #[default]
+    High,
+    Medium,
+    Low,
+}
+
+impl Confidence {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Confidence::High => "HIGH",
+            Confidence::Medium => "MEDIUM",
+            Confidence::Low => "LOW",
+        }
+    }
+}
+
+impl fmt::Display for Confidence {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Diagnostic {
     pub rule_id: RuleId,
@@ -252,6 +278,24 @@ pub struct Diagnostic {
     pub suggested_remediation: String,
     pub fix: Option<FixAction>,
     pub language: LanguageTarget,
+    #[serde(default)]
+    pub confidence: Confidence,
+}
+
+impl Default for Diagnostic {
+    fn default() -> Self {
+        Self {
+            rule_id: RuleId::new(""),
+            message: String::new(),
+            severity: Severity::Warning,
+            location: DiagnosticLocation::default(),
+            explanation: String::new(),
+            suggested_remediation: String::new(),
+            fix: None,
+            language: LanguageTarget::General,
+            confidence: Confidence::High,
+        }
+    }
 }
 
 /// Contribution of an individual diagnostic to health score deduction.
@@ -319,6 +363,7 @@ pub struct DiagnosticBuilder {
     suggested_remediation: String,
     fix: Option<FixAction>,
     language: LanguageTarget,
+    confidence: Confidence,
 }
 
 impl DiagnosticBuilder {
@@ -332,7 +377,13 @@ impl DiagnosticBuilder {
             suggested_remediation: String::new(),
             fix: None,
             language,
+            confidence: Confidence::High,
         }
+    }
+
+    pub fn confidence(mut self, conf: Confidence) -> Self {
+        self.confidence = conf;
+        self
     }
 
     pub fn message(mut self, msg: impl Into<String>) -> Self {
@@ -378,6 +429,7 @@ impl DiagnosticBuilder {
             suggested_remediation: self.suggested_remediation,
             fix: self.fix,
             language: self.language,
+            confidence: self.confidence,
         }
     }
 }
@@ -396,6 +448,8 @@ pub struct WorkspaceMemberInfo {
     pub peer_dependencies: HashMap<String, String>,
     #[serde(default)]
     pub optional_dependencies: HashMap<String, String>,
+    #[serde(default)]
+    pub scripts: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -430,6 +484,8 @@ pub struct NodeProjectInfo {
     pub tsconfig_base_url: Option<String>,
     #[serde(default)]
     pub workspace_members: Vec<WorkspaceMemberInfo>,
+    #[serde(default)]
+    pub scripts: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

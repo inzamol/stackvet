@@ -151,7 +151,7 @@ stackvet init --ci github
 
 ## 3. Run Project Health Doctor (`stackvet doctor`)
 
-Get a complete project health report across all 6 core pillars (Dependencies, Security, Packaging, Architecture, Environment, Framework) with progress bars and top priority issues:
+Get a complete project health report across all 6 core pillars (Dependencies, Security, Packaging, Architecture, Environment, Framework) with health score, letter grade, root cause clusters, and detailed diagnostic breakdown:
 
 ```bash
 stackvet doctor
@@ -160,35 +160,54 @@ stackvet doctor
 Example output:
 
 ```text
-QV Project Health
-────────────────────────────────────────
+=======================================================================
+                StackVet Universal Project Health Report               
+=======================================================================
 
-Dependencies      92/100   █████████░
-Security           84/100   ████████░░
-Packaging          96/100   ██████████
-Architecture       78/100   ████████░░
-Environment        91/100   █████████░
-Framework          88/100   █████████░
+  Health Score: 87 / 100
+  Overall Grade: B (Satisfactory)
+  Calculation:   Base 100 - 13 deductions (3 unique findings, 0 duplicates ignored)
 
-Health Score: 87/100
+  Critical: 0  |  Errors: 1  |  Warnings: 2
 
-3 high-priority issues
-7 warnings
-42 checks passed
+--- Health Score Deduction Breakdown ---
+  • [ERROR] SQL-014: -8 pts (1 finding) - N+1 query detected in user fetch
+  • [WARN] DEP-002: -2 pts (1 finding) - Missing dependency: httpx
+  • [WARN] ENV-003: -2 pts (1 finding) - Python version mismatch
 
-Top problems:
-  1. SQL-014  N+1 query detected
-  2. DEP-002  Missing dependency: httpx
-  3. ENV-003  Python version mismatch
+--- Root Cause Clusters (3) ---
+1. [ERROR] Rule Violation: SQL-014
+   Summary: Query loop executing separate queries for related entities without joined load or subquery eager load.
+   Remediation: Use selectinload() or joinedload() for relationship loading.
+   Symptoms Count: 1
 
-Run `stackvet explain SQL-014` for details.
+2. [WARN] Rule Violation: DEP-002
+   Summary: Imported package is used in source code but not declared in pyproject.toml or requirements.txt.
+   Remediation: Add the missing dependency to pyproject.toml or package.json.
+   Symptoms Count: 1
+
+3. [WARN] Rule Violation: ENV-003
+   Summary: Detected Python runtime discrepancy between pyproject.toml and Dockerfile.
+   Remediation: Align the python version specification across all configuration files.
+   Symptoms Count: 1
+
+--- Diagnostic Details ---
+╭─────────┬──────────┬────────┬─────────────────────────┬──────────────────────────────────╮
+│ Rule    ┆ Severity ┆ Target ┆ File Location           ┆ Message                          │
+╞═════════╪══════════╪════════╪═════════════════════════╪══════════════════════════════════╡
+│ SQL-014 ┆ ERROR    ┆ Code   ┆ app/routers/users.py:42 ┆ N+1 query detected in user fetch │
+├╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
+│ DEP-002 ┆ WARN     ┆ Deps   ┆ app/services/client.py  ┆ Missing dependency: httpx        │
+├╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
+│ ENV-003 ┆ WARN     ┆ Env    ┆ Dockerfile:1            ┆ Python version mismatch          │
+╰─────────┴──────────┴────────┴─────────────────────────┴──────────────────────────────────╯
 ```
 
 ---
 
-## 4. Run Detailed Diagnostic Scan (`stackvet scan`)
+## 4. Run Fast CI Gate (`stackvet check` / `stackvet scan`)
 
-Run `stackvet scan` in your project root to perform a comprehensive diagnostic audit with full evidence panels:
+Run `stackvet scan` in your project root to perform a fast CI check with exit code gating (0 for clean, 1 for errors):
 
 ```bash
 stackvet scan
@@ -197,26 +216,9 @@ stackvet scan
 Example output:
 
 ```text
-🔍 stackvet
-Project: my-api
-Python:  3.12.7
-Package Manager: uv
-
-🔴 1 Errors   🟡 1 Warnings   🟢 48 Checks Passed
-
-┌────────────────── 🔴 DEP-001 Dependency constraint conflict ─────────────────┐
-│ celery 5.4.0 requires kombu<5.4.0,>=5.3.0, but installed is kombu 5.5.2.     │
-│                                                                              │
-│ Evidence:                                                                    │
-│   • celery declared requirement: kombu<5.4.0,>=5.3.0                         │
-│   • Installed kombu version: 5.5.2                                           │
-│                                                                              │
-│ Suggested fix:                                                               │
-│   Upgrade celery or pin kombu to <5.4.0,>=5.3.0.                             │
-│   $ uv add 'kombu<5.4.0,>=5.3.0'                                             │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-Health Score: 85/100
+✗ CI Check Failed: 1 finding(s) at or above ERROR threshold.
+  [ERROR] DEP-001: celery 5.4.0 requires kombu<5.4.0,>=5.3.0, but installed is kombu 5.5.2
+     at requirements.txt:4
 ```
 
 ---

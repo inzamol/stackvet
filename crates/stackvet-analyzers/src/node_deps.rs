@@ -1,6 +1,7 @@
 use anyhow::Result;
 use stackvet_core::{
-    Analyzer, Diagnostic, DiagnosticLocation, FixAction, LanguageTarget, ProjectContext, Severity,
+    Analyzer, Confidence, Diagnostic, DiagnosticLocation, FixAction, LanguageTarget,
+    ProjectContext, Severity,
 };
 use stackvet_node::builtins::is_node_builtin;
 use stackvet_node::{
@@ -175,12 +176,22 @@ impl Analyzer for NodeDependencyAnalyzer {
             }
         }
 
+        // Collect all scripts across root package.json and workspace members
+        let mut all_scripts: Vec<&String> = node_info.scripts.values().collect();
+        for m in &node_info.workspace_members {
+            all_scripts.extend(m.scripts.values());
+        }
+
         // NDEP-002: Unused Node Package
         let mut dep_names: Vec<&String> = node_info.dependencies.keys().collect();
         dep_names.sort();
         for dep_name in dep_names {
             let matches_import = imported_packages.contains_key(dep_name);
-            // Ignore build tools, type definitions or runtime plugins often in dependencies
+            if matches_import {
+                continue;
+            }
+
+            // Whitelist build tools, framework conventions, type definitions
             let whitelist = [
                 "react",
                 "react-dom",
@@ -189,8 +200,70 @@ impl Analyzer for NodeDependencyAnalyzer {
                 "postcss",
                 "autoprefixer",
                 "typescript",
+                "tsx",
+                "ts-node",
+                "nodemon",
+                "webpack",
+                "vite",
+                "rollup",
+                "esbuild",
+                "babel",
+                "eslint",
+                "prettier",
+                "jest",
+                "vitest",
+                "rimraf",
+                "cross-env",
+                "dotenv",
+                "dotenv-cli",
+                "concurrently",
+                "npm-run-all",
             ];
-            if !matches_import && !whitelist.contains(&dep_name.as_str()) {
+            if whitelist.contains(&dep_name.as_str()) || dep_name.starts_with("@types/") {
+                continue;
+            }
+
+            // Check if invoked in package.json scripts (e.g. "build": "prisma generate")
+            let is_in_scripts = all_scripts.iter().any(|cmd| {
+                cmd.split(|c: char| c.is_whitespace() || c == '&' || c == '|' || c == ';')
+                    .any(|tok| tok == dep_name.as_str() || tok.ends_with(&format!("/{}", dep_name)))
+            });
+            if is_in_scripts {
+                continue;
+            }
+
+            // Check for plugin / config packages loaded dynamically by external tooling
+            let is_plugin_or_config = dep_name.starts_with("eslint-plugin-")
+                || dep_name.starts_with("eslint-config-")
+                || dep_name.starts_with("prettier-plugin-")
+                || dep_name.starts_with("babel-plugin-")
+                || dep_name.starts_with("babel-preset-")
+                || dep_name.starts_with("postcss-")
+                || dep_name.starts_with("rollup-plugin-")
+                || dep_name.starts_with("vite-plugin-")
+                || dep_name.starts_with("@typescript-eslint/")
+                || dep_name.starts_with("@babel/");
+
+            if is_plugin_or_config {
+                diagnostics.push(
+                    Diagnostic::builder("NDEP-002", Severity::Warning, LanguageTarget::Node)
+                        .message(format!(
+                            "Declared production dependency '{}' appears unused but matches build plugin or config pattern",
+                            dep_name
+                        ))
+                        .file(&node_info.package_json_path)
+                        .confidence(Confidence::Medium)
+                        .explanation(format!(
+                            "Package '{}' is not directly imported in code, but may be dynamically invoked by external configuration files. Automatic removal is withheld.",
+                            dep_name
+                        ))
+                        .remediation(format!(
+                            "Verify if '{}' is used in tool configuration or move it to devDependencies.",
+                            dep_name
+                        ))
+                        .build(),
+                );
+            } else {
                 diagnostics.push(
                     Diagnostic::builder("NDEP-002", Severity::Warning, LanguageTarget::Node)
                         .message(format!(
@@ -198,6 +271,7 @@ impl Analyzer for NodeDependencyAnalyzer {
                             dep_name
                         ))
                         .file(&node_info.package_json_path)
+                        .confidence(Confidence::High)
                         .explanation(format!(
                             "Package '{}' increases bundle size and node_modules installation overhead without active usage.",
                             dep_name
@@ -205,6 +279,11 @@ impl Analyzer for NodeDependencyAnalyzer {
                         .remediation(format!(
                             "Remove '{}' from package.json or move to devDependencies.",
                             dep_name
+                        ))
+                        .fix(FixAction::new(
+                            format!("Remove {} from dependencies", dep_name),
+                            node_info.package_json_path.clone(),
+                            dep_name.clone(),
                         ))
                         .build(),
                 );
