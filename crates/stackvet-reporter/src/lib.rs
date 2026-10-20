@@ -682,7 +682,11 @@ fn relativize_sarif_uri(
 
     let root_buf = scan_root
         .map(|r| r.canonicalize().unwrap_or_else(|_| r.to_path_buf()))
-        .or_else(|| std::env::current_dir().ok().map(|c| c.canonicalize().unwrap_or(c)));
+        .or_else(|| {
+            std::env::current_dir()
+                .ok()
+                .map(|c| c.canonicalize().unwrap_or(c))
+        });
 
     if let Some(root_path) = root_buf {
         let root_raw = root_path.to_string_lossy();
