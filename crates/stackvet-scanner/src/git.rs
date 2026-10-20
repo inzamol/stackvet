@@ -91,24 +91,16 @@ pub fn get_merge_base(root: &Path, base: &str, head: &str) -> Result<String> {
         }
     }
 
-    // Fallback: If merge-base fails (e.g. shallow clone or detached ref), try resolving base directly
-    let rev_output = Command::new("git")
-        .args(["rev-parse", base])
-        .current_dir(root)
-        .output();
-
-    if let Ok(out) = rev_output {
-        if out.status.success() {
-            let hash = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !hash.is_empty() {
-                return Ok(hash);
-            }
-        }
-    }
-
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     anyhow::bail!(
-        "Unable to determine merge-base or resolve base reference '{}'. Ensure git history is available (e.g. fetch-depth: 0 in CI).",
-        base
+        "Unable to determine common ancestor merge-base between '{}' and '{}'{}. Ensure git history is available (e.g. fetch-depth: 0 in CI).",
+        base,
+        head,
+        if stderr.is_empty() {
+            String::new()
+        } else {
+            format!(": {stderr}")
+        }
     )
 }
 
@@ -159,17 +151,17 @@ pub fn parse_unified_diff_hunks(
     let mut current_file: Option<PathBuf> = None;
 
     for line in diff_content.lines() {
-        if line.starts_with("+++ ") && !line.starts_with("+++ /dev/null") {
-            let raw = line["+++ ".len()..].trim().trim_matches('"');
-            if raw != "/dev/null" {
+        if let Some(rest) = line.strip_prefix("+++ ") {
+            let raw = rest.trim().trim_matches('"');
+            if raw == "/dev/null" {
+                current_file = None;
+            } else {
                 let rel = if let Some(stripped) = raw.strip_prefix("b/") {
                     stripped
                 } else {
                     raw
                 };
                 current_file = Some(root.join(rel));
-            } else {
-                current_file = None;
             }
         } else if line.starts_with("@@ ") {
             if let Some(target) = &current_file {
@@ -605,6 +597,27 @@ mod tests {
 
         let other_ranges = hunks.get(&root.join("app/other.py")).unwrap();
         assert_eq!(other_ranges, &[40..=40]);
+    }
+
+    #[test]
+    fn test_parse_unified_diff_hunks_with_deletion() {
+        let root = Path::new("/workspace");
+        let diff = r#"
+--- a/app/main.py
++++ b/app/main.py
+@@ -10,0 +11,5 @@
++import httpx
+--- a/app/deleted.py
++++ /dev/null
+@@ -1,5 +0,0 @@
+-old_deleted_content
+"#;
+        let hunks = parse_unified_diff_hunks(diff, root);
+        let main_ranges = hunks.get(&root.join("app/main.py")).unwrap();
+        // app/main.py should only have the 11..=15 range, not the deletion range
+        assert_eq!(main_ranges, &[11..=15]);
+        assert!(!hunks.contains_key(&root.join("app/deleted.py")));
+        assert!(!hunks.contains_key(&PathBuf::from("/dev/null")));
     }
 
     #[test]
