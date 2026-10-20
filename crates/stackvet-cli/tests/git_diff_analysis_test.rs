@@ -224,3 +224,44 @@ fn test_pr_analysis_github_annotations_and_markdown() {
     assert!(markdown.contains("### 🔍 StackVet Pull Request Analysis"));
     assert!(markdown.contains("DEP-001"));
 }
+
+#[test]
+#[allow(clippy::single_range_in_vec_init)]
+fn test_parse_unified_diff_hunks_quoted_paths() {
+    let root = Path::new("/workspace");
+    let diff = r#"diff --git "a/path with space/file.py" "b/path with space/file.py"
+--- "a/path with space/file.py"
++++ "b/path with space/file.py"
+@@ -5,3 +5,4 @@ def test():
+     pass
++    # new line
+"#;
+    let hunks = parse_unified_diff_hunks(diff, root);
+    let target = root.join("path with space/file.py");
+    assert!(
+        hunks.contains_key(&target),
+        "Expected key for unquoted relative path"
+    );
+    assert_eq!(hunks.get(&target).unwrap().as_slice(), &[5..=8]);
+}
+
+#[test]
+fn test_github_annotations_escaping() {
+    let d = Diagnostic {
+        rule_id: RuleId::new("RULE:1,2"),
+        message: "Message with % and \n newlines".to_string(),
+        severity: Severity::Error,
+        location: DiagnosticLocation::new("src/path:name,test.py")
+            .with_span(TextSpan::single_line(10, 2, 5)),
+        language: LanguageTarget::Python,
+        ..Default::default()
+    };
+
+    let result = PrAnalysisResult::analyze(vec![], &[d], &[]);
+    let annotations = result.render_github_annotations();
+    let text = annotations.join("\n");
+
+    assert!(text.contains("file=src/path%3Aname%2Ctest.py"));
+    assert!(text.contains("title=RULE%3A1%2C2"));
+    assert!(text.contains("Message with %25 and %0A newlines"));
+}

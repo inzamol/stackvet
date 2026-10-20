@@ -137,7 +137,7 @@ impl ProjectScanner {
         let walker = builder.build();
 
         for entry_res in walker.flatten() {
-            if entry_res.file_type().map_or(false, |ft| ft.is_file()) {
+            if entry_res.file_type().is_some_and(|ft| ft.is_file()) {
                 let path = entry_res.into_path();
                 let file_name = path
                     .file_name()

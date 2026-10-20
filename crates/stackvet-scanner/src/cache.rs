@@ -7,7 +7,7 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const CACHE_SCHEMA_VERSION: u32 = 1;
+pub const CACHE_SCHEMA_VERSION: u32 = 2;
 pub const DEFAULT_CACHE_DIR: &str = ".stackvet/cache";
 pub const DEFAULT_CACHE_FILE: &str = "scan_cache.json";
 
@@ -39,7 +39,7 @@ pub fn normalize_rel_path(root: &Path, file_path: &Path) -> String {
 pub struct FileCacheEntry {
     pub content_hash: String,
     pub file_size: u64,
-    pub mtime: u64,
+    pub mtime: u128,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -47,10 +47,12 @@ pub struct FileCacheEntry {
 pub struct ScanCacheData {
     pub schema_version: u32,
     pub stackvet_version: String,
-    pub timestamp: u64,
+    pub timestamp: u128,
     pub config_hash: String,
     pub manifest_hashes: BTreeMap<String, String>,
     pub files: BTreeMap<String, FileCacheEntry>,
+    #[serde(default)]
+    pub project_diagnostics: Vec<Diagnostic>,
 }
 
 impl ScanCacheData {
@@ -58,7 +60,7 @@ impl ScanCacheData {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs();
+            .as_nanos();
         Self {
             schema_version: CACHE_SCHEMA_VERSION,
             stackvet_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -66,6 +68,7 @@ impl ScanCacheData {
             config_hash,
             manifest_hashes: BTreeMap::new(),
             files: BTreeMap::new(),
+            project_diagnostics: Vec::new(),
         }
     }
 }
@@ -153,7 +156,12 @@ impl IncrementalCacheManager {
 
     pub fn with_custom_cache_dir(root: impl AsRef<Path>, cache_dir: impl AsRef<Path>) -> Self {
         let r = root.as_ref().to_path_buf();
-        let c_dir = cache_dir.as_ref().to_path_buf();
+        let c = cache_dir.as_ref();
+        let c_dir = if c.is_absolute() {
+            c.to_path_buf()
+        } else {
+            r.join(c)
+        };
         let c_file = c_dir.join(DEFAULT_CACHE_FILE);
         Self {
             root: r,
@@ -267,13 +275,17 @@ impl IncrementalCacheManager {
                 .modified()
                 .ok()
                 .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|d| d.as_secs())
+                .map(|d| d.as_nanos())
                 .unwrap_or(0);
 
             if let Some(entry) = cached_data.files.get(&rel) {
-                // If mtime and file size match, assume unchanged without re-reading content.
+                // If mtime and file size match and mtime is strictly older than cache timestamp,
+                // assume unchanged without re-reading content.
                 // Otherwise re-read and compare content hash.
-                if entry.file_size == file_size && entry.mtime == mtime {
+                if entry.file_size == file_size
+                    && entry.mtime == mtime
+                    && mtime < cached_data.timestamp
+                {
                     changes.unchanged_files.push(path.clone());
                 } else {
                     let content_hash = hash_file_content(path).unwrap_or_default();
@@ -442,7 +454,7 @@ mod tests {
         // Mutate manifest
         fs::write(&manifest, "[project]\nname='test2'\n").unwrap();
 
-        let res = manager.validate(&[manifest.clone()], &[], "conf1");
+        let res = manager.validate(std::slice::from_ref(&manifest), &[], "conf1");
         match res {
             CacheValidationResult::Invalid(CacheInvalidationReason::ManifestChanged {
                 manifest: m,

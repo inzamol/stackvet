@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use colored::Colorize;
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
@@ -430,17 +430,27 @@ fn collect_diagnostics_incremental(
     verbose: bool,
     custom_cache_dir: Option<&Path>,
 ) -> Result<(Vec<stackvet_core::Diagnostic>, usize, bool)> {
+    let resolve_cache_dir = |dir: &Path| -> PathBuf {
+        if dir.is_absolute() {
+            dir.to_path_buf()
+        } else {
+            root.join(dir)
+        }
+    };
     let cache_mgr = if let Some(dir) = custom_cache_dir {
-        IncrementalCacheManager::with_custom_cache_dir(root, dir)
+        IncrementalCacheManager::with_custom_cache_dir(root, resolve_cache_dir(dir))
     } else if let Some(dir) = &config.cache.dir {
-        IncrementalCacheManager::with_custom_cache_dir(root, dir)
+        IncrementalCacheManager::with_custom_cache_dir(root, resolve_cache_dir(dir))
     } else {
         IncrementalCacheManager::new(root)
     };
 
-    let mut config_bytes = Vec::new();
-    config_bytes.extend_from_slice(toml::to_string(config).unwrap_or_default().as_bytes());
+    let config_val = serde_json::to_value(config)
+        .context("Failed to serialize configuration for cache validation")?;
+    let mut config_bytes = serde_json::to_vec(&config_val)
+        .context("Failed to serialize configuration value for cache validation")?;
     for ign in cli_ignores {
+        config_bytes.push(b'\0');
         config_bytes.extend_from_slice(ign.as_bytes());
     }
     let config_hash = hash_bytes(&config_bytes);
@@ -468,9 +478,7 @@ fn collect_diagnostics_incremental(
                     .values()
                     .flat_map(|e| e.diagnostics.clone())
                     .collect();
-
-                let mut fw_diags = run_all_framework_analyzers(ctx)?;
-                all_diags.append(&mut fw_diags);
+                all_diags.extend(cached_data.project_diagnostics.clone());
 
                 let (mut deduped, duplicates_count) = deduplicate_diagnostics(&all_diags);
                 sort_diagnostics_deterministic(&mut deduped);
@@ -495,6 +503,7 @@ fn collect_diagnostics_incremental(
                 .map(|p| normalize_rel_path(root, p))
                 .collect();
 
+            // 1. Restore cached diagnostics for unchanged source files
             let mut all_diags: Vec<stackvet_core::Diagnostic> = Vec::new();
             for (rel_path, entry) in &cached_data.files {
                 if unchanged_set.contains(rel_path) {
@@ -502,29 +511,60 @@ fn collect_diagnostics_incremental(
                 }
             }
 
+            // 2. Identify modified and added files
             let mut reanalyze_files = changes.modified_files.clone();
             reanalyze_files.extend(changes.added_files.clone());
+            let reanalyze_set: HashSet<PathBuf> = reanalyze_files.iter().cloned().collect();
+            let source_files_set: HashSet<PathBuf> = ctx.source_files.iter().cloned().collect();
 
+            let is_source_file = |p: &Path| -> bool {
+                source_files_set.contains(p) || source_files_set.contains(&root.join(p))
+            };
+            let is_reanalyzed = |p: &Path| -> bool {
+                reanalyze_set.contains(p) || reanalyze_set.contains(&root.join(p))
+            };
+
+            // 3. Project-wide analyzers receive the full ctx.source_files so rules inspecting
+            // full sets (unused deps, lockfile drift, import graph cycles) remain sound.
+            let project_wide_diags = run_all_analyzers(ctx, offline)?;
+
+            // 4. Per-file framework analyzers only inspect reanalyzed files
             let mut sub_ctx = ctx.clone();
             sub_ctx.source_files = reanalyze_files.clone();
+            let fresh_fw_diags = run_all_framework_analyzers(&sub_ctx)?;
 
-            let (fresh_diags, _) = collect_all_diagnostics(&sub_ctx, offline)?;
+            let mut fresh_diags = project_wide_diags;
+            fresh_diags.extend(fresh_fw_diags);
 
             let mut fresh_by_file: HashMap<PathBuf, Vec<stackvet_core::Diagnostic>> =
                 HashMap::new();
+            let mut fresh_project_diags: Vec<stackvet_core::Diagnostic> = Vec::new();
+
             for d in fresh_diags {
-                all_diags.push(d.clone());
-                fresh_by_file
-                    .entry(d.location.file_path.clone())
-                    .or_default()
-                    .push(d);
+                if is_reanalyzed(&d.location.file_path) {
+                    all_diags.push(d.clone());
+                    let key = if d.location.file_path.is_absolute() {
+                        d.location.file_path.clone()
+                    } else {
+                        root.join(&d.location.file_path)
+                    };
+                    fresh_by_file.entry(key).or_default().push(d);
+                } else if !is_source_file(&d.location.file_path) {
+                    fresh_project_diags.push(d);
+                }
             }
 
+            // Replace cached project diagnostics with fresh results
+            cached_data.project_diagnostics = fresh_project_diags;
+            all_diags.extend(cached_data.project_diagnostics.clone());
+
+            // Remove deleted files from cache
             for del in &changes.deleted_files {
                 let rel = normalize_rel_path(root, del);
                 cached_data.files.remove(&rel);
             }
 
+            // Update cache entries for reanalyzed files
             for p in &reanalyze_files {
                 let rel = normalize_rel_path(root, p);
                 if let Ok(metadata) = fs::metadata(p) {
@@ -533,10 +573,13 @@ fn collect_diagnostics_incremental(
                         .modified()
                         .ok()
                         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|d| d.as_secs())
+                        .map(|d| d.as_nanos())
                         .unwrap_or(0);
                     let content_hash = hash_file_content(p).unwrap_or_default();
-                    let diags = fresh_by_file.remove(p).unwrap_or_default();
+                    let diags = fresh_by_file
+                        .remove(p)
+                        .or_else(|| fresh_by_file.remove(&root.join(p)))
+                        .unwrap_or_default();
 
                     cached_data.files.insert(
                         rel,
@@ -578,10 +621,12 @@ fn collect_diagnostics_incremental(
             let mut diags_by_file: HashMap<PathBuf, Vec<stackvet_core::Diagnostic>> =
                 HashMap::new();
             for d in &all_diags {
-                diags_by_file
-                    .entry(d.location.file_path.clone())
-                    .or_default()
-                    .push(d.clone());
+                let key = if d.location.file_path.is_absolute() {
+                    d.location.file_path.clone()
+                } else {
+                    root.join(&d.location.file_path)
+                };
+                diags_by_file.entry(key).or_default().push(d.clone());
             }
 
             for p in &ctx.source_files {
@@ -592,10 +637,13 @@ fn collect_diagnostics_incremental(
                         .modified()
                         .ok()
                         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|d| d.as_secs())
+                        .map(|d| d.as_nanos())
                         .unwrap_or(0);
                     let content_hash = hash_file_content(p).unwrap_or_default();
-                    let diags = diags_by_file.remove(p).unwrap_or_default();
+                    let diags = diags_by_file
+                        .remove(p)
+                        .or_else(|| diags_by_file.remove(&root.join(p)))
+                        .unwrap_or_default();
 
                     new_cache.files.insert(
                         rel,
@@ -608,6 +656,13 @@ fn collect_diagnostics_incremental(
                     );
                 }
             }
+
+            // Save all remaining diags_by_file entries into project_diagnostics
+            let mut remaining_project_diags: Vec<stackvet_core::Diagnostic> = Vec::new();
+            for diags in diags_by_file.into_values() {
+                remaining_project_diags.extend(diags);
+            }
+            new_cache.project_diagnostics = remaining_project_diags;
 
             let _ = cache_mgr.save(&new_cache);
 
@@ -2122,43 +2177,47 @@ async fn main() -> Result<()> {
                 } else {
                     root.join(b_file)
                 };
-                if baseline_path.is_file() {
-                    match BaselineData::load_from_file(&baseline_path) {
-                        Ok(bdata) => bdata
-                            .issues
-                            .iter()
-                            .map(|entry| {
-                                stackvet_core::Diagnostic::builder(
-                                    &entry.rule_id,
-                                    stackvet_core::config::parse_severity(&entry.severity)
-                                        .unwrap_or(Severity::Warning),
-                                    stackvet_core::LanguageTarget::General,
-                                )
-                                .message(&entry.message)
-                                .location(
-                                    stackvet_core::DiagnosticLocation::new(&entry.file_path)
-                                        .with_span(stackvet_core::TextSpan::single_line(
-                                            entry.line, 1, 1,
-                                        )),
-                                )
-                                .build()
-                            })
-                            .collect(),
-                        Err(e) => {
-                            eprintln!(
-                                "{}",
-                                format!(
-                                    "Failed to load baseline file '{}': {e}",
-                                    baseline_path.display()
-                                )
-                                .red()
-                                .bold()
-                            );
-                            ExitCode::ExecutionError.exit();
-                        }
+                if !baseline_path.is_file() {
+                    eprintln!(
+                        "{}",
+                        format!("Baseline file not found: '{}'", baseline_path.display())
+                            .red()
+                            .bold()
+                    );
+                    ExitCode::ExecutionError.exit();
+                }
+                match BaselineData::load_from_file(&baseline_path) {
+                    Ok(bdata) => bdata
+                        .issues
+                        .iter()
+                        .map(|entry| {
+                            stackvet_core::Diagnostic::builder(
+                                &entry.rule_id,
+                                stackvet_core::config::parse_severity(&entry.severity)
+                                    .unwrap_or(Severity::Warning),
+                                stackvet_core::LanguageTarget::General,
+                            )
+                            .message(&entry.message)
+                            .location(
+                                stackvet_core::DiagnosticLocation::new(&entry.file_path).with_span(
+                                    stackvet_core::TextSpan::single_line(entry.line, 1, 1),
+                                ),
+                            )
+                            .build()
+                        })
+                        .collect(),
+                    Err(e) => {
+                        eprintln!(
+                            "{}",
+                            format!(
+                                "Failed to load baseline file '{}': {e}",
+                                baseline_path.display()
+                            )
+                            .red()
+                            .bold()
+                        );
+                        ExitCode::ExecutionError.exit();
                     }
-                } else {
-                    Vec::new()
                 }
             } else if root.join(".stackvet-baseline.json").is_file() {
                 if let Ok(bdata) =

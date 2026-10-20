@@ -159,12 +159,18 @@ pub fn parse_unified_diff_hunks(
     let mut current_file: Option<PathBuf> = None;
 
     for line in diff_content.lines() {
-        if line.starts_with("+++ b/") {
-            let rel = &line["+++ b/".len()..];
-            current_file = Some(root.join(rel));
-        } else if line.starts_with("+++ ") && !line.starts_with("+++ /dev/null") {
-            let rel = line["+++ ".len()..].trim_matches('"');
-            current_file = Some(root.join(rel));
+        if line.starts_with("+++ ") && !line.starts_with("+++ /dev/null") {
+            let raw = line["+++ ".len()..].trim().trim_matches('"');
+            if raw != "/dev/null" {
+                let rel = if let Some(stripped) = raw.strip_prefix("b/") {
+                    stripped
+                } else {
+                    raw
+                };
+                current_file = Some(root.join(rel));
+            } else {
+                current_file = None;
+            }
         } else if line.starts_with("@@ ") {
             if let Some(target) = &current_file {
                 // Parse @@ -a,b +start,count @@ or @@ -a,b +start @@
@@ -215,13 +221,35 @@ pub fn collect_git_diff(
             "origin/main".to_string()
         }
     } else {
-        "HEAD~1".to_string()
+        let ref_exists = |r: &str| -> bool {
+            Command::new("git")
+                .args(["rev-parse", "--verify", "--quiet", r])
+                .current_dir(root)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        };
+        if ref_exists("main") || ref_exists("origin/main") {
+            if ref_exists("origin/main") {
+                "origin/main".to_string()
+            } else {
+                "main".to_string()
+            }
+        } else if ref_exists("master") || ref_exists("origin/master") {
+            if ref_exists("origin/master") {
+                "origin/master".to_string()
+            } else {
+                "master".to_string()
+            }
+        } else {
+            "HEAD~1".to_string()
+        }
     };
 
     let head = head_ref.unwrap_or("HEAD");
 
-    let merge_base = get_merge_base(root, &base, head).ok();
-    let compare_target = merge_base.as_deref().unwrap_or(&base);
+    let merge_base = get_merge_base(root, &base, head)?;
+    let compare_target = &merge_base;
 
     // 1. Get changed files using name-status
     let status_output = Command::new("git")
@@ -231,6 +259,20 @@ pub fn collect_git_diff(
         .with_context(|| {
             format!("Failed to run 'git diff --name-status {compare_target} {head}'")
         })?;
+
+    if !status_output.status.success() {
+        let stderr = String::from_utf8_lossy(&status_output.stderr)
+            .trim()
+            .to_string();
+        anyhow::bail!(
+            "Git diff command failed: {}",
+            if stderr.is_empty() {
+                "unknown error"
+            } else {
+                &stderr
+            }
+        );
+    }
 
     let stdout_str = String::from_utf8_lossy(&status_output.stdout);
     let mut changed_files = parse_name_status(&stdout_str, root);
@@ -242,11 +284,13 @@ pub fn collect_git_diff(
         .output();
 
     if let Ok(hunk_out) = hunk_output {
-        let hunk_str = String::from_utf8_lossy(&hunk_out.stdout);
-        let hunk_map = parse_unified_diff_hunks(&hunk_str, root);
-        for file in &mut changed_files {
-            if let Some(ranges) = hunk_map.get(&file.path) {
-                file.changed_lines = ranges.clone();
+        if hunk_out.status.success() {
+            let hunk_str = String::from_utf8_lossy(&hunk_out.stdout);
+            let hunk_map = parse_unified_diff_hunks(&hunk_str, root);
+            for file in &mut changed_files {
+                if let Some(ranges) = hunk_map.get(&file.path) {
+                    file.changed_lines = ranges.clone();
+                }
             }
         }
     }
@@ -254,7 +298,7 @@ pub fn collect_git_diff(
     Ok(GitDiffSummary {
         base_ref: base,
         head_ref: head.to_string(),
-        merge_base,
+        merge_base: Some(merge_base),
         is_shallow,
         changed_files,
     })
@@ -487,19 +531,37 @@ impl PrAnalysisResult {
                 _ => "notice",
             };
 
-            let file = d.location.file_path.display();
+            let file_str = d.location.file_path.to_string_lossy();
+            let escaped_file = escape_workflow_property(&file_str);
+            let escaped_title = escape_workflow_property(&d.rule_id.0);
+            let escaped_message = escape_workflow_data(&d.message);
             let line = d.location.span.as_ref().map(|s| s.start_line).unwrap_or(1);
             let col = d.location.span.as_ref().map(|s| s.start_col).unwrap_or(1);
 
             annotations.push(format!(
                 "::{} file={},line={},col={},title={}::{}",
-                level, file, line, col, d.rule_id.0, d.message
+                level, escaped_file, line, col, escaped_title, escaped_message
             ));
         }
         annotations
     }
 }
+
+fn escape_workflow_property(s: &str) -> String {
+    s.replace('%', "%25")
+        .replace('\r', "%0D")
+        .replace('\n', "%0A")
+        .replace(':', "%3A")
+        .replace(',', "%2C")
+}
+
+fn escape_workflow_data(s: &str) -> String {
+    s.replace('%', "%25")
+        .replace('\r', "%0D")
+        .replace('\n', "%0A")
+}
 #[cfg(test)]
+#[allow(clippy::single_range_in_vec_init)]
 mod tests {
     use super::*;
     use stackvet_core::Severity;

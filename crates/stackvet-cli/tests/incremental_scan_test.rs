@@ -84,7 +84,7 @@ fn test_incremental_cache_cold_start_and_subsequent_hit() {
                 .unwrap()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_secs(),
+                .as_nanos(),
             diagnostics: vec![diag_a.clone()],
         },
     );
@@ -99,7 +99,7 @@ fn test_incremental_cache_cold_start_and_subsequent_hit() {
                 .unwrap()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_secs(),
+                .as_nanos(),
             diagnostics: vec![],
         },
     );
@@ -157,7 +157,7 @@ fn test_incremental_cache_detects_modified_and_added_files() {
                 .unwrap()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_secs(),
+                .as_nanos(),
             diagnostics: vec![],
         },
     );
