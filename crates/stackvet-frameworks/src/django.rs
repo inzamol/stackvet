@@ -7,6 +7,12 @@ use std::path::Path;
 
 pub struct DjangoAnalyzer;
 
+impl Default for DjangoAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DjangoAnalyzer {
     pub fn new() -> Self {
         Self

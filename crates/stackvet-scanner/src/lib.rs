@@ -43,6 +43,10 @@ pub struct ProjectScanner {
     custom_ignores: Vec<String>,
     use_default_exclusions: bool,
     verbose: bool,
+    max_file_size: u64,
+    max_depth: usize,
+    max_files: usize,
+    follow_symlinks: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -53,6 +57,10 @@ pub struct ScanResult {
     pub dockerfiles: Vec<PathBuf>,
     pub ci_workflows: Vec<PathBuf>,
     pub ignored_paths: Vec<PathBuf>,
+    pub unreadable_files: Vec<(PathBuf, String)>,
+    pub oversized_files: Vec<(PathBuf, u64)>,
+    pub skipped_symlinks: Vec<(PathBuf, String)>,
+    pub is_truncated: bool,
 }
 
 impl ProjectScanner {
@@ -62,6 +70,10 @@ impl ProjectScanner {
             custom_ignores: Vec::new(),
             use_default_exclusions: true,
             verbose: false,
+            max_file_size: 10 * 1024 * 1024, // 10 MB
+            max_depth: 40,
+            max_files: 50_000,
+            follow_symlinks: false,
         }
     }
 
@@ -84,13 +96,43 @@ impl ProjectScanner {
         self
     }
 
+    /// Configures maximum individual file size in bytes before skipping (prevents memory exhaustion).
+    pub fn with_max_file_size(mut self, max_file_size: u64) -> Self {
+        self.max_file_size = max_file_size;
+        self
+    }
+
+    /// Configures maximum directory traversal depth.
+    pub fn with_max_depth(mut self, max_depth: usize) -> Self {
+        self.max_depth = max_depth;
+        self
+    }
+
+    /// Configures maximum total files scanned.
+    pub fn with_max_files(mut self, max_files: usize) -> Self {
+        self.max_files = max_files;
+        self
+    }
+
+    /// Configures whether symlinks should be followed (default: false for security).
+    pub fn with_follow_symlinks(mut self, follow_symlinks: bool) -> Self {
+        self.follow_symlinks = follow_symlinks;
+        self
+    }
+
     pub fn scan(&self) -> ScanResult {
         let mut result = ScanResult::default();
+        let canonical_root = self
+            .root
+            .canonicalize()
+            .unwrap_or_else(|_| self.root.clone());
 
         let mut builder = WalkBuilder::new(&self.root);
         builder.hidden(false);
         builder.parents(false);
         builder.git_ignore(true);
+        builder.max_depth(Some(self.max_depth));
+        builder.follow_links(self.follow_symlinks);
 
         // Native .stackvetignore discovery across directory tree
         builder.add_custom_ignore_filename(".stackvetignore");
@@ -136,64 +178,120 @@ impl ProjectScanner {
 
         let walker = builder.build();
 
-        for entry_res in walker.flatten() {
-            if entry_res.file_type().is_some_and(|ft| ft.is_file()) {
-                let path = entry_res.into_path();
-                let file_name = path
-                    .file_name()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_default();
-
-                // Check Dockerfiles
-                if file_name == "Dockerfile"
-                    || file_name.starts_with("Dockerfile.")
-                    || file_name.ends_with(".dockerfile")
-                    || file_name.starts_with("docker-compose")
-                {
-                    result.dockerfiles.push(path.clone());
+        for entry_res in walker {
+            let entry = match entry_res {
+                Ok(e) => e,
+                Err(err) => {
+                    let (path, sanitized) = match &err {
+                        ignore::Error::WithPath { path, err } => (path.clone(), err.to_string()),
+                        _ => (self.root.clone(), err.to_string()),
+                    };
+                    result.unreadable_files.push((path, sanitized));
+                    continue;
                 }
+            };
 
-                // Check GitHub Actions / CI workflows
-                if path
-                    .to_string_lossy()
-                    .replace('\\', "/")
-                    .contains(".github/workflows")
-                    && (file_name.ends_with(".yml") || file_name.ends_with(".yaml"))
-                {
-                    result.ci_workflows.push(path.clone());
+            let path = entry.path();
+
+            // Security check: Verify path stays strictly within canonical repository root boundary
+            if let Ok(canonical_entry) = path.canonicalize() {
+                if !canonical_entry.starts_with(&canonical_root) {
+                    result.skipped_symlinks.push((
+                        path.to_path_buf(),
+                        "Target path escapes repository boundary".to_string(),
+                    ));
+                    continue;
                 }
+            } else if entry.file_type().is_some_and(|ft| ft.is_symlink()) {
+                result.skipped_symlinks.push((
+                    path.to_path_buf(),
+                    "Broken or unresolvable symlink".to_string(),
+                ));
+                continue;
+            }
 
-                // Manifests & Lockfiles
-                if file_name == "pyproject.toml"
-                    || file_name == "package.json"
-                    || file_name == "requirements.txt"
-                    || file_name == "uv.lock"
-                    || file_name == "poetry.lock"
-                    || file_name == "package-lock.json"
-                    || file_name == "pnpm-lock.yaml"
-                    || file_name == "yarn.lock"
-                    || file_name == "bun.lock"
-                    || file_name == "bun.lockb"
-                    || file_name == "pnpm-workspace.yaml"
-                    || file_name == "lerna.json"
-                    || file_name == "bunfig.toml"
-                    || file_name == "Cargo.toml"
-                {
-                    result.manifest_files.push(path.clone());
+            // Skip non-regular files (pipes, sockets, character/block devices)
+            let is_regular_file = entry.file_type().is_some_and(|ft| ft.is_file());
+            if !is_regular_file {
+                continue;
+            }
+
+            // Check file size limits to prevent out-of-memory on huge files
+            if let Ok(metadata) = entry.metadata() {
+                if metadata.len() > self.max_file_size {
+                    result
+                        .oversized_files
+                        .push((path.to_path_buf(), metadata.len()));
+                    continue;
                 }
+            }
 
-                // Source files
-                if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
-                    match ext {
-                        "py" | "ts" | "tsx" | "js" | "jsx" => {
-                            result.source_files.push(path);
-                        }
-                        "yml" | "yaml" | "toml" | "json" => {
-                            result.config_files.push(path);
-                        }
-                        _ => {}
+            let path_buf = path.to_path_buf();
+            let file_name = path_buf
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            // Check Dockerfiles
+            if file_name == "Dockerfile"
+                || file_name.starts_with("Dockerfile.")
+                || file_name.ends_with(".dockerfile")
+                || file_name.starts_with("docker-compose")
+            {
+                result.dockerfiles.push(path_buf.clone());
+            }
+
+            // Check GitHub Actions / CI workflows
+            if path_buf
+                .to_string_lossy()
+                .replace('\\', "/")
+                .contains(".github/workflows")
+                && (file_name.ends_with(".yml") || file_name.ends_with(".yaml"))
+            {
+                result.ci_workflows.push(path_buf.clone());
+            }
+
+            // Manifests & Lockfiles
+            if file_name == "pyproject.toml"
+                || file_name == "package.json"
+                || file_name == "requirements.txt"
+                || file_name == "uv.lock"
+                || file_name == "poetry.lock"
+                || file_name == "package-lock.json"
+                || file_name == "pnpm-lock.yaml"
+                || file_name == "yarn.lock"
+                || file_name == "bun.lock"
+                || file_name == "bun.lockb"
+                || file_name == "pnpm-workspace.yaml"
+                || file_name == "lerna.json"
+                || file_name == "bunfig.toml"
+                || file_name == "Cargo.toml"
+            {
+                result.manifest_files.push(path_buf.clone());
+            }
+
+            // Source files
+            if let Some(ext) = path_buf.extension().and_then(|s| s.to_str()) {
+                match ext {
+                    "py" | "ts" | "tsx" | "js" | "jsx" => {
+                        result.source_files.push(path_buf);
                     }
+                    "yml" | "yaml" | "toml" | "json" => {
+                        result.config_files.push(path_buf);
+                    }
+                    _ => {}
                 }
+            }
+
+            // Check max files limit
+            let total_count = result.source_files.len()
+                + result.manifest_files.len()
+                + result.config_files.len()
+                + result.dockerfiles.len()
+                + result.ci_workflows.len();
+            if total_count >= self.max_files {
+                result.is_truncated = true;
+                break;
             }
         }
 
@@ -213,6 +311,81 @@ impl ProjectScanner {
         ctx.dockerfiles = scan.dockerfiles;
         ctx.ci_workflows = scan.ci_workflows;
         ctx.manifest_files = scan.manifest_files;
+
+        // Convert scan errors and limits into discovery diagnostics
+        for (unreadable_path, err_msg) in &scan.unreadable_files {
+            ctx.discovery_diagnostics.push(
+                stackvet_core::Diagnostic::builder(
+                    "DISC-001",
+                    stackvet_core::Severity::Warning,
+                    stackvet_core::LanguageTarget::General,
+                )
+                .message(format!("Unreadable file '{}': {}", unreadable_path.display(), err_msg))
+                .location(stackvet_core::DiagnosticLocation::new(unreadable_path.clone()))
+                .explanation("The file could not be read during project scanning due to I/O permissions or encoding issues.")
+                .remediation("Check file read permissions and ensure file is valid UTF-8.")
+                .build(),
+            );
+        }
+
+        for (oversized_path, size_bytes) in &scan.oversized_files {
+            let size_mb = size_bytes / (1024 * 1024);
+            let limit_mb = self.max_file_size / (1024 * 1024);
+            ctx.discovery_diagnostics.push(
+                stackvet_core::Diagnostic::builder(
+                    "DISC-005",
+                    stackvet_core::Severity::Warning,
+                    stackvet_core::LanguageTarget::General,
+                )
+                .message(format!(
+                    "File '{}' ({} MB) exceeds maximum scanner size limit ({} MB)",
+                    oversized_path.display(),
+                    size_mb,
+                    limit_mb
+                ))
+                .location(stackvet_core::DiagnosticLocation::new(oversized_path.clone()))
+                .explanation("Oversized files are skipped from static AST analysis to prevent resource exhaustion.")
+                .remediation("Increase max_file_size in stackvet.toml or add the file to .stackvetignore.")
+                .build(),
+            );
+        }
+
+        for (symlink_path, reason) in &scan.skipped_symlinks {
+            ctx.discovery_diagnostics.push(
+                stackvet_core::Diagnostic::builder(
+                    "DISC-005",
+                    stackvet_core::Severity::Warning,
+                    stackvet_core::LanguageTarget::General,
+                )
+                .message(format!(
+                    "Symlink '{}' was skipped: {}",
+                    symlink_path.display(),
+                    reason
+                ))
+                .location(stackvet_core::DiagnosticLocation::new(symlink_path.clone()))
+                .explanation("Symlinks pointing outside the repository boundary or cyclical links are ignored to harden scanning against untrusted code.")
+                .remediation("Ensure symlinks point within the repository root or replace with relative copies.")
+                .build(),
+            );
+        }
+
+        if scan.is_truncated {
+            ctx.discovery_diagnostics.push(
+                stackvet_core::Diagnostic::builder(
+                    "DISC-005",
+                    stackvet_core::Severity::Warning,
+                    stackvet_core::LanguageTarget::General,
+                )
+                .message(format!(
+                    "Scan truncated after reaching maximum file limit ({} files)",
+                    self.max_files
+                ))
+                .explanation("The project exceeds the maximum number of files configured for a single scan.")
+                .remediation("Increase max_files in stackvet.toml [scanner] or use .stackvetignore to exclude large subtrees.")
+                .build(),
+            );
+        }
+
         Ok(ctx)
     }
 }
@@ -310,6 +483,73 @@ mod tests {
 
         assert_eq!(res.source_files.len(), 1);
         assert_eq!(res.source_files[0], temp_dir.join("app.py"));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_scanner_max_file_size_limit() {
+        let temp_dir = make_temp_dir("max_file_size");
+
+        let small_file = temp_dir.join("small.py");
+        fs::write(&small_file, "x = 1\n").unwrap();
+
+        let large_file = temp_dir.join("large.py");
+        fs::write(&large_file, "a".repeat(500)).unwrap();
+
+        let scanner = ProjectScanner::new(&temp_dir).with_max_file_size(200);
+        let res = scanner.scan();
+
+        assert_eq!(res.source_files.len(), 1);
+        assert_eq!(res.source_files[0], small_file);
+        assert_eq!(res.oversized_files.len(), 1);
+        assert_eq!(res.oversized_files[0].0, large_file);
+
+        let ctx = scanner.build_context().unwrap();
+        assert!(ctx.discovery_diagnostics.iter().any(
+            |d| d.rule_id.0 == "DISC-005" && d.message.contains("exceeds maximum scanner size")
+        ));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_scanner_max_files_limit() {
+        let temp_dir = make_temp_dir("max_files");
+
+        for i in 0..10 {
+            fs::write(temp_dir.join(format!("file_{}.py", i)), "pass\n").unwrap();
+        }
+
+        let scanner = ProjectScanner::new(&temp_dir).with_max_files(4);
+        let res = scanner.scan();
+
+        assert!(res.is_truncated);
+        assert!(res.source_files.len() <= 4);
+
+        let ctx = scanner.build_context().unwrap();
+        assert!(ctx
+            .discovery_diagnostics
+            .iter()
+            .any(|d| d.rule_id.0 == "DISC-005" && d.message.contains("truncated")));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_scanner_max_depth_limit() {
+        let temp_dir = make_temp_dir("max_depth");
+
+        let deep_dir = temp_dir.join("a").join("b").join("c").join("d");
+        fs::create_dir_all(&deep_dir).unwrap();
+        fs::write(deep_dir.join("deep.py"), "pass\n").unwrap();
+        fs::write(temp_dir.join("shallow.py"), "pass\n").unwrap();
+
+        let scanner = ProjectScanner::new(&temp_dir).with_max_depth(2);
+        let res = scanner.scan();
+
+        assert!(res.source_files.contains(&temp_dir.join("shallow.py")));
+        assert!(!res.source_files.contains(&deep_dir.join("deep.py")));
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

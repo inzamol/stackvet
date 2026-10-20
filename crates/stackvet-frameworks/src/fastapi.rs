@@ -10,6 +10,12 @@ use std::path::Path;
 
 pub struct FastApiAnalyzer;
 
+impl Default for FastApiAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FastApiAnalyzer {
     pub fn new() -> Self {
         Self
@@ -102,10 +108,8 @@ impl FastApiAnalyzer {
                     ) {
                         // Extract path template if first argument is string
                         let mut route_path = String::new();
-                        if let Some(first_arg) = call.arguments.args.first() {
-                            if let Expr::StringLiteral(s) = first_arg {
-                                route_path = s.value.to_string();
-                            }
+                        if let Some(Expr::StringLiteral(s)) = call.arguments.args.first() {
+                            route_path = s.value.to_string();
                         }
 
                         // FAP-010: Duplicate route check

@@ -1,6 +1,6 @@
 use stackvet_core::{
     byte_offset_to_line_col, byte_range_to_span, extract_snippet_from_source, Diagnostic,
-    DiagnosticLocation, FixAction, LanguageTarget, RuleId, Severity, TextSpan,
+    DiagnosticLocation, LanguageTarget, Severity, TextSpan,
 };
 use std::path::PathBuf;
 
@@ -73,9 +73,18 @@ fn test_extract_snippet_from_source() {
     assert_eq!(snippet_multi.as_deref(), Some("line 2 with target\nline 3"));
 
     // Invalid span rejection (zero lines or zero columns)
-    assert_eq!(extract_snippet_from_source(source, &TextSpan::new(0, 2, 1, 5)), None);
-    assert_eq!(extract_snippet_from_source(source, &TextSpan::new(2, 2, 0, 5)), None);
-    assert_eq!(extract_snippet_from_source(source, &TextSpan::new(2, 2, 1, 0)), None);
+    assert_eq!(
+        extract_snippet_from_source(source, &TextSpan::new(0, 2, 1, 5)),
+        None
+    );
+    assert_eq!(
+        extract_snippet_from_source(source, &TextSpan::new(2, 2, 0, 5)),
+        None
+    );
+    assert_eq!(
+        extract_snippet_from_source(source, &TextSpan::new(2, 2, 1, 0)),
+        None
+    );
 }
 
 #[test]

@@ -7,6 +7,12 @@ use std::path::Path;
 
 pub struct SqlAlchemyAnalyzer;
 
+impl Default for SqlAlchemyAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SqlAlchemyAnalyzer {
     pub fn new() -> Self {
         Self
@@ -46,26 +52,24 @@ impl SqlAlchemyAnalyzer {
 
         // SQL-010: Hardcoded database credentials
         for (idx, line) in lines.iter().enumerate() {
-            if line.contains("postgresql://")
+            if (line.contains("postgresql://")
                 || line.contains("mysql://")
-                || line.contains("mysql+pymysql://")
+                || line.contains("mysql+pymysql://"))
+                && line.contains(':')
+                && line.contains('@')
+                && !line.contains("os.environ")
+                && !line.contains("os.getenv")
+                && !line.contains("settings.")
             {
-                if line.contains(':')
-                    && line.contains('@')
-                    && !line.contains("os.environ")
-                    && !line.contains("os.getenv")
-                    && !line.contains("settings.")
-                {
-                    diags.push(
-                        Diagnostic::builder("SQL-010", Severity::Critical, LanguageTarget::Python)
-                            .message("Plaintext database credentials hardcoded in connection URL")
-                            .location(DiagnosticLocation::new(path.to_path_buf()).with_span(TextSpan::single_line(idx + 1, 1, 1)))
-                            .explanation("Hardcoded database connection strings expose sensitive production passwords in version control.")
-                            .remediation("Load database credentials from environment variables (e.g. DATABASE_URL).")
-                            .build(),
-                    );
-                    break;
-                }
+                diags.push(
+                    Diagnostic::builder("SQL-010", Severity::Critical, LanguageTarget::Python)
+                        .message("Plaintext database credentials hardcoded in connection URL")
+                        .location(DiagnosticLocation::new(path.to_path_buf()).with_span(TextSpan::single_line(idx + 1, 1, 1)))
+                        .explanation("Hardcoded database connection strings expose sensitive production passwords in version control.")
+                        .remediation("Load database credentials from environment variables (e.g. DATABASE_URL).")
+                        .build(),
+                );
+                break;
             }
         }
 

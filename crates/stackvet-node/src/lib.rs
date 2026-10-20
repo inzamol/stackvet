@@ -10,7 +10,10 @@ use oxc_ast::visit::walk;
 use oxc_ast::visit::Visit;
 use oxc_parser::Parser;
 use oxc_span::SourceType;
-use stackvet_core::{byte_range_to_span, NodeProjectInfo, TextSpan};
+use stackvet_core::{
+    byte_range_to_span, Diagnostic, DiagnosticLocation, LanguageTarget, NodeProjectInfo, Severity,
+    TextSpan,
+};
 use std::fs;
 use std::path::Path;
 
@@ -114,13 +117,11 @@ impl<'a> Visit<'a> for NodeImportVisitor<'a> {
     fn visit_call_expression(&mut self, expr: &CallExpression<'a>) {
         let is_require = match &expr.callee {
             Expression::Identifier(id) => id.name.as_str() == "require",
-            Expression::StaticMemberExpression(member) => {
-                if member.property.name.as_str() == "resolve" {
-                    if let Expression::Identifier(obj) = &member.object {
-                        obj.name.as_str() == "require"
-                    } else {
-                        false
-                    }
+            Expression::StaticMemberExpression(member)
+                if member.property.name.as_str() == "resolve" =>
+            {
+                if let Expression::Identifier(obj) = &member.object {
+                    obj.name.as_str() == "require"
                 } else {
                     false
                 }
@@ -161,16 +162,40 @@ pub struct NodeImport {
 }
 
 pub fn parse_node_imports(content: &str, file: &Path) -> Vec<NodeImport> {
+    parse_node_imports_with_diagnostics(content, file).0
+}
+
+pub fn parse_node_imports_with_diagnostics(
+    content: &str,
+    file: &Path,
+) -> (Vec<NodeImport>, Vec<Diagnostic>) {
     let allocator = Allocator::default();
     let source_type = SourceType::from_path(file).unwrap_or_default();
     let ret = Parser::new(&allocator, content, source_type).parse();
+
+    let mut diags = Vec::new();
+    if let Some(err) = ret.errors.first() {
+        let msg = err.to_string();
+        let loc = DiagnosticLocation::new(file.to_path_buf());
+        let diag = Diagnostic::builder("DISC-003", Severity::Warning, LanguageTarget::Node)
+            .message(format!(
+                "JavaScript/TypeScript syntax error in '{}': {}",
+                file.display(),
+                msg
+            ))
+            .location(loc)
+            .explanation("A JavaScript or TypeScript source file contains invalid syntax and could not be parsed into an AST. Static analysis for this file is skipped or incomplete.")
+            .remediation("Fix the syntax error in the source file.")
+            .build();
+        diags.push(diag);
+    }
 
     let mut visitor = NodeImportVisitor {
         content,
         imports: Vec::new(),
     };
     visitor.visit_program(&ret.program);
-    visitor.imports
+    (visitor.imports, diags)
 }
 
 /// Normalizes package name from import specifier:
@@ -319,7 +344,7 @@ fn find_best_matching_path_key<'a>(
                 let prefix_len = prefix.len();
                 if best_match
                     .as_ref()
-                    .map_or(true, |(_, len, _)| prefix_len > *len)
+                    .is_none_or(|(_, len, _)| prefix_len > *len)
                 {
                     best_match = Some((pattern.as_str(), prefix_len, targets.as_slice()));
                 }
@@ -508,12 +533,63 @@ pub fn parse_package_json(content: &str, path: &Path) -> Result<NodeProjectInfo>
 
 /// Detects a Node project and loads its manifest, workspace packages, and lockfile versions.
 pub fn detect_node_project(root: &Path) -> Option<NodeProjectInfo> {
+    detect_node_project_with_diagnostics(root).0
+}
+
+/// Detects a Node project and returns collected discovery/manifest diagnostics.
+pub fn detect_node_project_with_diagnostics(
+    root: &Path,
+) -> (Option<NodeProjectInfo>, Vec<Diagnostic>) {
+    let mut diags = Vec::new();
     let pkg_json = root.join("package.json");
+    let mut pkg_val: Option<serde_json::Value> = None;
+
     let mut info = if pkg_json.is_file() {
-        if let Ok(content) = fs::read_to_string(&pkg_json) {
-            parse_package_json(&content, &pkg_json).ok()
-        } else {
-            None
+        match fs::read_to_string(&pkg_json) {
+            Ok(content) => {
+                let clean = strip_json_comments(&content);
+                match serde_json::from_str::<serde_json::Value>(&clean) {
+                    Ok(val) => {
+                        pkg_val = Some(val);
+                        match parse_package_json(&content, &pkg_json) {
+                            Ok(inf) => Some(inf),
+                            Err(e) => {
+                                diags.push(
+                                    Diagnostic::builder("DISC-004", Severity::Error, LanguageTarget::Node)
+                                        .message(format!("Invalid configuration in 'package.json': {}", e))
+                                        .location(DiagnosticLocation::new(pkg_json.clone()))
+                                        .explanation("The package.json manifest could not be parsed into project metadata.")
+                                        .remediation("Verify the dependencies and structure of package.json.")
+                                        .build(),
+                                );
+                                None
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        diags.push(
+                            Diagnostic::builder("DISC-004", Severity::Error, LanguageTarget::Node)
+                                .message(format!("Malformed manifest 'package.json': {}", e))
+                                .location(DiagnosticLocation::new(pkg_json.clone()))
+                                .explanation("The package.json manifest contains invalid JSON syntax or corrupted structure.")
+                                .remediation("Validate and correct JSON syntax in package.json.")
+                                .build(),
+                        );
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                diags.push(
+                    Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Node)
+                        .message(format!("Unreadable manifest 'package.json': {}", e))
+                        .location(DiagnosticLocation::new(pkg_json.clone()))
+                        .explanation("The package.json file could not be read due to I/O permissions or encoding issues.")
+                        .remediation("Check file read permissions and ensure file is valid UTF-8.")
+                        .build(),
+                );
+                None
+            }
         }
     } else {
         None
@@ -523,36 +599,32 @@ pub fn detect_node_project(root: &Path) -> Option<NodeProjectInfo> {
     let lerna_json = root.join("lerna.json");
     let bunfig_toml = root.join("bunfig.toml");
 
-    // Discover workspace members (from package.json workspaces, pnpm-workspace.yaml, lerna.json, or conventional subdirs)
-    let pkg_val: Option<serde_json::Value> = if pkg_json.is_file() {
-        fs::read_to_string(&pkg_json)
-            .ok()
-            .and_then(|c| serde_json::from_str(&strip_json_comments(&c)).ok())
-    } else {
-        None
-    };
-
     let members = discover_workspace_members(root, pkg_val.as_ref());
 
-    if info.is_none() {
-        if !members.is_empty() || pnpm_ws.is_file() || lerna_json.is_file() || bunfig_toml.is_file()
-        {
-            let pm = if pnpm_ws.is_file() {
-                "pnpm".to_string()
-            } else if bunfig_toml.is_file() || root.join("bun.lock").is_file() {
-                "bun".to_string()
-            } else {
-                "npm".to_string()
-            };
-            info = Some(NodeProjectInfo {
-                package_manager: pm,
-                package_json_path: pkg_json.clone(),
-                ..Default::default()
-            });
-        }
+    if info.is_none()
+        && (!members.is_empty()
+            || pnpm_ws.is_file()
+            || lerna_json.is_file()
+            || bunfig_toml.is_file())
+    {
+        let pm = if pnpm_ws.is_file() {
+            "pnpm".to_string()
+        } else if bunfig_toml.is_file() || root.join("bun.lock").is_file() {
+            "bun".to_string()
+        } else {
+            "npm".to_string()
+        };
+        info = Some(NodeProjectInfo {
+            package_manager: pm,
+            package_json_path: pkg_json.clone(),
+            ..Default::default()
+        });
     }
 
-    let mut info = info?;
+    let mut info = match info {
+        Some(i) => i,
+        None => return (None, diags),
+    };
 
     // Populate workspace members and packages
     info.workspace_members = members;
@@ -571,44 +643,112 @@ pub fn detect_node_project(root: &Path) -> Option<NodeProjectInfo> {
     if pnpm_lock.is_file() {
         info.lock_file = Some(pnpm_lock.clone());
         info.package_manager = "pnpm".to_string();
-        if let Ok(lcontent) = fs::read_to_string(&pnpm_lock) {
-            if let Ok(lock_data) = parse_pnpm_lock(&lcontent) {
-                info.locked_packages = lock_data.locked_packages;
-                info.locked_versions = lock_data.locked_versions;
-                for (k, v) in lock_data.workspace_packages {
-                    info.workspace_packages.entry(k).or_insert(v);
+        match fs::read_to_string(&pnpm_lock) {
+            Ok(lcontent) => match parse_pnpm_lock(&lcontent) {
+                Ok(lock_data) => {
+                    info.locked_packages = lock_data.locked_packages;
+                    info.locked_versions = lock_data.locked_versions;
+                    for (k, v) in lock_data.workspace_packages {
+                        info.workspace_packages.entry(k).or_insert(v);
+                    }
                 }
+                Err(e) => {
+                    diags.push(
+                        Diagnostic::builder("DISC-004", Severity::Warning, LanguageTarget::Node)
+                            .message(format!("Malformed lockfile 'pnpm-lock.yaml': {}", e))
+                            .location(DiagnosticLocation::new(pnpm_lock))
+                            .explanation("The pnpm-lock.yaml file contains invalid YAML syntax.")
+                            .remediation("Regenerate pnpm-lock.yaml using 'pnpm install'.")
+                            .build(),
+                    );
+                }
+            },
+            Err(e) => {
+                diags.push(
+                    Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Node)
+                        .message(format!("Unreadable lockfile 'pnpm-lock.yaml': {}", e))
+                        .location(DiagnosticLocation::new(pnpm_lock))
+                        .explanation("The pnpm-lock.yaml file could not be read.")
+                        .remediation("Check file read permissions.")
+                        .build(),
+                );
             }
         }
     } else if yarn_lock.is_file() {
         info.lock_file = Some(yarn_lock.clone());
         info.package_manager = "yarn".to_string();
-        if let Ok(lcontent) = fs::read_to_string(&yarn_lock) {
-            let lock_data = parse_yarn_lock(&lcontent);
-            info.locked_packages = lock_data.locked_packages;
-            info.locked_versions = lock_data.locked_versions;
+        match fs::read_to_string(&yarn_lock) {
+            Ok(lcontent) => {
+                let lock_data = parse_yarn_lock(&lcontent);
+                info.locked_packages = lock_data.locked_packages;
+                info.locked_versions = lock_data.locked_versions;
+            }
+            Err(e) => {
+                diags.push(
+                    Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Node)
+                        .message(format!("Unreadable lockfile 'yarn.lock': {}", e))
+                        .location(DiagnosticLocation::new(yarn_lock))
+                        .explanation("The yarn.lock file could not be read.")
+                        .remediation("Check file read permissions.")
+                        .build(),
+                );
+            }
         }
     } else if npm_lock.is_file() {
         info.lock_file = Some(npm_lock.clone());
         info.package_manager = "npm".to_string();
-        if let Ok(lcontent) = fs::read_to_string(&npm_lock) {
-            if let Ok(lock_data) = parse_npm_lock(&lcontent) {
+        match fs::read_to_string(&npm_lock) {
+            Ok(lcontent) => match parse_npm_lock(&lcontent) {
+                Ok(lock_data) => {
+                    info.locked_packages = lock_data.locked_packages;
+                    info.locked_versions = lock_data.locked_versions;
+                    for (k, v) in lock_data.workspace_packages {
+                        info.workspace_packages.entry(k).or_insert(v);
+                    }
+                }
+                Err(e) => {
+                    diags.push(
+                        Diagnostic::builder("DISC-004", Severity::Warning, LanguageTarget::Node)
+                            .message(format!("Malformed lockfile 'package-lock.json': {}", e))
+                            .location(DiagnosticLocation::new(npm_lock))
+                            .explanation("The package-lock.json file contains invalid JSON syntax.")
+                            .remediation("Regenerate package-lock.json using 'npm install'.")
+                            .build(),
+                    );
+                }
+            },
+            Err(e) => {
+                diags.push(
+                    Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Node)
+                        .message(format!("Unreadable lockfile 'package-lock.json': {}", e))
+                        .location(DiagnosticLocation::new(npm_lock))
+                        .explanation("The package-lock.json file could not be read.")
+                        .remediation("Check file read permissions.")
+                        .build(),
+                );
+            }
+        }
+    } else if bun_text_lock.is_file() {
+        info.lock_file = Some(bun_text_lock.clone());
+        info.package_manager = "bun".to_string();
+        match fs::read_to_string(&bun_text_lock) {
+            Ok(lcontent) => {
+                let lock_data = parse_bun_lock(&lcontent);
                 info.locked_packages = lock_data.locked_packages;
                 info.locked_versions = lock_data.locked_versions;
                 for (k, v) in lock_data.workspace_packages {
                     info.workspace_packages.entry(k).or_insert(v);
                 }
             }
-        }
-    } else if bun_text_lock.is_file() {
-        info.lock_file = Some(bun_text_lock.clone());
-        info.package_manager = "bun".to_string();
-        if let Ok(lcontent) = fs::read_to_string(&bun_text_lock) {
-            let lock_data = parse_bun_lock(&lcontent);
-            info.locked_packages = lock_data.locked_packages;
-            info.locked_versions = lock_data.locked_versions;
-            for (k, v) in lock_data.workspace_packages {
-                info.workspace_packages.entry(k).or_insert(v);
+            Err(e) => {
+                diags.push(
+                    Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Node)
+                        .message(format!("Unreadable lockfile 'bun.lock': {}", e))
+                        .location(DiagnosticLocation::new(bun_text_lock))
+                        .explanation("The bun.lock file could not be read.")
+                        .remediation("Check file read permissions.")
+                        .build(),
+                );
             }
         }
     } else if bun_lock.is_file() {
@@ -626,18 +766,42 @@ pub fn detect_node_project(root: &Path) -> Option<NodeProjectInfo> {
     for file_name in tsconfig_candidates {
         let ts_path = root.join(file_name);
         if ts_path.is_file() {
-            if let Ok(ts_content) = fs::read_to_string(&ts_path) {
-                let (paths, base_url) = parse_tsconfig(&ts_content);
-                if !paths.is_empty() || base_url.is_some() {
-                    info.tsconfig_paths = paths;
-                    info.tsconfig_base_url = base_url;
-                    break;
+            match fs::read_to_string(&ts_path) {
+                Ok(ts_content) => {
+                    let clean = strip_json_comments(&ts_content);
+                    if serde_json::from_str::<serde_json::Value>(&clean).is_err() {
+                        diags.push(
+                            Diagnostic::builder("DISC-004", Severity::Warning, LanguageTarget::Node)
+                                .message(format!("Malformed config file '{}': invalid JSON", file_name))
+                                .location(DiagnosticLocation::new(ts_path.clone()))
+                                .explanation("The TypeScript/JavaScript config file contains invalid JSON syntax.")
+                                .remediation("Validate JSON syntax in tsconfig/jsconfig.")
+                                .build(),
+                        );
+                    } else {
+                        let (paths, base_url) = parse_tsconfig(&ts_content);
+                        if !paths.is_empty() || base_url.is_some() {
+                            info.tsconfig_paths = paths;
+                            info.tsconfig_base_url = base_url;
+                            break;
+                        }
+                    }
+                }
+                Err(e) => {
+                    diags.push(
+                        Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Node)
+                            .message(format!("Unreadable config file '{}': {}", file_name, e))
+                            .location(DiagnosticLocation::new(ts_path.clone()))
+                            .explanation("The config file could not be read due to I/O permissions or encoding issues.")
+                            .remediation("Check file read permissions.")
+                            .build(),
+                    );
                 }
             }
         }
     }
 
-    Some(info)
+    (Some(info), diags)
 }
 
 #[cfg(test)]

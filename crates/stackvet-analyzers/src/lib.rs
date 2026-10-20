@@ -14,7 +14,7 @@ use anyhow::Result;
 use stackvet_core::{Analyzer, Diagnostic, ProjectContext};
 
 pub fn run_all_analyzers(ctx: &ProjectContext, offline: bool) -> Result<Vec<Diagnostic>> {
-    let mut diagnostics = Vec::new();
+    let mut diagnostics = ctx.discovery_diagnostics.clone();
 
     let analyzers: Vec<Box<dyn Analyzer>> = vec![
         Box::new(PythonDependencyAnalyzer::new(offline)),

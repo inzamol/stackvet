@@ -35,6 +35,46 @@ pub struct StackvetConfig {
     pub suppressions: Vec<SuppressionEntry>,
     #[serde(default)]
     pub cache: CacheConfig,
+    #[serde(default)]
+    pub scanner: ScannerConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScannerConfig {
+    #[serde(default = "default_max_file_size")]
+    pub max_file_size: u64,
+    #[serde(default = "default_max_depth")]
+    pub max_depth: usize,
+    #[serde(default = "default_max_files")]
+    pub max_files: usize,
+    #[serde(default)]
+    pub follow_symlinks: bool,
+    #[serde(default)]
+    pub fail_on_incomplete: bool,
+}
+
+fn default_max_file_size() -> u64 {
+    10 * 1024 * 1024 // 10 MB
+}
+
+fn default_max_depth() -> usize {
+    40
+}
+
+fn default_max_files() -> usize {
+    50_000
+}
+
+impl Default for ScannerConfig {
+    fn default() -> Self {
+        Self {
+            max_file_size: default_max_file_size(),
+            max_depth: default_max_depth(),
+            max_files: default_max_files(),
+            follow_symlinks: false,
+            fail_on_incomplete: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]

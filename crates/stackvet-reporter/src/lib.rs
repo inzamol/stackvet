@@ -26,7 +26,11 @@ impl Default for ToolInfo {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReportSummary {
     pub total_issues: usize,
     pub critical_count: usize,
@@ -35,12 +39,34 @@ pub struct ReportSummary {
     pub info_count: usize,
     pub hint_count: usize,
     pub fixable_count: usize,
+    #[serde(default = "default_true")]
+    pub is_complete: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub incomplete_reasons: Vec<String>,
+}
+
+impl Default for ReportSummary {
+    fn default() -> Self {
+        Self {
+            total_issues: 0,
+            critical_count: 0,
+            error_count: 0,
+            warning_count: 0,
+            info_count: 0,
+            hint_count: 0,
+            fixable_count: 0,
+            is_complete: true,
+            incomplete_reasons: Vec::new(),
+        }
+    }
 }
 
 impl ReportSummary {
     pub fn from_diagnostics(diagnostics: &[Diagnostic]) -> Self {
-        let mut summary = Self::default();
-        summary.total_issues = diagnostics.len();
+        let mut summary = Self {
+            total_issues: diagnostics.len(),
+            ..Default::default()
+        };
         for d in diagnostics {
             match d.severity {
                 Severity::Critical => summary.critical_count += 1,
@@ -52,8 +78,24 @@ impl ReportSummary {
             if d.fix.is_some() {
                 summary.fixable_count += 1;
             }
+
+            if d.rule_id.0.starts_with("DISC-") {
+                summary.is_complete = false;
+                let reason = format!("{}: {}", d.rule_id.0, d.message);
+                if !summary.incomplete_reasons.contains(&reason) {
+                    summary.incomplete_reasons.push(reason);
+                }
+            }
         }
         summary
+    }
+
+    pub fn mark_incomplete(&mut self, reason: impl Into<String>) {
+        self.is_complete = false;
+        let r = reason.into();
+        if !self.incomplete_reasons.contains(&r) {
+            self.incomplete_reasons.push(r);
+        }
     }
 }
 
@@ -79,6 +121,12 @@ fn default_schema_version() -> String {
 
 pub struct Reporter;
 
+impl Default for Reporter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Reporter {
     pub fn new() -> Self {
         Self
@@ -95,7 +143,7 @@ impl Reporter {
     ) -> String {
         let mut out = String::new();
 
-        out.push_str("\n");
+        out.push('\n');
         out.push_str(
             &"=======================================================================\n"
                 .cyan()
@@ -143,7 +191,7 @@ impl Reporter {
                 ));
             }
         }
-        out.push_str("\n");
+        out.push('\n');
 
         // Counts
         let criticals = diagnostics
@@ -178,6 +226,23 @@ impl Reporter {
             }
         ));
 
+        let disc_diags: Vec<_> = diagnostics
+            .iter()
+            .filter(|d| d.rule_id.0.starts_with("DISC-"))
+            .collect();
+        if !disc_diags.is_empty() {
+            out.push_str(
+                &"⚠️  Incomplete Analysis / Scanner Hardening Notices:\n"
+                    .yellow()
+                    .bold()
+                    .to_string(),
+            );
+            for d in disc_diags {
+                out.push_str(&format!("  • [{}] {}\n", d.rule_id.0.yellow(), d.message));
+            }
+            out.push('\n');
+        }
+
         // Score deduction breakdown
         if let Some(exp) = explanation {
             if !exp.rule_contributions.is_empty() {
@@ -203,7 +268,7 @@ impl Reporter {
                         contrib.title
                     ));
                 }
-                out.push_str("\n");
+                out.push('\n');
             }
         }
 

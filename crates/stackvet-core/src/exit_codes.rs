@@ -10,6 +10,8 @@ pub enum ExitCode {
     ConfigurationError = 2,
     /// Execution or operational I/O error (path not found, missing baseline file, read error).
     ExecutionError = 3,
+    /// Incomplete analysis due to malformed files, unreadable files, or resource limit exhaustion.
+    IncompleteAnalysis = 4,
 }
 
 impl ExitCode {

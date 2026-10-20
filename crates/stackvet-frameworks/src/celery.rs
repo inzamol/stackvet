@@ -7,6 +7,12 @@ use std::path::Path;
 
 pub struct CeleryAnalyzer;
 
+impl Default for CeleryAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CeleryAnalyzer {
     pub fn new() -> Self {
         Self
@@ -25,7 +31,7 @@ impl CeleryAnalyzer {
         let is_test_file = path
             .file_name()
             .map(|s| s.to_string_lossy())
-            .map_or(false, |name| {
+            .is_some_and(|name| {
                 name.starts_with("test_") || name.ends_with("_test.py") || name == "tests.py"
             });
 

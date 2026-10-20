@@ -161,7 +161,13 @@ pub fn parse_unified_diff_hunks(
                 } else {
                     raw
                 };
-                current_file = Some(root.join(rel));
+                let target = root.join(rel);
+                if is_within_repo_boundary(&target, root) {
+                    current_file = Some(target);
+                } else {
+                    tracing::warn!("Diff targets path escaping repository boundary: {}", raw);
+                    current_file = None;
+                }
             }
         } else if line.starts_with("@@ ") {
             if let Some(target) = &current_file {
@@ -296,13 +302,48 @@ pub fn collect_git_diff(
     })
 }
 
+/// Validates that a file path is safely contained within the repository root boundary,
+/// protecting against path traversal attempts (e.g. `../../etc/passwd` or outside absolute paths).
+pub fn is_within_repo_boundary(candidate: &Path, root: &Path) -> bool {
+    let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let full = if candidate.is_absolute() {
+        candidate.to_path_buf()
+    } else {
+        root.join(candidate)
+    };
+    if let Ok(canon_full) = full.canonicalize() {
+        canon_full.starts_with(&canonical_root)
+    } else {
+        // For non-existent / deleted paths, resolve lexical components
+        let mut norm = PathBuf::new();
+        for comp in full.components() {
+            match comp {
+                std::path::Component::ParentDir => {
+                    norm.pop();
+                }
+                std::path::Component::CurDir => {}
+                c => norm.push(c),
+            }
+        }
+        norm.starts_with(&canonical_root) || norm.starts_with(root)
+    }
+}
+
 /// Parses an explicit comma-separated file list argument (e.g. `--files users.py,requirements.txt`).
 pub fn parse_explicit_files(files_arg: &str, root: &Path) -> Vec<ChangedFile> {
     files_arg
         .split(',')
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
-        .map(|s| ChangedFile::new(root.join(s), FileDiffKind::Modified))
+        .filter_map(|s| {
+            let path = root.join(s);
+            if is_within_repo_boundary(&path, root) {
+                Some(ChangedFile::new(path, FileDiffKind::Modified))
+            } else {
+                tracing::warn!("Rejecting path outside repository boundary: {}", s);
+                None
+            }
+        })
         .collect()
 }
 
@@ -657,5 +698,35 @@ mod tests {
         let annotations = result.render_github_annotations();
         assert_eq!(annotations.len(), 1);
         assert!(annotations[0].starts_with("::error file="));
+    }
+
+    #[test]
+    fn test_path_traversal_rejected_in_explicit_files() {
+        let root = Path::new("test_repo");
+        let untrusted = "../../etc/passwd,/etc/shadow,normal/path.py";
+        let filtered = parse_explicit_files(untrusted, root);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].path, root.join("normal/path.py"));
+    }
+
+    #[test]
+    fn test_path_traversal_rejected_in_diff() {
+        let root = Path::new("test_repo");
+        let malicious_diff = r#"
+--- a/../../etc/passwd
++++ b/../../etc/passwd
+@@ -1,1 +1,2 @@
+ root:x:0:0:root:/root:/bin/bash
++pwned:x:0:0:root:/root:/bin/bash
+--- a/src/app.py
++++ b/src/app.py
+@@ -10,3 +10,4 @@
+ def hello():
++    print("safe")
+     return True
+"#;
+        let files = parse_unified_diff_hunks(malicious_diff, root);
+        assert_eq!(files.len(), 1);
+        assert!(files.contains_key(&root.join("src/app.py")));
     }
 }

@@ -48,7 +48,7 @@ pub fn add_dependency_to_pyproject(content: &str, package: &str, version: &str) 
             if let Some(deps) = deps_item.as_array_mut() {
                 // Check if already present using normalized package name
                 let already_has = deps.iter().any(|v| {
-                    v.as_str().map_or(false, |s| {
+                    v.as_str().is_some_and(|s| {
                         normalize_python_package_name(extract_python_package_name(s)) == norm_pkg
                     })
                 });
@@ -142,11 +142,11 @@ pub fn add_dependency_to_package_json(
     let in_deps = obj
         .get("dependencies")
         .and_then(|d| d.as_object())
-        .map_or(false, |deps| deps.contains_key(package));
+        .is_some_and(|deps| deps.contains_key(package));
     let in_dev = obj
         .get("devDependencies")
         .and_then(|d| d.as_object())
-        .map_or(false, |deps| deps.contains_key(package));
+        .is_some_and(|deps| deps.contains_key(package));
 
     if in_deps || in_dev {
         return Ok(content.to_string());
@@ -586,6 +586,12 @@ pub struct RemediationReport {
 }
 
 pub struct RemediationEngine;
+
+impl Default for RemediationEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl RemediationEngine {
     pub fn new() -> Self {
