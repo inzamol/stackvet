@@ -3,8 +3,8 @@ use stackvet_core::{
     Analyzer, Diagnostic, DiagnosticLocation, LanguageTarget, ProjectContext, Severity,
 };
 use stackvet_graph::ImportGraph;
-use stackvet_node::parse_node_imports;
-use stackvet_python::parse_python_imports;
+use stackvet_node::parse_node_imports_with_diagnostics;
+use stackvet_python::parse_python_imports_with_diagnostics;
 use stackvet_python::stdlib::is_pep594_removed;
 use std::collections::HashSet;
 use std::fs;
@@ -224,15 +224,26 @@ impl Analyzer for ImportsArchAnalyzer {
 
             let ext = file.extension().and_then(|s| s.to_str()).unwrap_or("");
             if ext == "py" {
-                if let Ok(content) = fs::read_to_string(file) {
-                    let imports = parse_python_imports(&content, file);
-                    for imp in imports {
-                        // Check PEP 594: IMP-004
-                        if is_pep594_removed(&imp.module) {
-                            let loc =
-                                make_import_location(file, imp.span.as_ref(), imp.line, &content);
-                            diagnostics.push(
-                                Diagnostic::builder("IMP-004", Severity::Error, LanguageTarget::Python)
+                match fs::read_to_string(file) {
+                    Ok(content) => {
+                        let (imports, syn_diags) =
+                            parse_python_imports_with_diagnostics(&content, file);
+                        diagnostics.extend(syn_diags);
+                        for imp in imports {
+                            // Check PEP 594: IMP-004
+                            if is_pep594_removed(&imp.module) {
+                                let loc = make_import_location(
+                                    file,
+                                    imp.span.as_ref(),
+                                    imp.line,
+                                    &content,
+                                );
+                                diagnostics.push(
+                                    Diagnostic::builder(
+                                        "IMP-004",
+                                        Severity::Error,
+                                        LanguageTarget::Python,
+                                    )
                                     .message(format!(
                                         "Module '{}' was removed in Python 3.13 (PEP 594)",
                                         imp.module
@@ -242,114 +253,94 @@ impl Analyzer for ImportsArchAnalyzer {
                                         "PEP 594 completely removed deprecated standard library module '{}' from Python 3.13+.",
                                         imp.module
                                     ))
-                                    .remediation("Migrate to a modern replacement library or backport.")
+                                    .remediation(
+                                        "Migrate to a modern replacement library or backport.",
+                                    )
                                     .build(),
-                            );
-                        }
+                                );
+                            }
 
-                        if imp.is_relative {
-                            if let Some(target_file) =
-                                Self::resolve_python_relative_import(file, &imp)
-                            {
-                                let target_rel = target_file
-                                    .strip_prefix(&ctx.root)
-                                    .unwrap_or(&target_file)
-                                    .to_string_lossy()
-                                    .replace('\\', "/");
-                                graph.add_import(rel_path.clone(), target_rel);
-                            } else {
-                                let dots = ".".repeat(imp.level);
-                                let import_desc = if imp.module.is_empty() {
-                                    format!(
-                                        "from {} import {}",
-                                        dots,
-                                        imp.symbol.as_deref().unwrap_or("?")
-                                    )
+                            if imp.is_relative {
+                                if let Some(target_file) =
+                                    Self::resolve_python_relative_import(file, &imp)
+                                {
+                                    let target_rel = target_file
+                                        .strip_prefix(&ctx.root)
+                                        .unwrap_or(&target_file)
+                                        .to_string_lossy()
+                                        .replace('\\', "/");
+                                    graph.add_import(rel_path.clone(), target_rel);
                                 } else {
-                                    format!(
-                                        "from {}{} import {}",
-                                        dots,
-                                        imp.module,
-                                        imp.symbol.as_deref().unwrap_or("*")
-                                    )
-                                };
-                                let loc = make_import_location(
-                                    file,
-                                    imp.span.as_ref(),
-                                    imp.line,
-                                    &content,
-                                );
-                                diagnostics.push(
-                                    Diagnostic::builder(
-                                        "IMP-002",
-                                        Severity::Error,
-                                        LanguageTarget::Python,
-                                    )
-                                    .message(format!(
-                                        "Unresolved relative Python import '{}' in '{}'",
-                                        import_desc, rel_path
-                                    ))
-                                    .location(loc)
-                                    .explanation(
-                                        "Relative import does not correspond to an existing Python file or package module.",
-                                    )
-                                    .remediation("Check the module path and verify file exists.")
-                                    .build(),
-                                );
+                                    let dots = ".".repeat(imp.level);
+                                    let import_desc = if imp.module.is_empty() {
+                                        format!(
+                                            "from {} import {}",
+                                            dots,
+                                            imp.symbol.as_deref().unwrap_or("?")
+                                        )
+                                    } else {
+                                        format!(
+                                            "from {}{} import {}",
+                                            dots,
+                                            imp.module,
+                                            imp.symbol.as_deref().unwrap_or("*")
+                                        )
+                                    };
+                                    let loc = make_import_location(
+                                        file,
+                                        imp.span.as_ref(),
+                                        imp.line,
+                                        &content,
+                                    );
+                                    diagnostics.push(
+                                        Diagnostic::builder(
+                                            "IMP-002",
+                                            Severity::Error,
+                                            LanguageTarget::Python,
+                                        )
+                                        .message(format!(
+                                            "Unresolved relative Python import '{}' in '{}'",
+                                            import_desc, rel_path
+                                        ))
+                                        .location(loc)
+                                        .explanation(
+                                            "Relative import does not correspond to an existing Python file or package module.",
+                                        )
+                                        .remediation("Check the module path and verify file exists.")
+                                        .build(),
+                                    );
+                                }
                             }
                         }
                     }
+                    Err(e) => {
+                        diagnostics.push(
+                            Diagnostic::builder(
+                                "DISC-001",
+                                Severity::Warning,
+                                LanguageTarget::General,
+                            )
+                            .message(format!("Unreadable file '{}': {}", file.display(), e))
+                            .location(DiagnosticLocation::new(file.to_path_buf()))
+                            .explanation(
+                                "The source file could not be read during AST import traversal.",
+                            )
+                            .remediation("Check file read permissions.")
+                            .build(),
+                        );
+                    }
                 }
             } else if matches!(ext, "ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs") {
-                if let Ok(content) = fs::read_to_string(file) {
-                    let imports = parse_node_imports(&content, file);
-                    for imp in imports {
-                        if imp.specifier.starts_with('.') {
-                            if let Some(target_file) =
-                                Self::resolve_local_import(file, &imp.specifier)
-                            {
-                                let target_rel = target_file
-                                    .strip_prefix(&ctx.root)
-                                    .unwrap_or(&target_file)
-                                    .to_string_lossy()
-                                    .replace('\\', "/");
-                                graph.add_import(rel_path.clone(), target_rel);
-                            } else {
-                                let loc = make_import_location(
-                                    file,
-                                    imp.span.as_ref(),
-                                    imp.line,
-                                    &content,
-                                );
-                                diagnostics.push(
-                                    Diagnostic::builder(
-                                        "IMP-002",
-                                        Severity::Error,
-                                        LanguageTarget::Node,
-                                    )
-                                    .message(format!(
-                                        "Unresolved local import '{}' in '{}'",
-                                        imp.specifier, rel_path
-                                    ))
-                                    .location(loc)
-                                    .explanation(
-                                        "Specifier could not be resolved to any file or directory index on disk.",
-                                    )
-                                    .remediation("Check file extension, path casing, or tsconfig path aliases.")
-                                    .build(),
-                                );
-                            }
-                        } else if let Some(node_info) = &ctx.node {
-                            if stackvet_node::is_tsconfig_alias(
-                                &imp.specifier,
-                                &node_info.tsconfig_paths,
-                            ) {
-                                if let Some(target_file) = stackvet_node::resolve_aliased_import(
-                                    &ctx.root,
-                                    &node_info.tsconfig_paths,
-                                    node_info.tsconfig_base_url.as_deref(),
-                                    &imp.specifier,
-                                ) {
+                match fs::read_to_string(file) {
+                    Ok(content) => {
+                        let (imports, syn_diags) =
+                            parse_node_imports_with_diagnostics(&content, file);
+                        diagnostics.extend(syn_diags);
+                        for imp in imports {
+                            if imp.specifier.starts_with('.') {
+                                if let Some(target_file) =
+                                    Self::resolve_local_import(file, &imp.specifier)
+                                {
                                     let target_rel = target_file
                                         .strip_prefix(&ctx.root)
                                         .unwrap_or(&target_file)
@@ -370,31 +361,96 @@ impl Analyzer for ImportsArchAnalyzer {
                                             LanguageTarget::Node,
                                         )
                                         .message(format!(
-                                            "Unresolved TypeScript path alias '{}' in '{}'",
+                                            "Unresolved local import '{}' in '{}'",
                                             imp.specifier, rel_path
                                         ))
                                         .location(loc)
                                         .explanation(
-                                            "Path alias matched tsconfig.json paths but target file could not be found on disk.",
+                                            "Specifier could not be resolved to any file or directory index on disk.",
                                         )
-                                        .remediation("Verify tsconfig.json paths mapping and ensure target file exists.")
+                                        .remediation(
+                                            "Check file extension, path casing, or tsconfig path aliases.",
+                                        )
                                         .build(),
                                     );
                                 }
-                            } else if let Some(target_file) = stackvet_node::resolve_aliased_import(
-                                &ctx.root,
-                                &node_info.tsconfig_paths,
-                                node_info.tsconfig_base_url.as_deref(),
-                                &imp.specifier,
-                            ) {
-                                let target_rel = target_file
-                                    .strip_prefix(&ctx.root)
-                                    .unwrap_or(&target_file)
-                                    .to_string_lossy()
-                                    .replace('\\', "/");
-                                graph.add_import(rel_path.clone(), target_rel);
+                            } else if let Some(node_info) = &ctx.node {
+                                if stackvet_node::is_tsconfig_alias(
+                                    &imp.specifier,
+                                    &node_info.tsconfig_paths,
+                                ) {
+                                    if let Some(target_file) = stackvet_node::resolve_aliased_import(
+                                        &ctx.root,
+                                        &node_info.tsconfig_paths,
+                                        node_info.tsconfig_base_url.as_deref(),
+                                        &imp.specifier,
+                                    ) {
+                                        let target_rel = target_file
+                                            .strip_prefix(&ctx.root)
+                                            .unwrap_or(&target_file)
+                                            .to_string_lossy()
+                                            .replace('\\', "/");
+                                        graph.add_import(rel_path.clone(), target_rel);
+                                    } else {
+                                        let loc = make_import_location(
+                                            file,
+                                            imp.span.as_ref(),
+                                            imp.line,
+                                            &content,
+                                        );
+                                        diagnostics.push(
+                                            Diagnostic::builder(
+                                                "IMP-002",
+                                                Severity::Error,
+                                                LanguageTarget::Node,
+                                            )
+                                            .message(format!(
+                                                "Unresolved TypeScript path alias '{}' in '{}'",
+                                                imp.specifier, rel_path
+                                            ))
+                                            .location(loc)
+                                            .explanation(
+                                                "Path alias matched tsconfig.json paths but target file could not be found on disk.",
+                                            )
+                                            .remediation(
+                                                "Verify tsconfig.json paths mapping and ensure target file exists.",
+                                            )
+                                            .build(),
+                                        );
+                                    }
+                                } else if let Some(target_file) =
+                                    stackvet_node::resolve_aliased_import(
+                                        &ctx.root,
+                                        &node_info.tsconfig_paths,
+                                        node_info.tsconfig_base_url.as_deref(),
+                                        &imp.specifier,
+                                    )
+                                {
+                                    let target_rel = target_file
+                                        .strip_prefix(&ctx.root)
+                                        .unwrap_or(&target_file)
+                                        .to_string_lossy()
+                                        .replace('\\', "/");
+                                    graph.add_import(rel_path.clone(), target_rel);
+                                }
                             }
                         }
+                    }
+                    Err(e) => {
+                        diagnostics.push(
+                            Diagnostic::builder(
+                                "DISC-001",
+                                Severity::Warning,
+                                LanguageTarget::General,
+                            )
+                            .message(format!("Unreadable file '{}': {}", file.display(), e))
+                            .location(DiagnosticLocation::new(file.to_path_buf()))
+                            .explanation(
+                                "The source file could not be read during AST import traversal.",
+                            )
+                            .remediation("Check file read permissions.")
+                            .build(),
+                        );
                     }
                 }
             }

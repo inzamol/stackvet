@@ -9,7 +9,10 @@ use ruff_python_ast::{
     Expr, ExprAttribute, ExprCall, ExprName, ExprStringLiteral, Stmt, StmtImport, StmtImportFrom,
 };
 use ruff_python_parser::parse_module;
-use stackvet_core::{byte_range_to_span, PythonProjectInfo, TextSpan};
+use stackvet_core::{
+    byte_range_to_span, Diagnostic, DiagnosticLocation, LanguageTarget, PythonProjectInfo,
+    Severity, TextSpan,
+};
 use std::fs;
 use std::path::Path;
 
@@ -141,17 +144,37 @@ impl<'a, 'b> Visitor<'a> for ImportVisitor<'b> {
     }
 }
 
-pub fn parse_python_imports(content: &str, _file: &Path) -> Vec<PythonImport> {
+pub fn parse_python_imports_with_diagnostics(
+    content: &str,
+    file: &Path,
+) -> (Vec<PythonImport>, Vec<Diagnostic>) {
     let mut visitor = ImportVisitor {
         content,
         imports: Vec::new(),
     };
-    if let Ok(parsed) = parse_module(content) {
-        for stmt in parsed.suite() {
-            visitor.visit_stmt(stmt);
+    let mut diags = Vec::new();
+    match parse_module(content) {
+        Ok(parsed) => {
+            for stmt in parsed.suite() {
+                visitor.visit_stmt(stmt);
+            }
+        }
+        Err(err) => {
+            let loc = DiagnosticLocation::new(file.to_path_buf());
+            let diag = Diagnostic::builder("DISC-002", Severity::Warning, LanguageTarget::Python)
+                .message(format!("Python syntax error in '{}': {}", file.display(), err))
+                .location(loc)
+                .explanation("A Python source file contains invalid syntax and could not be parsed into an AST. Static analysis for this file is skipped or incomplete.")
+                .remediation("Fix the syntax error in the source file.")
+                .build();
+            diags.push(diag);
         }
     }
-    visitor.imports
+    (visitor.imports, diags)
+}
+
+pub fn parse_python_imports(content: &str, file: &Path) -> Vec<PythonImport> {
+    parse_python_imports_with_diagnostics(content, file).0
 }
 
 struct StringLiteralVisitor {
@@ -207,7 +230,7 @@ pub fn parse_requirement_spec(spec: &str) -> Option<(String, String)> {
     } else {
         // Find comparison operators: ==, >=, <=, ~=, !=, >, <
         let op_indices: Vec<usize> = clean_spec
-            .match_indices(|c| c == '=' || c == '>' || c == '<' || c == '~' || c == '!')
+            .match_indices(['=', '>', '<', '~', '!'])
             .map(|(idx, _)| idx)
             .collect();
         if let Some(&first_op) = op_indices.first() {
@@ -335,20 +358,93 @@ pub fn parse_requirements_txt(content: &str, path: &Path) -> PythonProjectInfo {
 
 /// Detects a Python project and loads its manifest and available lockfile metadata.
 pub fn detect_python_project(root: &Path) -> Option<PythonProjectInfo> {
+    detect_python_project_with_diagnostics(root).0
+}
+
+/// Detects a Python project and returns collected discovery/manifest diagnostics.
+const MAX_MANIFEST_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
+
+pub fn detect_python_project_with_diagnostics(
+    root: &Path,
+) -> (Option<PythonProjectInfo>, Vec<Diagnostic>) {
+    let mut diags = Vec::new();
     let pyproject = root.join("pyproject.toml");
-    let pyproject_val: Option<toml::Value> = if pyproject.is_file() {
-        fs::read_to_string(&pyproject)
-            .ok()
-            .and_then(|c| toml::from_str(&c).ok())
-    } else {
-        None
-    };
+    let mut pyproject_val: Option<toml::Value> = None;
+
+    if pyproject.is_file() {
+        let is_oversized = fs::metadata(&pyproject)
+            .map(|m| m.len() > MAX_MANIFEST_SIZE)
+            .unwrap_or(false);
+        if is_oversized {
+            diags.push(
+                Diagnostic::builder("DISC-005", Severity::Warning, LanguageTarget::Python)
+                    .message("Scan resource limit exceeded: 'pyproject.toml' exceeds 10 MB limit, skipping parsing")
+                    .location(DiagnosticLocation::new(pyproject.clone()))
+                    .explanation("The manifest exceeds the maximum allowable file size (10 MB).")
+                    .remediation("Reduce the manifest size or configure a higher max_file_size limit.")
+                    .build(),
+            );
+        } else {
+            match fs::read_to_string(&pyproject) {
+                Ok(c) => match toml::from_str::<toml::Value>(&c) {
+                    Ok(val) => {
+                        pyproject_val = Some(val);
+                    }
+                    Err(e) => {
+                        let mut loc = DiagnosticLocation::new(pyproject.clone());
+                        let mut coords = String::new();
+                        if let Some(r) = e.span() {
+                            let span = stackvet_core::byte_range_to_span(&c, r.start, r.end);
+                            coords =
+                                format!(" at line {}, column {}", span.start_line, span.start_col);
+                            loc = loc.with_span(span);
+                        }
+                        diags.push(
+                        Diagnostic::builder("DISC-004", Severity::Error, LanguageTarget::Python)
+                            .message(format!(
+                                "Malformed manifest 'pyproject.toml'{}: {}",
+                                coords,
+                                e.message()
+                            ))
+                            .location(loc)
+                            .explanation("The pyproject.toml manifest contains invalid TOML syntax or corrupted structure.")
+                            .remediation("Validate and correct the TOML syntax in pyproject.toml.")
+                            .build(),
+                    );
+                    }
+                },
+                Err(e) => {
+                    diags.push(
+                    Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Python)
+                        .message(format!("Unreadable manifest 'pyproject.toml': {}", e))
+                        .location(DiagnosticLocation::new(pyproject.clone()))
+                        .explanation("The pyproject.toml file could not be read due to I/O permissions or encoding issues.")
+                        .remediation("Check file read permissions and ensure file is valid UTF-8.")
+                        .build(),
+                );
+                }
+            }
+        }
+    }
 
     let members = discover_python_workspace_members(root, pyproject_val.as_ref());
 
-    let mut info = if pyproject.is_file() {
+    let mut info = if pyproject.is_file() && pyproject_val.is_some() {
         if let Ok(content) = fs::read_to_string(&pyproject) {
-            parse_pyproject_toml(&content, &pyproject).ok()
+            match parse_pyproject_toml(&content, &pyproject) {
+                Ok(inf) => Some(inf),
+                Err(e) => {
+                    diags.push(
+                        Diagnostic::builder("DISC-004", Severity::Error, LanguageTarget::Python)
+                            .message(format!("Invalid configuration in 'pyproject.toml': {}", e))
+                            .location(DiagnosticLocation::new(pyproject.clone()))
+                            .explanation("The pyproject.toml manifest could not be parsed into project metadata.")
+                            .remediation("Verify the [project] or [tool.poetry] sections in pyproject.toml.")
+                            .build(),
+                    );
+                    None
+                }
+            }
         } else {
             None
         }
@@ -356,11 +452,23 @@ pub fn detect_python_project(root: &Path) -> Option<PythonProjectInfo> {
         None
     };
 
+    let reqs = root.join("requirements.txt");
     if info.is_none() && !members.is_empty() {
-        let reqs = root.join("requirements.txt");
         if reqs.is_file() {
-            if let Ok(content) = fs::read_to_string(&reqs) {
-                info = Some(parse_requirements_txt(&content, &reqs));
+            match fs::read_to_string(&reqs) {
+                Ok(content) => {
+                    info = Some(parse_requirements_txt(&content, &reqs));
+                }
+                Err(e) => {
+                    diags.push(
+                        Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Python)
+                            .message(format!("Unreadable 'requirements.txt': {}", e))
+                            .location(DiagnosticLocation::new(reqs.clone()))
+                            .explanation("The requirements.txt file could not be read due to I/O permissions or encoding issues.")
+                            .remediation("Check file read permissions and ensure file is valid UTF-8.")
+                            .build(),
+                    );
+                }
             }
         }
         if info.is_none() {
@@ -386,48 +494,123 @@ pub fn detect_python_project(root: &Path) -> Option<PythonProjectInfo> {
         if uv_lock.is_file() {
             info.lock_file = Some(uv_lock.clone());
             info.package_manager = "uv".to_string();
-            if let Ok(lock_str) = fs::read_to_string(&uv_lock) {
-                let data = parse_uv_lock(&lock_str);
-                info.installed_packages = data.locked_packages.clone();
-                info.locked_packages = data.locked_packages;
-                info.locked_versions = data.locked_versions;
-                for (k, v) in data.workspace_packages {
-                    info.workspace_packages.entry(k).or_insert(v);
+            let is_oversized = fs::metadata(&uv_lock)
+                .map(|m| m.len() > MAX_MANIFEST_SIZE)
+                .unwrap_or(false);
+            if is_oversized {
+                diags.push(
+                    Diagnostic::builder("DISC-005", Severity::Warning, LanguageTarget::Python)
+                        .message("Scan resource limit exceeded: 'uv.lock' exceeds 10 MB limit, skipping parsing")
+                        .location(DiagnosticLocation::new(uv_lock))
+                        .explanation("The uv.lock file exceeds the maximum allowable file size (10 MB).")
+                        .remediation("Increase max_file_size or optimize the lockfile.")
+                        .build(),
+                );
+            } else {
+                match fs::read_to_string(&uv_lock) {
+                    Ok(lock_str) => {
+                        let data = parse_uv_lock(&lock_str);
+                        info.installed_packages = data.locked_packages.clone();
+                        info.locked_packages = data.locked_packages;
+                        info.locked_versions = data.locked_versions;
+                        for (k, v) in data.workspace_packages {
+                            info.workspace_packages.entry(k).or_insert(v);
+                        }
+                    }
+                    Err(e) => {
+                        diags.push(
+                            Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Python)
+                                .message(format!("Unreadable lockfile 'uv.lock': {}", e))
+                                .location(DiagnosticLocation::new(uv_lock))
+                                .explanation("The uv.lock file could not be read due to I/O permissions or encoding issues.")
+                                .remediation("Check file read permissions and ensure file is valid UTF-8.")
+                                .build(),
+                        );
+                    }
                 }
             }
         } else if poetry_lock.is_file() {
             info.lock_file = Some(poetry_lock.clone());
             info.package_manager = "poetry".to_string();
-            if let Ok(lock_str) = fs::read_to_string(&poetry_lock) {
-                let data = parse_poetry_lock(&lock_str);
-                info.installed_packages = data.locked_packages.clone();
-                info.locked_packages = data.locked_packages;
-                info.locked_versions = data.locked_versions;
-                for (k, v) in data.workspace_packages {
-                    info.workspace_packages.entry(k).or_insert(v);
+            let is_oversized = fs::metadata(&poetry_lock)
+                .map(|m| m.len() > MAX_MANIFEST_SIZE)
+                .unwrap_or(false);
+            if is_oversized {
+                diags.push(
+                    Diagnostic::builder("DISC-005", Severity::Warning, LanguageTarget::Python)
+                        .message("Scan resource limit exceeded: 'poetry.lock' exceeds 10 MB limit, skipping parsing")
+                        .location(DiagnosticLocation::new(poetry_lock))
+                        .explanation("The poetry.lock file exceeds the maximum allowable file size (10 MB).")
+                        .remediation("Increase max_file_size or optimize the lockfile.")
+                        .build(),
+                );
+            } else {
+                match fs::read_to_string(&poetry_lock) {
+                    Ok(lock_str) => {
+                        let data = parse_poetry_lock(&lock_str);
+                        info.installed_packages = data.locked_packages.clone();
+                        info.locked_packages = data.locked_packages;
+                        info.locked_versions = data.locked_versions;
+                        for (k, v) in data.workspace_packages {
+                            info.workspace_packages.entry(k).or_insert(v);
+                        }
+                    }
+                    Err(e) => {
+                        diags.push(
+                            Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Python)
+                                .message(format!("Unreadable lockfile 'poetry.lock': {}", e))
+                                .location(DiagnosticLocation::new(poetry_lock))
+                                .explanation("The poetry.lock file could not be read due to I/O permissions or encoding issues.")
+                                .remediation("Check file read permissions and ensure file is valid UTF-8.")
+                                .build(),
+                        );
+                    }
                 }
             }
         } else if pipfile_lock.is_file() {
             info.lock_file = Some(pipfile_lock.clone());
             info.package_manager = "pipenv".to_string();
-            if let Ok(lock_str) = fs::read_to_string(&pipfile_lock) {
-                let data = parse_pipfile_lock(&lock_str);
-                info.installed_packages = data.locked_packages.clone();
-                info.locked_packages = data.locked_packages;
-                info.locked_versions = data.locked_versions;
+            match fs::read_to_string(&pipfile_lock) {
+                Ok(lock_str) => {
+                    let data = parse_pipfile_lock(&lock_str);
+                    info.installed_packages = data.locked_packages.clone();
+                    info.locked_packages = data.locked_packages;
+                    info.locked_versions = data.locked_versions;
+                }
+                Err(e) => {
+                    diags.push(
+                        Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Python)
+                            .message(format!("Unreadable lockfile 'Pipfile.lock': {}", e))
+                            .location(DiagnosticLocation::new(pipfile_lock))
+                            .explanation("The Pipfile.lock file could not be read due to I/O permissions or encoding issues.")
+                            .remediation("Check file read permissions and ensure file is valid UTF-8.")
+                            .build(),
+                    );
+                }
             }
         }
-        return Some(info);
+        return (Some(info), diags);
     }
 
-    let req_txt = root.join("requirements.txt");
-    if req_txt.is_file() {
-        if let Ok(content) = fs::read_to_string(&req_txt) {
-            return Some(parse_requirements_txt(&content, &req_txt));
+    if reqs.is_file() {
+        match fs::read_to_string(&reqs) {
+            Ok(content) => {
+                return (Some(parse_requirements_txt(&content, &reqs)), diags);
+            }
+            Err(e) => {
+                diags.push(
+                    Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Python)
+                        .message(format!("Unreadable 'requirements.txt': {}", e))
+                        .location(DiagnosticLocation::new(reqs))
+                        .explanation("The requirements.txt file could not be read due to I/O permissions or encoding issues.")
+                        .remediation("Check file read permissions and ensure file is valid UTF-8.")
+                        .build(),
+                );
+            }
         }
     }
 
-    None
+    (None, diags)
 }
 
 #[cfg(test)]

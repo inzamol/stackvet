@@ -14,8 +14,8 @@ use stackvet_correlation::{
 };
 use stackvet_frameworks::run_all_framework_analyzers;
 use stackvet_graph::ImportGraph;
-use stackvet_node::detect_node_project;
-use stackvet_python::detect_python_project;
+use stackvet_node::detect_node_project_with_diagnostics;
+use stackvet_python::detect_python_project_with_diagnostics;
 use stackvet_remediation::RemediationEngine;
 use stackvet_reporter::Reporter;
 use stackvet_scanner::{
@@ -74,6 +74,12 @@ pub struct Cli {
 
     #[arg(long, help = "Custom directory for incremental scan cache")]
     pub cache_dir: Option<PathBuf>,
+
+    #[arg(
+        long,
+        help = "Fail with exit code 4 if analysis is incomplete due to unreadable, malformed, or skipped files"
+    )]
+    pub fail_on_incomplete: bool,
 
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -140,6 +146,12 @@ pub enum Commands {
             help = "Update baseline file with current findings and remove resolved issues"
         )]
         update_baseline: bool,
+
+        #[arg(
+            long,
+            help = "Fail with exit code 4 if analysis is incomplete due to unreadable, malformed, or skipped files"
+        )]
+        fail_on_incomplete: bool,
 
         #[arg(
             long = "ignore",
@@ -384,10 +396,19 @@ fn build_full_context(
         .with_default_exclusions(config.ignore.use_defaults())
         .with_ignores(config.ignore.patterns().iter().cloned())
         .with_ignores(cli_ignores.iter().cloned())
+        .with_max_file_size(config.scanner.max_file_size)
+        .with_max_depth(config.scanner.max_depth)
+        .with_max_files(config.scanner.max_files)
+        .with_follow_symlinks(config.scanner.follow_symlinks)
         .with_verbose(verbose);
     let mut ctx = scanner.build_context()?;
-    ctx.python = detect_python_project(root);
-    ctx.node = detect_node_project(root);
+    let (py_proj, py_diags) = detect_python_project_with_diagnostics(root);
+    ctx.python = py_proj;
+    ctx.discovery_diagnostics.extend(py_diags);
+
+    let (node_proj, node_diags) = detect_node_project_with_diagnostics(root);
+    ctx.node = node_proj;
+    ctx.discovery_diagnostics.extend(node_diags);
     Ok(ctx)
 }
 
@@ -1286,7 +1307,9 @@ async fn main() -> Result<()> {
                     &diagnostics,
                     Some(&explanation),
                 )?,
-                OutputFormat::Sarif => reporter.render_sarif(&diagnostics)?,
+                OutputFormat::Sarif => {
+                    reporter.render_sarif_with_root(&diagnostics, Some(&ctx.root))?
+                }
                 OutputFormat::Html => reporter.render_html(
                     score,
                     grade,
@@ -1355,6 +1378,12 @@ async fn main() -> Result<()> {
                 }
             }
 
+            if (cli.fail_on_incomplete || config.scanner.fail_on_incomplete)
+                && diagnostics.iter().any(|d| d.rule_id.0.starts_with("DISC-"))
+            {
+                ExitCode::IncompleteAnalysis.exit();
+            }
+
             ExitCode::Success.exit();
         }
         Some(Commands::Check {
@@ -1362,8 +1391,12 @@ async fn main() -> Result<()> {
             fail_on,
             baseline,
             update_baseline,
+            fail_on_incomplete,
             ..
         }) => {
+            let should_fail_incomplete =
+                *fail_on_incomplete || cli.fail_on_incomplete || config.scanner.fail_on_incomplete;
+            let has_incomplete = diagnostics.iter().any(|d| d.rule_id.0.starts_with("DISC-"));
             let cli_fail_on = match fail_on.as_deref().map(parse_severity).transpose() {
                 Ok(sev) => sev,
                 Err(e) => {
@@ -1438,6 +1471,15 @@ async fn main() -> Result<()> {
 
                 if cli.format == OutputFormat::Text {
                     if violating_issues.is_empty() {
+                        if should_fail_incomplete && has_incomplete {
+                            eprintln!(
+                                "{}",
+                                "✗ Baseline CI Check Incomplete: Malformed files, syntax errors, or scanner limit exhaustion detected."
+                                    .red()
+                                    .bold()
+                            );
+                            ExitCode::IncompleteAnalysis.exit();
+                        }
                         println!(
                             "{}",
                             format!("✓ Baseline CI Check Passed: No new regressions at or above {} threshold.", threshold)
@@ -1544,7 +1586,9 @@ async fn main() -> Result<()> {
                             &diagnostics,
                             Some(&explanation),
                         )?,
-                        OutputFormat::Sarif => reporter.render_sarif(&diagnostics)?,
+                        OutputFormat::Sarif => {
+                            reporter.render_sarif_with_root(&diagnostics, Some(&ctx.root))?
+                        }
                         OutputFormat::Html => reporter.render_html(
                             score,
                             grade,
@@ -1558,6 +1602,8 @@ async fn main() -> Result<()> {
 
                     if !violating_issues.is_empty() {
                         ExitCode::FindingsViolation.exit();
+                    } else if should_fail_incomplete && has_incomplete {
+                        ExitCode::IncompleteAnalysis.exit();
                     } else {
                         ExitCode::Success.exit();
                     }
@@ -1570,6 +1616,15 @@ async fn main() -> Result<()> {
 
                 if cli.format == OutputFormat::Text {
                     if violating_issues.is_empty() {
+                        if should_fail_incomplete && has_incomplete {
+                            eprintln!(
+                                "{}",
+                                "✗ CI Check Incomplete: Malformed files, syntax errors, or scanner limit exhaustion detected."
+                                    .red()
+                                    .bold()
+                            );
+                            ExitCode::IncompleteAnalysis.exit();
+                        }
                         println!(
                             "{}",
                             format!(
@@ -1651,7 +1706,9 @@ async fn main() -> Result<()> {
                             &diagnostics,
                             Some(&explanation),
                         )?,
-                        OutputFormat::Sarif => reporter.render_sarif(&diagnostics)?,
+                        OutputFormat::Sarif => {
+                            reporter.render_sarif_with_root(&diagnostics, Some(&ctx.root))?
+                        }
                         OutputFormat::Html => reporter.render_html(
                             score,
                             grade,
@@ -1665,6 +1722,8 @@ async fn main() -> Result<()> {
 
                     if !violating_issues.is_empty() {
                         ExitCode::FindingsViolation.exit();
+                    } else if should_fail_incomplete && has_incomplete {
+                        ExitCode::IncompleteAnalysis.exit();
                     } else {
                         ExitCode::Success.exit();
                     }
@@ -2291,7 +2350,7 @@ async fn main() -> Result<()> {
                 }
             } else if *sarif {
                 let sarif_str = reporter
-                    .render_sarif(&pr_result.new_diagnostics)
+                    .render_sarif_with_root(&pr_result.new_diagnostics, Some(&root))
                     .unwrap_or_else(|_| "{}".to_string());
                 if let Some(out_file) = output {
                     if let Err(e) = fs::write(out_file, &sarif_str) {

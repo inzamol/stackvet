@@ -7,6 +7,12 @@ use std::path::Path;
 
 pub struct DockerAnalyzer;
 
+impl Default for DockerAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DockerAnalyzer {
     pub fn new() -> Self {
         Self

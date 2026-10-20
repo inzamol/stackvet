@@ -163,6 +163,12 @@ pub fn score_grade(score: u32) -> &'static str {
 
 pub struct CorrelationEngine;
 
+impl Default for CorrelationEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CorrelationEngine {
     pub fn new() -> Self {
         Self

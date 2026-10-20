@@ -7,6 +7,12 @@ use std::path::Path;
 
 pub struct ReactAnalyzer;
 
+impl Default for ReactAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReactAnalyzer {
     pub fn new() -> Self {
         Self
@@ -129,7 +135,7 @@ impl ReactAnalyzer {
         // RCT-004: Missing Key in .map()
         for (idx, line) in lines.iter().enumerate() {
             if line.contains(".map(")
-                && (lines.get(idx + 1).map_or(false, |l| l.contains('<')) || line.contains('<'))
+                && (lines.get(idx + 1).is_some_and(|l| l.contains('<')) || line.contains('<'))
             {
                 // If it renders JSX without key=
                 let check_block = format!("{} {}", line, lines.get(idx + 1).unwrap_or(&""));

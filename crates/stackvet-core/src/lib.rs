@@ -11,7 +11,7 @@ pub mod baseline;
 pub use baseline::{BaselineData, BaselineDiff, BaselineIssueEntry};
 
 pub mod config;
-pub use config::{CacheConfig, ConfigError, StackvetConfig};
+pub use config::{CacheConfig, ConfigError, ScannerConfig, StackvetConfig};
 
 pub mod exit_codes;
 pub use exit_codes::ExitCode;
@@ -665,6 +665,8 @@ pub struct ProjectContext {
     pub ci_workflows: Vec<PathBuf>,
     #[serde(default)]
     pub manifest_files: Vec<PathBuf>,
+    #[serde(default)]
+    pub discovery_diagnostics: Vec<Diagnostic>,
 }
 
 impl ProjectContext {
@@ -677,6 +679,7 @@ impl ProjectContext {
             dockerfiles: Vec::new(),
             ci_workflows: Vec::new(),
             manifest_files: Vec::new(),
+            discovery_diagnostics: Vec::new(),
         }
     }
 }

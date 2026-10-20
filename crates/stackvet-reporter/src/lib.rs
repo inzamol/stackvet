@@ -26,7 +26,11 @@ impl Default for ToolInfo {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReportSummary {
     pub total_issues: usize,
     pub critical_count: usize,
@@ -35,12 +39,34 @@ pub struct ReportSummary {
     pub info_count: usize,
     pub hint_count: usize,
     pub fixable_count: usize,
+    #[serde(default = "default_true")]
+    pub is_complete: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub incomplete_reasons: Vec<String>,
+}
+
+impl Default for ReportSummary {
+    fn default() -> Self {
+        Self {
+            total_issues: 0,
+            critical_count: 0,
+            error_count: 0,
+            warning_count: 0,
+            info_count: 0,
+            hint_count: 0,
+            fixable_count: 0,
+            is_complete: true,
+            incomplete_reasons: Vec::new(),
+        }
+    }
 }
 
 impl ReportSummary {
     pub fn from_diagnostics(diagnostics: &[Diagnostic]) -> Self {
-        let mut summary = Self::default();
-        summary.total_issues = diagnostics.len();
+        let mut summary = Self {
+            total_issues: diagnostics.len(),
+            ..Default::default()
+        };
         for d in diagnostics {
             match d.severity {
                 Severity::Critical => summary.critical_count += 1,
@@ -52,8 +78,24 @@ impl ReportSummary {
             if d.fix.is_some() {
                 summary.fixable_count += 1;
             }
+
+            if d.rule_id.0.starts_with("DISC-") {
+                summary.is_complete = false;
+                let reason = format!("{}: {}", d.rule_id.0, d.message);
+                if !summary.incomplete_reasons.contains(&reason) {
+                    summary.incomplete_reasons.push(reason);
+                }
+            }
         }
         summary
+    }
+
+    pub fn mark_incomplete(&mut self, reason: impl Into<String>) {
+        self.is_complete = false;
+        let r = reason.into();
+        if !self.incomplete_reasons.contains(&r) {
+            self.incomplete_reasons.push(r);
+        }
     }
 }
 
@@ -104,7 +146,7 @@ impl Reporter {
     ) -> String {
         let mut out = String::new();
 
-        out.push_str("\n");
+        out.push('\n');
         out.push_str(
             &"=======================================================================\n"
                 .cyan()
@@ -152,7 +194,7 @@ impl Reporter {
                 ));
             }
         }
-        out.push_str("\n");
+        out.push('\n');
 
         // Counts
         let criticals = diagnostics
@@ -187,6 +229,23 @@ impl Reporter {
             }
         ));
 
+        let disc_diags: Vec<_> = diagnostics
+            .iter()
+            .filter(|d| d.rule_id.0.starts_with("DISC-"))
+            .collect();
+        if !disc_diags.is_empty() {
+            out.push_str(
+                &"⚠️  Incomplete Analysis / Scanner Hardening Notices:\n"
+                    .yellow()
+                    .bold()
+                    .to_string(),
+            );
+            for d in disc_diags {
+                out.push_str(&format!("  • [{}] {}\n", d.rule_id.0.yellow(), d.message));
+            }
+            out.push('\n');
+        }
+
         // Score deduction breakdown
         if let Some(exp) = explanation {
             if !exp.rule_contributions.is_empty() {
@@ -212,7 +271,7 @@ impl Reporter {
                         contrib.title
                     ));
                 }
-                out.push_str("\n");
+                out.push('\n');
             }
         }
 
@@ -313,6 +372,15 @@ impl Reporter {
 
     /// Renders OASIS SARIF v2.1.0 JSON format for GitHub Code Scanning
     pub fn render_sarif(&self, diagnostics: &[Diagnostic]) -> Result<String> {
+        self.render_sarif_with_root(diagnostics, None)
+    }
+
+    /// Renders OASIS SARIF v2.1.0 JSON format relativizing paths against the provided scan root
+    pub fn render_sarif_with_root(
+        &self,
+        diagnostics: &[Diagnostic],
+        scan_root: Option<&std::path::Path>,
+    ) -> Result<String> {
         let mut rules_map = std::collections::BTreeMap::new();
         for d in diagnostics {
             let r_id = d.rule_id.as_str();
@@ -347,6 +415,8 @@ impl Reporter {
         }
         let driver_rules: Vec<serde_json::Value> = rules_map.into_values().collect();
 
+        let effective_scan_root = scan_root.or(self.scan_root.as_deref());
+
         let results: Vec<serde_json::Value> = diagnostics
             .iter()
             .map(|d| {
@@ -363,7 +433,9 @@ impl Reporter {
                 });
 
                 // Locations: only emit if physical location exists (explicit, not fabricated)
-                if let Some(sarif_uri) = relativize_sarif_uri(&d.location.file_path, self.scan_root.as_deref()) {
+                if let Some(sarif_uri) =
+                    relativize_sarif_uri(&d.location.file_path, effective_scan_root)
+                {
                     let mut region_obj = serde_json::Map::new();
                     if let Some(span) = &d.location.span {
                         region_obj
@@ -408,7 +480,8 @@ impl Reporter {
                         .iter()
                         .enumerate()
                         .filter_map(|(idx, rel)| {
-                            let sarif_uri = relativize_sarif_uri(&rel.file_path, self.scan_root.as_deref())?;
+                            let sarif_uri =
+                                relativize_sarif_uri(&rel.file_path, effective_scan_root)?;
                             let mut artifact_loc = serde_json::json!({
                                 "uri": sarif_uri.uri
                             });
@@ -444,7 +517,8 @@ impl Reporter {
                 // Suggested fixes: emit only when fix contains a specific code span
                 if let Some(fix) = &d.fix {
                     if let Some(span) = &fix.span {
-                        let sarif_uri = relativize_sarif_uri(&fix.file_path, self.scan_root.as_deref());
+                        let sarif_uri =
+                            relativize_sarif_uri(&fix.file_path, effective_scan_root);
                         let artifact_loc = if let Some(su) = sarif_uri {
                             let mut loc = serde_json::json!({ "uri": su.uri });
                             if su.is_relative {
@@ -495,9 +569,9 @@ impl Reporter {
             "results": results
         });
 
-        let effective_root = self
-            .scan_root
-            .clone()
+        let effective_root = scan_root
+            .map(|r| r.to_path_buf())
+            .or_else(|| self.scan_root.clone())
             .or_else(|| std::env::current_dir().ok());
 
         if let Some(ref root) = effective_root {
@@ -675,7 +749,7 @@ pub fn relativize_sarif_uri(
     scan_root: Option<&std::path::Path>,
 ) -> Option<SarifUri> {
     let raw = file_path.to_string_lossy();
-    if raw.is_empty() || raw == "<unknown>" {
+    if raw.is_empty() || raw == "<unknown>" || raw == "-" {
         return None;
     }
     let p_clean = raw.replace(r"\\?\", "").replace('\\', "/");

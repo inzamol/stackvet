@@ -6,6 +6,12 @@ use std::fs;
 
 pub struct EnvDriftAnalyzer;
 
+impl Default for EnvDriftAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EnvDriftAnalyzer {
     pub fn new() -> Self {
         Self

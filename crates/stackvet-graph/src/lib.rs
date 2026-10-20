@@ -76,13 +76,10 @@ impl ImportGraph {
     pub fn to_mermaid(&self) -> String {
         let mut out = String::from("flowchart TD\n");
         let mut id_map: HashMap<&str, String> = HashMap::new();
-        let mut counter = 0;
-
-        for node in &self.nodes {
+        for (counter, node) in self.nodes.iter().enumerate() {
             let id = format!("N{}", counter);
             id_map.insert(node.as_str(), id.clone());
             out.push_str(&format!("    {}[\"{}\"]\n", id, node));
-            counter += 1;
         }
 
         for (from, to) in &self.edges {

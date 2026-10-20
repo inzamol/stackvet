@@ -300,10 +300,8 @@ pub fn parse_yarn_lock(content: &str) -> LockfileData {
         {
             let raw_ver = if let Some(rest) = trimmed.strip_prefix("version:") {
                 rest
-            } else if let Some(rest) = trimmed.strip_prefix("version ") {
-                rest
             } else {
-                ""
+                trimmed.strip_prefix("version ").unwrap_or_default()
             };
             let ver = raw_ver
                 .trim()
