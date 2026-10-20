@@ -9,7 +9,7 @@ use ruff_python_ast::{
     Expr, ExprAttribute, ExprCall, ExprName, ExprStringLiteral, Stmt, StmtImport, StmtImportFrom,
 };
 use ruff_python_parser::parse_module;
-use stackvet_core::PythonProjectInfo;
+use stackvet_core::{byte_range_to_span, PythonProjectInfo, TextSpan};
 use std::fs;
 use std::path::Path;
 
@@ -21,6 +21,7 @@ pub struct PythonImport {
     pub is_relative: bool,
     pub level: usize,
     pub is_dynamic: bool,
+    pub span: Option<TextSpan>,
 }
 
 struct ImportVisitor<'b> {
@@ -31,20 +32,19 @@ struct ImportVisitor<'b> {
 impl<'a, 'b> Visitor<'a> for ImportVisitor<'b> {
     fn visit_stmt(&mut self, stmt: &'a Stmt) {
         match stmt {
-            Stmt::Import(StmtImport { names, range, .. }) => {
-                let offset = usize::from(range.start());
-                let line = self.content[..offset.min(self.content.len())]
-                    .matches('\n')
-                    .count()
-                    + 1;
+            Stmt::Import(StmtImport { names, .. }) => {
                 for alias in names {
+                    let start_offset = usize::from(alias.range.start());
+                    let end_offset = usize::from(alias.range.end());
+                    let span = byte_range_to_span(self.content, start_offset, end_offset);
                     self.imports.push(PythonImport {
                         module: alias.name.to_string(),
                         symbol: None,
-                        line,
+                        line: span.start_line,
                         is_relative: false,
                         level: 0,
                         is_dynamic: false,
+                        span: Some(span),
                     });
                 }
             }
@@ -52,24 +52,22 @@ impl<'a, 'b> Visitor<'a> for ImportVisitor<'b> {
                 module,
                 names,
                 level,
-                range,
                 ..
             }) => {
-                let offset = usize::from(range.start());
-                let line = self.content[..offset.min(self.content.len())]
-                    .matches('\n')
-                    .count()
-                    + 1;
                 let mod_name = module.as_ref().map(|m| m.to_string()).unwrap_or_default();
                 let lvl = *level as usize;
                 for alias in names {
+                    let start_offset = usize::from(alias.range.start());
+                    let end_offset = usize::from(alias.range.end());
+                    let span = byte_range_to_span(self.content, start_offset, end_offset);
                     self.imports.push(PythonImport {
                         module: mod_name.clone(),
                         symbol: Some(alias.name.to_string()),
-                        line,
+                        line: span.start_line,
                         is_relative: lvl > 0,
                         level: lvl,
                         is_dynamic: false,
+                        span: Some(span),
                     });
                 }
             }
@@ -98,30 +96,29 @@ impl<'a, 'b> Visitor<'a> for ImportVisitor<'b> {
             };
 
             if is_dynamic_import {
-                if let Some(first_arg) = arguments.args.first() {
-                    if let Expr::StringLiteral(ExprStringLiteral { value, .. }) = first_arg {
-                        let raw_mod = value.to_str();
-                        let offset = usize::from(range.start());
-                        let line = self.content[..offset.min(self.content.len())]
-                            .matches('\n')
-                            .count()
-                            + 1;
-                        let leading_dots = raw_mod.chars().take_while(|&c| c == '.').count();
-                        let is_relative = leading_dots > 0;
-                        let clean_mod = if is_relative {
-                            raw_mod.trim_start_matches('.').to_string()
-                        } else {
-                            raw_mod.to_string()
-                        };
-                        self.imports.push(PythonImport {
-                            module: clean_mod,
-                            symbol: None,
-                            line,
-                            is_relative,
-                            level: leading_dots,
-                            is_dynamic: true,
-                        });
-                    }
+                if let Some(Expr::StringLiteral(ExprStringLiteral { value, .. })) =
+                    arguments.args.first()
+                {
+                    let raw_mod = value.to_str();
+                    let start_offset = usize::from(range.start());
+                    let end_offset = usize::from(range.end());
+                    let span = byte_range_to_span(self.content, start_offset, end_offset);
+                    let leading_dots = raw_mod.chars().take_while(|&c| c == '.').count();
+                    let is_relative = leading_dots > 0;
+                    let clean_mod = if is_relative {
+                        raw_mod.trim_start_matches('.').to_string()
+                    } else {
+                        raw_mod.to_string()
+                    };
+                    self.imports.push(PythonImport {
+                        module: clean_mod,
+                        symbol: None,
+                        line: span.start_line,
+                        is_relative,
+                        level: leading_dots,
+                        is_dynamic: true,
+                        span: Some(span),
+                    });
                 }
             }
         }

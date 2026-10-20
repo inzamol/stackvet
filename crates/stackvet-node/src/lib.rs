@@ -10,7 +10,7 @@ use oxc_ast::visit::walk;
 use oxc_ast::visit::Visit;
 use oxc_parser::Parser;
 use oxc_span::SourceType;
-use stackvet_core::NodeProjectInfo;
+use stackvet_core::{byte_range_to_span, NodeProjectInfo, TextSpan};
 use std::fs;
 use std::path::Path;
 
@@ -24,45 +24,48 @@ impl<'a> Visit<'a> for NodeImportVisitor<'a> {
         match decl {
             ModuleDeclaration::ImportDeclaration(import_decl) => {
                 let specifier = import_decl.source.value.to_string();
-                let offset = import_decl.span.start as usize;
-                let line = self.content[..offset.min(self.content.len())]
-                    .matches('\n')
-                    .count()
-                    + 1;
+                let span = byte_range_to_span(
+                    self.content,
+                    import_decl.span.start as usize,
+                    import_decl.span.end as usize,
+                );
                 self.imports.push(NodeImport {
                     specifier,
                     is_dynamic: false,
                     is_type_only: import_decl.import_kind.is_type(),
-                    line,
+                    line: span.start_line,
+                    span: Some(span),
                 });
             }
             ModuleDeclaration::ExportAllDeclaration(export_all) => {
                 let specifier = export_all.source.value.to_string();
-                let offset = export_all.span.start as usize;
-                let line = self.content[..offset.min(self.content.len())]
-                    .matches('\n')
-                    .count()
-                    + 1;
+                let span = byte_range_to_span(
+                    self.content,
+                    export_all.span.start as usize,
+                    export_all.span.end as usize,
+                );
                 self.imports.push(NodeImport {
                     specifier,
                     is_dynamic: false,
                     is_type_only: export_all.export_kind.is_type(),
-                    line,
+                    line: span.start_line,
+                    span: Some(span),
                 });
             }
             ModuleDeclaration::ExportNamedDeclaration(export_named) => {
                 if let Some(source) = &export_named.source {
                     let specifier = source.value.to_string();
-                    let offset = export_named.span.start as usize;
-                    let line = self.content[..offset.min(self.content.len())]
-                        .matches('\n')
-                        .count()
-                        + 1;
+                    let span = byte_range_to_span(
+                        self.content,
+                        export_named.span.start as usize,
+                        export_named.span.end as usize,
+                    );
                     self.imports.push(NodeImport {
                         specifier,
                         is_dynamic: false,
                         is_type_only: export_named.export_kind.is_type(),
-                        line,
+                        line: span.start_line,
+                        span: Some(span),
                     });
                 }
             }
@@ -74,16 +77,17 @@ impl<'a> Visit<'a> for NodeImportVisitor<'a> {
     fn visit_ts_import_equals_declaration(&mut self, decl: &TSImportEqualsDeclaration<'a>) {
         if let TSModuleReference::ExternalModuleReference(module_ref) = &decl.module_reference {
             let specifier = module_ref.expression.value.to_string();
-            let offset = decl.span.start as usize;
-            let line = self.content[..offset.min(self.content.len())]
-                .matches('\n')
-                .count()
-                + 1;
+            let span = byte_range_to_span(
+                self.content,
+                decl.span.start as usize,
+                decl.span.end as usize,
+            );
             self.imports.push(NodeImport {
                 specifier,
                 is_dynamic: false,
                 is_type_only: decl.import_kind.is_type(),
-                line,
+                line: span.start_line,
+                span: Some(span),
             });
         }
         walk::walk_ts_import_equals_declaration(self, decl);
@@ -91,16 +95,17 @@ impl<'a> Visit<'a> for NodeImportVisitor<'a> {
 
     fn visit_import_expression(&mut self, expr: &ImportExpression<'a>) {
         if let Expression::StringLiteral(lit) = &expr.source {
-            let offset = expr.span.start as usize;
-            let line = self.content[..offset.min(self.content.len())]
-                .matches('\n')
-                .count()
-                + 1;
+            let span = byte_range_to_span(
+                self.content,
+                expr.span.start as usize,
+                expr.span.end as usize,
+            );
             self.imports.push(NodeImport {
                 specifier: lit.value.to_string(),
                 is_dynamic: true,
                 is_type_only: false,
-                line,
+                line: span.start_line,
+                span: Some(span),
             });
         }
         walk::walk_import_expression(self, expr);
@@ -126,16 +131,17 @@ impl<'a> Visit<'a> for NodeImportVisitor<'a> {
         if is_require {
             if let Some(first_arg) = expr.arguments.first() {
                 if let Some(Expression::StringLiteral(lit)) = first_arg.as_expression() {
-                    let offset = expr.span.start as usize;
-                    let line = self.content[..offset.min(self.content.len())]
-                        .matches('\n')
-                        .count()
-                        + 1;
+                    let span = byte_range_to_span(
+                        self.content,
+                        expr.span.start as usize,
+                        expr.span.end as usize,
+                    );
                     self.imports.push(NodeImport {
                         specifier: lit.value.to_string(),
                         is_dynamic: true,
                         is_type_only: false,
-                        line,
+                        line: span.start_line,
+                        span: Some(span),
                     });
                 }
             }
@@ -151,6 +157,7 @@ pub struct NodeImport {
     pub is_dynamic: bool,
     pub is_type_only: bool,
     pub line: usize,
+    pub span: Option<TextSpan>,
 }
 
 pub fn parse_node_imports(content: &str, file: &Path) -> Vec<NodeImport> {

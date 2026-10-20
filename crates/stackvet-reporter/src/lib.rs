@@ -6,14 +6,75 @@ use comfy_table::{Cell, Color, Row, Table};
 use serde::{Deserialize, Serialize};
 use stackvet_core::{Diagnostic, HealthScoreExplanation, RootCause, Severity};
 
-#[derive(Debug, Serialize, Deserialize)]
+pub const SCHEMA_VERSION: &str = "1.0.0";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolInfo {
+    pub name: String,
+    pub version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
+}
+
+impl Default for ToolInfo {
+    fn default() -> Self {
+        Self {
+            name: "stackvet".to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            repository: Some("https://github.com/stackvet/stackvet".to_string()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct ReportSummary {
+    pub total_issues: usize,
+    pub critical_count: usize,
+    pub error_count: usize,
+    pub warning_count: usize,
+    pub info_count: usize,
+    pub hint_count: usize,
+    pub fixable_count: usize,
+}
+
+impl ReportSummary {
+    pub fn from_diagnostics(diagnostics: &[Diagnostic]) -> Self {
+        let mut summary = Self::default();
+        summary.total_issues = diagnostics.len();
+        for d in diagnostics {
+            match d.severity {
+                Severity::Critical => summary.critical_count += 1,
+                Severity::Error => summary.error_count += 1,
+                Severity::Warning => summary.warning_count += 1,
+                Severity::Info => summary.info_count += 1,
+                Severity::Hint => summary.hint_count += 1,
+            }
+            if d.fix.is_some() {
+                summary.fixable_count += 1;
+            }
+        }
+        summary
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FullReport {
+    #[serde(default = "default_schema_version")]
+    pub schema_version: String,
+    #[serde(default)]
+    pub tool: ToolInfo,
+    #[serde(default)]
+    pub summary: ReportSummary,
     pub health_score: u32,
     pub grade: String,
     pub root_causes: Vec<RootCause>,
     pub diagnostics: Vec<Diagnostic>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub score_breakdown: Option<HealthScoreExplanation>,
+}
+
+fn default_schema_version() -> String {
+    SCHEMA_VERSION.to_string()
 }
 
 pub struct Reporter;
@@ -194,12 +255,7 @@ impl Reporter {
                     Severity::Hint => Cell::new("HINT").fg(Color::Grey),
                 };
 
-                let raw_loc = if let Some(span) = &d.location.span {
-                    format!("{}:{}", d.location.file_path.display(), span.start_line)
-                } else {
-                    format!("{}", d.location.file_path.display())
-                };
-                let loc_str = raw_loc.replace(r"\\?\", "").replace('\\', "/");
+                let loc_str = d.location.display_location();
 
                 table.add_row(Row::from(vec![
                     Cell::new(d.rule_id.as_str()),
@@ -224,7 +280,7 @@ impl Reporter {
         out
     }
 
-    /// Renders JSON format
+    /// Renders JSON format with stable schema versioning, tool info, and summary
     pub fn render_json(
         &self,
         score: u32,
@@ -234,6 +290,9 @@ impl Reporter {
         explanation: Option<&HealthScoreExplanation>,
     ) -> Result<String> {
         let report = FullReport {
+            schema_version: SCHEMA_VERSION.to_string(),
+            tool: ToolInfo::default(),
+            summary: ReportSummary::from_diagnostics(diagnostics),
             health_score: score,
             grade: grade.to_string(),
             root_causes: root_causes.to_vec(),
@@ -245,6 +304,40 @@ impl Reporter {
 
     /// Renders OASIS SARIF v2.1.0 JSON format for GitHub Code Scanning
     pub fn render_sarif(&self, diagnostics: &[Diagnostic]) -> Result<String> {
+        let mut rules_map = std::collections::BTreeMap::new();
+        for d in diagnostics {
+            let r_id = d.rule_id.as_str();
+            rules_map.entry(r_id.to_string()).or_insert_with(|| {
+                if let Some(meta) = stackvet_core::get_rule_meta(r_id) {
+                    serde_json::json!({
+                        "id": meta.id,
+                        "name": meta.title,
+                        "shortDescription": { "text": meta.title },
+                        "fullDescription": { "text": meta.description },
+                        "help": { "text": format!("{}\n\nRemediation: {}", meta.description, meta.remediation) },
+                        "helpUri": format!("https://github.com/stackvet/stackvet/blob/main/docs/rules/{}.md", meta.id),
+                        "defaultConfiguration": {
+                            "level": match meta.severity {
+                                "CRITICAL" | "ERROR" => "error",
+                                "WARN" | "WARNING" => "warning",
+                                _ => "note",
+                            }
+                        },
+                        "properties": {
+                            "category": meta.category,
+                            "tags": [meta.category]
+                        }
+                    })
+                } else {
+                    serde_json::json!({
+                        "id": r_id,
+                        "shortDescription": { "text": r_id }
+                    })
+                }
+            });
+        }
+        let driver_rules: Vec<serde_json::Value> = rules_map.into_values().collect();
+
         let results: Vec<serde_json::Value> = diagnostics
             .iter()
             .map(|d| {
@@ -254,40 +347,133 @@ impl Reporter {
                     Severity::Info | Severity::Hint => "note",
                 };
 
-                let start_line = d.location.span.as_ref().map(|s| s.start_line).unwrap_or(1);
-                let raw_uri = d.location.file_path.to_string_lossy();
-                let uri = raw_uri.replace(r"\\?\", "").replace('\\', "/");
-
-                serde_json::json!({
+                let mut result_obj = serde_json::json!({
                     "ruleId": d.rule_id.0,
                     "level": level,
-                    "message": { "text": d.message },
-                    "locations": [{
-                        "physicalLocation": {
+                    "message": { "text": d.message }
+                });
+
+                // Locations: only emit if physical location exists (explicit, not fabricated)
+                if let Some(uri) = d.location.normalized_path() {
+                    let mut region_obj = serde_json::Map::new();
+                    if let Some(span) = &d.location.span {
+                        region_obj
+                            .insert("startLine".to_string(), serde_json::json!(span.start_line));
+                        region_obj
+                            .insert("startColumn".to_string(), serde_json::json!(span.start_col));
+                        region_obj.insert("endLine".to_string(), serde_json::json!(span.end_line));
+                        region_obj.insert("endColumn".to_string(), serde_json::json!(span.end_col));
+                    }
+                    if let Some(snippet) = &d.location.snippet {
+                        region_obj.insert(
+                            "snippet".to_string(),
+                            serde_json::json!({ "text": snippet }),
+                        );
+                    }
+
+                    let mut phys_loc = serde_json::json!({
+                        "artifactLocation": {
+                            "uri": uri,
+                            "uriBaseId": "%SRCROOT%"
+                        }
+                    });
+                    if !region_obj.is_empty() {
+                        phys_loc["region"] = serde_json::Value::Object(region_obj);
+                    }
+
+                    result_obj["locations"] = serde_json::json!([{
+                        "physicalLocation": phys_loc
+                    }]);
+                } else {
+                    result_obj["locations"] = serde_json::json!([]);
+                }
+
+                // Related locations (e.g. cycle hops, multiple import sites)
+                if !d.related_locations.is_empty() {
+                    let related: Vec<serde_json::Value> = d
+                        .related_locations
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(idx, rel)| {
+                            let uri = rel.normalized_path()?;
+                            let mut phys = serde_json::json!({
+                                "artifactLocation": {
+                                    "uri": uri,
+                                    "uriBaseId": "%SRCROOT%"
+                                }
+                            });
+                            if let Some(span) = &rel.span {
+                                phys["region"] = serde_json::json!({
+                                    "startLine": span.start_line,
+                                    "startColumn": span.start_col,
+                                    "endLine": span.end_line,
+                                    "endColumn": span.end_col
+                                });
+                            }
+                            let mut loc_val = serde_json::json!({
+                                "id": idx + 1,
+                                "physicalLocation": phys
+                            });
+                            if let Some(msg) = &rel.message {
+                                loc_val["message"] = serde_json::json!({ "text": msg });
+                            }
+                            Some(loc_val)
+                        })
+                        .collect();
+                    if !related.is_empty() {
+                        result_obj["relatedLocations"] = serde_json::Value::Array(related);
+                    }
+                }
+
+                // Suggested fixes
+                if let Some(fix) = &d.fix {
+                    let fix_uri = fix
+                        .file_path
+                        .to_string_lossy()
+                        .replace(r"\\?\", "")
+                        .replace('\\', "/");
+                    let mut replacement_obj = serde_json::json!({
+                        "insertedContent": { "text": fix.replacement }
+                    });
+                    if let Some(span) = &fix.span {
+                        replacement_obj["deletedRegion"] = serde_json::json!({
+                            "startLine": span.start_line,
+                            "startColumn": span.start_col,
+                            "endLine": span.end_line,
+                            "endColumn": span.end_col
+                        });
+                    }
+                    result_obj["fixes"] = serde_json::json!([{
+                        "description": { "text": fix.description },
+                        "fileChanges": [{
                             "artifactLocation": {
-                                "uri": uri,
+                                "uri": fix_uri,
                                 "uriBaseId": "%SRCROOT%"
                             },
-                            "region": {
-                                "startLine": start_line,
-                                "startColumn": 1
-                            }
-                        }
-                    }]
-                })
+                            "replacements": [replacement_obj]
+                        }]
+                    }]);
+                }
+
+                result_obj
             })
             .collect();
+
+        let mut driver_obj = serde_json::json!({
+            "name": "stackvet",
+            "informationUri": "https://github.com/stackvet/stackvet",
+            "version": env!("CARGO_PKG_VERSION")
+        });
+        if !driver_rules.is_empty() {
+            driver_obj["rules"] = serde_json::Value::Array(driver_rules);
+        }
 
         let sarif = serde_json::json!({
             "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
             "version": "2.1.0",
             "runs": [{
                 "tool": {
-                    "driver": {
-                        "name": "stackvet",
-                        "informationUri": "https://github.com/stackvet/stackvet",
-                        "version": env!("CARGO_PKG_VERSION")
-                    }
+                    "driver": driver_obj
                 },
                 "results": results
             }]
@@ -313,12 +499,7 @@ impl Reporter {
                 Severity::Warning => "#ffa940",
                 _ => "#4096ff",
             };
-            let raw_loc = if let Some(span) = &d.location.span {
-                format!("{}:{}", d.location.file_path.display(), span.start_line)
-            } else {
-                format!("{}", d.location.file_path.display())
-            };
-            let loc_str = raw_loc.replace(r"\\?\", "").replace('\\', "/");
+            let loc_str = d.location.display_location();
             rows.push_str(&format!(
                 "<tr><td><code>{}</code></td><td><span style=\"color:{};font-weight:bold;\">{}</span></td><td>{}</td><td><code>{}</code></td><td>{}</td></tr>",
                 d.rule_id.as_str(), sev_color, d.severity.as_str(), d.language.as_str(), loc_str, d.message

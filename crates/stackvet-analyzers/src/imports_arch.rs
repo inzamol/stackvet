@@ -10,6 +10,23 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+fn make_import_location(
+    file: &Path,
+    span: Option<&stackvet_core::TextSpan>,
+    line: usize,
+    content: &str,
+) -> DiagnosticLocation {
+    if let Some(s) = span {
+        let mut loc = DiagnosticLocation::new(file).with_span(*s);
+        if let Some(snippet) = DiagnosticLocation::extract_snippet_from_source(content, s) {
+            loc = loc.with_snippet(snippet);
+        }
+        loc
+    } else {
+        DiagnosticLocation::new(file).with_span(stackvet_core::TextSpan::single_line(line, 1, 1))
+    }
+}
+
 pub struct ImportsArchAnalyzer;
 
 impl ImportsArchAnalyzer {
@@ -212,16 +229,15 @@ impl Analyzer for ImportsArchAnalyzer {
                     for imp in imports {
                         // Check PEP 594: IMP-004
                         if is_pep594_removed(&imp.module) {
+                            let loc =
+                                make_import_location(file, imp.span.as_ref(), imp.line, &content);
                             diagnostics.push(
                                 Diagnostic::builder("IMP-004", Severity::Error, LanguageTarget::Python)
                                     .message(format!(
                                         "Module '{}' was removed in Python 3.13 (PEP 594)",
                                         imp.module
                                     ))
-                                    .location(
-                                        DiagnosticLocation::new(file.clone())
-                                            .with_span(stackvet_core::TextSpan::single_line(imp.line, 1, 1)),
-                                    )
+                                    .location(loc)
                                     .explanation(format!(
                                         "PEP 594 completely removed deprecated standard library module '{}' from Python 3.13+.",
                                         imp.module
@@ -257,6 +273,12 @@ impl Analyzer for ImportsArchAnalyzer {
                                         imp.symbol.as_deref().unwrap_or("*")
                                     )
                                 };
+                                let loc = make_import_location(
+                                    file,
+                                    imp.span.as_ref(),
+                                    imp.line,
+                                    &content,
+                                );
                                 diagnostics.push(
                                     Diagnostic::builder(
                                         "IMP-002",
@@ -267,10 +289,7 @@ impl Analyzer for ImportsArchAnalyzer {
                                         "Unresolved relative Python import '{}' in '{}'",
                                         import_desc, rel_path
                                     ))
-                                    .location(
-                                        DiagnosticLocation::new(file.clone())
-                                            .with_span(stackvet_core::TextSpan::single_line(imp.line, 1, 1)),
-                                    )
+                                    .location(loc)
                                     .explanation(
                                         "Relative import does not correspond to an existing Python file or package module.",
                                     )
@@ -296,6 +315,12 @@ impl Analyzer for ImportsArchAnalyzer {
                                     .replace('\\', "/");
                                 graph.add_import(rel_path.clone(), target_rel);
                             } else {
+                                let loc = make_import_location(
+                                    file,
+                                    imp.span.as_ref(),
+                                    imp.line,
+                                    &content,
+                                );
                                 diagnostics.push(
                                     Diagnostic::builder(
                                         "IMP-002",
@@ -306,10 +331,7 @@ impl Analyzer for ImportsArchAnalyzer {
                                         "Unresolved local import '{}' in '{}'",
                                         imp.specifier, rel_path
                                     ))
-                                    .location(
-                                        DiagnosticLocation::new(file.clone())
-                                            .with_span(stackvet_core::TextSpan::single_line(imp.line, 1, 1)),
-                                    )
+                                    .location(loc)
                                     .explanation(
                                         "Specifier could not be resolved to any file or directory index on disk.",
                                     )
@@ -335,6 +357,12 @@ impl Analyzer for ImportsArchAnalyzer {
                                         .replace('\\', "/");
                                     graph.add_import(rel_path.clone(), target_rel);
                                 } else {
+                                    let loc = make_import_location(
+                                        file,
+                                        imp.span.as_ref(),
+                                        imp.line,
+                                        &content,
+                                    );
                                     diagnostics.push(
                                         Diagnostic::builder(
                                             "IMP-002",
@@ -345,10 +373,7 @@ impl Analyzer for ImportsArchAnalyzer {
                                             "Unresolved TypeScript path alias '{}' in '{}'",
                                             imp.specifier, rel_path
                                         ))
-                                        .location(
-                                            DiagnosticLocation::new(file.clone())
-                                                .with_span(stackvet_core::TextSpan::single_line(imp.line, 1, 1)),
-                                        )
+                                        .location(loc)
                                         .explanation(
                                             "Path alias matched tsconfig.json paths but target file could not be found on disk.",
                                         )
@@ -379,17 +404,23 @@ impl Analyzer for ImportsArchAnalyzer {
         let cycles = graph.find_cycles();
         for cycle in cycles {
             let cycle_path = cycle.join(" -> ");
-            diagnostics.push(
-                Diagnostic::builder("IMP-001", Severity::Error, LanguageTarget::General)
-                    .message(format!("Circular import cycle detected: {}", cycle_path))
-                    .file(Path::new(&cycle[0]))
-                    .explanation(format!(
-                        "Cycles between modules ({}) cause runtime import failures, initialization deadlock, or undefined symbols.",
-                        cycle_path
-                    ))
-                    .remediation("Refactor shared interfaces into a separate common module or use dependency injection.")
-                    .build(),
-            );
+            let mut builder = Diagnostic::builder("IMP-001", Severity::Error, LanguageTarget::General)
+                .message(format!("Circular import cycle detected: {}", cycle_path))
+                .file(Path::new(&cycle[0]))
+                .explanation(format!(
+                    "Cycles between modules ({}) cause runtime import failures, initialization deadlock, or undefined symbols.",
+                    cycle_path
+                ))
+                .remediation("Refactor shared interfaces into a separate common module or use dependency injection.");
+
+            for step in cycle.iter().skip(1) {
+                builder = builder.related_location(
+                    DiagnosticLocation::new(Path::new(step))
+                        .with_message("Part of circular import cycle"),
+                );
+            }
+
+            diagnostics.push(builder.build());
         }
 
         // IMP-003: Orphan File / Dead Code

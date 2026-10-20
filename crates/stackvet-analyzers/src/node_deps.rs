@@ -55,9 +55,14 @@ impl Analyzer for NodeDependencyAnalyzer {
             })
             .collect();
 
+        type PackageOccurrences<'a> = Vec<(
+            &'a std::path::PathBuf,
+            usize,
+            Option<stackvet_core::TextSpan>,
+        )>;
+
         // 1. Collect all imports
-        let mut imported_packages: BTreeMap<String, Vec<(&std::path::PathBuf, usize)>> =
-            BTreeMap::new();
+        let mut imported_packages: BTreeMap<String, PackageOccurrences> = BTreeMap::new();
 
         for file in &node_files {
             if let Ok(content) = fs::read_to_string(file) {
@@ -83,7 +88,7 @@ impl Analyzer for NodeDependencyAnalyzer {
                         imported_packages
                             .entry(pkg_name)
                             .or_default()
-                            .push((file, imp.line));
+                            .push((file, imp.line, imp.span));
                     }
                 }
             }
@@ -107,7 +112,7 @@ impl Analyzer for NodeDependencyAnalyzer {
             }
 
             // Find the first occurrence not covered by its enclosing member's dependencies or self-reference
-            let uncovered_occurrence = occurrences.iter().find(|(file, _)| {
+            let uncovered_occurrence = occurrences.iter().find(|(file, _, _)| {
                 !node_info.workspace_members.iter().any(|m| {
                     file.starts_with(&m.root_dir)
                         && (m.dependencies.contains_key(pkg_name.as_str())
@@ -118,7 +123,7 @@ impl Analyzer for NodeDependencyAnalyzer {
                 })
             });
 
-            if let Some(&(first_file, first_line)) = uncovered_occurrence {
+            if let Some(&(first_file, first_line, ref first_span)) = uncovered_occurrence {
                 let enclosing_member = node_info
                     .workspace_members
                     .iter()
@@ -151,16 +156,20 @@ impl Analyzer for NodeDependencyAnalyzer {
                     )
                 };
 
-                diagnostics.push(
+                let loc = if let Some(span) = first_span {
+                    DiagnosticLocation::new(first_file.to_path_buf()).with_span(*span)
+                } else {
+                    DiagnosticLocation::new(first_file.to_path_buf())
+                        .with_span(stackvet_core::TextSpan::single_line(first_line, 1, 1))
+                };
+
+                let mut builder =
                     Diagnostic::builder("NDEP-001", Severity::Error, LanguageTarget::Node)
                         .message(format!(
                             "Package '{}' is imported in source code but not declared in {}",
                             pkg_name, manifest_name
                         ))
-                        .location(
-                            DiagnosticLocation::new(first_file.to_path_buf())
-                                .with_span(stackvet_core::TextSpan::single_line(first_line, 1, 1)),
-                        )
+                        .location(loc)
                         .explanation(format!(
                             "Importing undeclared package '{}' will fail at runtime or during production build.",
                             pkg_name
@@ -170,9 +179,22 @@ impl Analyzer for NodeDependencyAnalyzer {
                             format!("Add {} to {}", pkg_name, manifest_name),
                             target_manifest,
                             pkg_name.clone(),
-                        ))
-                        .build(),
-                );
+                        ));
+
+                for &(occ_file, occ_line, ref occ_span) in occurrences
+                    .iter()
+                    .filter(|&&(f, l, _)| f != first_file || l != first_line)
+                {
+                    let rel_loc = if let Some(s) = occ_span {
+                        DiagnosticLocation::new(occ_file.to_path_buf()).with_span(*s)
+                    } else {
+                        DiagnosticLocation::new(occ_file.to_path_buf())
+                            .with_span(stackvet_core::TextSpan::single_line(occ_line, 1, 1))
+                    };
+                    builder = builder.related_location(rel_loc.with_message("Also imported here"));
+                }
+
+                diagnostics.push(builder.build());
             }
         }
 
@@ -300,7 +322,7 @@ impl Analyzer for NodeDependencyAnalyzer {
 
         for dev_pkg in dev_pkgs {
             if let Some(occurrences) = imported_packages.get(dev_pkg) {
-                for (file, line) in occurrences {
+                for (file, line, span) in occurrences {
                     let file_str = file.to_string_lossy().replace('\\', "/");
                     let is_test_file = file_str.contains(".test.")
                         || file_str.contains(".spec.")
@@ -354,6 +376,13 @@ impl Analyzer for NodeDependencyAnalyzer {
                                     .to_string_lossy()
                             });
 
+                        let loc = if let Some(s) = span {
+                            DiagnosticLocation::new((*file).clone()).with_span(*s)
+                        } else {
+                            DiagnosticLocation::new((*file).clone())
+                                .with_span(stackvet_core::TextSpan::single_line(*line, 1, 1))
+                        };
+
                         diagnostics.push(
                             Diagnostic::builder("NDEP-005", Severity::Error, LanguageTarget::Node)
                                 .message(format!(
@@ -361,10 +390,7 @@ impl Analyzer for NodeDependencyAnalyzer {
                                     dev_pkg,
                                     file.file_name().unwrap_or_default().to_string_lossy()
                                 ))
-                                .location(
-                                    DiagnosticLocation::new((*file).clone())
-                                        .with_span(stackvet_core::TextSpan::single_line(*line, 1, 1)),
-                                )
+                                .location(loc)
                                 .explanation(format!(
                                     "Packages in devDependencies are not installed in production environments (NODE_ENV=production), causing runtime crash when '{}' is imported.",
                                     dev_pkg

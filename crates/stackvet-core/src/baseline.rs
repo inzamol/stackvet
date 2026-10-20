@@ -196,6 +196,7 @@ mod tests {
             fix: None,
             language: LanguageTarget::Python,
             confidence: crate::Confidence::High,
+            ..Default::default()
         }
     }
 
