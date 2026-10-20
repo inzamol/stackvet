@@ -1,0 +1,7 @@
+{
+  "name": "monorepo-violations-root",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ]
+}

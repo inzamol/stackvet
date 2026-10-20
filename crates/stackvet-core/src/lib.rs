@@ -382,6 +382,22 @@ impl DiagnosticBuilder {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct WorkspaceMemberInfo {
+    pub name: String,
+    pub version: Option<String>,
+    pub manifest_path: PathBuf,
+    pub root_dir: PathBuf,
+    #[serde(default)]
+    pub dependencies: HashMap<String, String>,
+    #[serde(default)]
+    pub dev_dependencies: HashMap<String, String>,
+    #[serde(default)]
+    pub peer_dependencies: HashMap<String, String>,
+    #[serde(default)]
+    pub optional_dependencies: HashMap<String, String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PythonProjectInfo {
     pub requires_python: Option<String>,
@@ -394,6 +410,8 @@ pub struct PythonProjectInfo {
     pub locked_packages: HashMap<String, String>,    // primary locked version per package
     pub locked_versions: HashMap<String, Vec<String>>, // all locked versions per package
     pub workspace_packages: HashMap<String, String>, // workspace package name -> version
+    #[serde(default)]
+    pub workspace_members: Vec<WorkspaceMemberInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -410,6 +428,8 @@ pub struct NodeProjectInfo {
     pub workspace_packages: HashMap<String, String>, // workspace package name -> version
     pub tsconfig_paths: HashMap<String, Vec<String>>,
     pub tsconfig_base_url: Option<String>,
+    #[serde(default)]
+    pub workspace_members: Vec<WorkspaceMemberInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -420,6 +440,8 @@ pub struct ProjectContext {
     pub source_files: Vec<PathBuf>,
     pub dockerfiles: Vec<PathBuf>,
     pub ci_workflows: Vec<PathBuf>,
+    #[serde(default)]
+    pub manifest_files: Vec<PathBuf>,
 }
 
 impl ProjectContext {
@@ -431,6 +453,7 @@ impl ProjectContext {
             source_files: Vec::new(),
             dockerfiles: Vec::new(),
             ci_workflows: Vec::new(),
+            manifest_files: Vec::new(),
         }
     }
 }

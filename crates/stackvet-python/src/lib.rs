@@ -299,46 +299,88 @@ pub fn parse_requirements_txt(content: &str, path: &Path) -> PythonProjectInfo {
 /// Detects a Python project and loads its manifest and available lockfile metadata.
 pub fn detect_python_project(root: &Path) -> Option<PythonProjectInfo> {
     let pyproject = root.join("pyproject.toml");
-    if pyproject.is_file() {
-        if let Ok(content) = fs::read_to_string(&pyproject) {
-            if let Ok(mut info) = parse_pyproject_toml(&content, &pyproject) {
-                let uv_lock = root.join("uv.lock");
-                let poetry_lock = root.join("poetry.lock");
-                let pipfile_lock = root.join("Pipfile.lock");
+    let pyproject_val: Option<toml::Value> = if pyproject.is_file() {
+        fs::read_to_string(&pyproject)
+            .ok()
+            .and_then(|c| toml::from_str(&c).ok())
+    } else {
+        None
+    };
 
-                if uv_lock.is_file() {
-                    info.lock_file = Some(uv_lock.clone());
-                    info.package_manager = "uv".to_string();
-                    if let Ok(lock_str) = fs::read_to_string(&uv_lock) {
-                        let data = parse_uv_lock(&lock_str);
-                        info.installed_packages = data.locked_packages.clone();
-                        info.locked_packages = data.locked_packages;
-                        info.locked_versions = data.locked_versions;
-                        info.workspace_packages = data.workspace_packages;
-                    }
-                } else if poetry_lock.is_file() {
-                    info.lock_file = Some(poetry_lock.clone());
-                    info.package_manager = "poetry".to_string();
-                    if let Ok(lock_str) = fs::read_to_string(&poetry_lock) {
-                        let data = parse_poetry_lock(&lock_str);
-                        info.installed_packages = data.locked_packages.clone();
-                        info.locked_packages = data.locked_packages;
-                        info.locked_versions = data.locked_versions;
-                        info.workspace_packages = data.workspace_packages;
-                    }
-                } else if pipfile_lock.is_file() {
-                    info.lock_file = Some(pipfile_lock.clone());
-                    info.package_manager = "pipenv".to_string();
-                    if let Ok(lock_str) = fs::read_to_string(&pipfile_lock) {
-                        let data = parse_pipfile_lock(&lock_str);
-                        info.installed_packages = data.locked_packages.clone();
-                        info.locked_packages = data.locked_packages;
-                        info.locked_versions = data.locked_versions;
-                    }
-                }
-                return Some(info);
+    let members = discover_python_workspace_members(root, pyproject_val.as_ref());
+
+    let mut info = if pyproject.is_file() {
+        if let Ok(content) = fs::read_to_string(&pyproject) {
+            parse_pyproject_toml(&content, &pyproject).ok()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    if info.is_none() && !members.is_empty() {
+        let reqs = root.join("requirements.txt");
+        if reqs.is_file() {
+            if let Ok(content) = fs::read_to_string(&reqs) {
+                info = Some(parse_requirements_txt(&content, &reqs));
             }
         }
+        if info.is_none() {
+            info = Some(PythonProjectInfo {
+                package_manager: "uv".to_string(),
+                manifest_file: pyproject.clone(),
+                ..Default::default()
+            });
+        }
+    }
+
+    if let Some(mut info) = info {
+        info.workspace_members = members;
+        for m in &info.workspace_members {
+            let v = m.version.clone().unwrap_or_else(|| "*".to_string());
+            info.workspace_packages.entry(m.name.clone()).or_insert(v);
+        }
+
+        let uv_lock = root.join("uv.lock");
+        let poetry_lock = root.join("poetry.lock");
+        let pipfile_lock = root.join("Pipfile.lock");
+
+        if uv_lock.is_file() {
+            info.lock_file = Some(uv_lock.clone());
+            info.package_manager = "uv".to_string();
+            if let Ok(lock_str) = fs::read_to_string(&uv_lock) {
+                let data = parse_uv_lock(&lock_str);
+                info.installed_packages = data.locked_packages.clone();
+                info.locked_packages = data.locked_packages;
+                info.locked_versions = data.locked_versions;
+                for (k, v) in data.workspace_packages {
+                    info.workspace_packages.entry(k).or_insert(v);
+                }
+            }
+        } else if poetry_lock.is_file() {
+            info.lock_file = Some(poetry_lock.clone());
+            info.package_manager = "poetry".to_string();
+            if let Ok(lock_str) = fs::read_to_string(&poetry_lock) {
+                let data = parse_poetry_lock(&lock_str);
+                info.installed_packages = data.locked_packages.clone();
+                info.locked_packages = data.locked_packages;
+                info.locked_versions = data.locked_versions;
+                for (k, v) in data.workspace_packages {
+                    info.workspace_packages.entry(k).or_insert(v);
+                }
+            }
+        } else if pipfile_lock.is_file() {
+            info.lock_file = Some(pipfile_lock.clone());
+            info.package_manager = "pipenv".to_string();
+            if let Ok(lock_str) = fs::read_to_string(&pipfile_lock) {
+                let data = parse_pipfile_lock(&lock_str);
+                info.installed_packages = data.locked_packages.clone();
+                info.locked_packages = data.locked_packages;
+                info.locked_versions = data.locked_versions;
+            }
+        }
+        return Some(info);
     }
 
     let req_txt = root.join("requirements.txt");

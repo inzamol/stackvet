@@ -3,9 +3,13 @@ use stackvet_core::{
     Analyzer, Diagnostic, DiagnosticLocation, FixAction, LanguageTarget, ProjectContext, Severity,
 };
 use stackvet_python::stdlib::{is_pep594_removed, is_python_stdlib};
-use stackvet_python::{normalize_package_name, parse_python_imports, pep_version_satisfies};
+use stackvet_python::{
+    check_pep_constraints_compatibility, normalize_package_name, parse_python_imports,
+    pep_version_satisfies, ConstraintCompatibility,
+};
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
+use std::path::Path;
 
 pub struct PythonDependencyAnalyzer {
     pub offline: bool,
@@ -138,7 +142,28 @@ impl Analyzer for PythonDependencyAnalyzer {
 
             // Check if matches a package directly or mapped via known PyPI distribution names
             let pypi_alts = stackvet_python::stdlib::get_known_pypi_packages(pkg_name);
-            let is_declared = all_declared_direct.contains(pkg_name)
+            let covered_by_member = |file: &std::path::Path| {
+                py_info.workspace_members.iter().any(|m| {
+                    let declares = |name: &str| {
+                        m.dependencies.contains_key(name) || m.dev_dependencies.contains_key(name)
+                    };
+                    file.starts_with(&m.root_dir)
+                        && (declares(pkg_name.as_str())
+                            || m.name == *pkg_name
+                            || pypi_alts.is_some_and(|alts| alts.iter().any(|alt| declares(alt))))
+                })
+            };
+
+            let (first_file, first_line) = occurrences
+                .iter()
+                .find(|(file, _)| !covered_by_member(file))
+                .copied()
+                .unwrap_or(occurrences[0]);
+
+            let is_member_dep = covered_by_member(first_file);
+
+            let is_declared = is_member_dep
+                || all_declared_direct.contains(pkg_name)
                 || all_declared_dev.contains(pkg_name)
                 || py_info.workspace_packages.contains_key(pkg_name)
                 || pypi_alts.is_some_and(|alts| {
@@ -151,7 +176,6 @@ impl Analyzer for PythonDependencyAnalyzer {
                 let target_pypi_name = pypi_alts
                     .and_then(|alts| alts.first().copied())
                     .unwrap_or(pkg_name.as_str());
-                let (first_file, first_line) = occurrences[0];
 
                 // Check if in lockfile (transitive dependency) -> DEP-007
                 if py_info.installed_packages.contains_key(target_pypi_name) {
@@ -386,6 +410,87 @@ impl Analyzer for PythonDependencyAnalyzer {
                         .remediation("Upgrade python version requirement to '>=3.10' or '>=3.11'.")
                         .build(),
                 );
+            }
+        }
+
+        // Cross-Workspace Dependency Version Conflicts (DEP-001)
+        if !py_info.workspace_members.is_empty() {
+            let mut cross_deps: BTreeMap<String, Vec<(&str, &Path, &str)>> = BTreeMap::new();
+
+            if !py_info.direct_dependencies.is_empty() {
+                let root_name = "root";
+                for (dep, constraint) in &py_info.direct_dependencies {
+                    if !py_info.workspace_packages.contains_key(dep) {
+                        cross_deps.entry(dep.clone()).or_default().push((
+                            root_name,
+                            &py_info.manifest_file,
+                            constraint,
+                        ));
+                    }
+                }
+            }
+
+            for member in &py_info.workspace_members {
+                for (dep, constraint) in &member.dependencies {
+                    if !py_info.workspace_packages.contains_key(dep) {
+                        cross_deps.entry(dep.clone()).or_default().push((
+                            &member.name,
+                            &member.manifest_path,
+                            constraint,
+                        ));
+                    }
+                }
+            }
+
+            for (pkg_name, decls) in cross_deps {
+                let distinct_members: HashSet<&str> = decls.iter().map(|(m, _, _)| *m).collect();
+                if distinct_members.len() < 2 {
+                    continue;
+                }
+
+                let member_pairs: Vec<(&str, &str)> =
+                    decls.iter().map(|(m, _, c)| (*m, *c)).collect();
+                let compatibility = check_pep_constraints_compatibility(&member_pairs);
+
+                if let ConstraintCompatibility::Incompatible { reason, .. } = compatibility {
+                    let first_manifest = decls[0].1;
+                    let member_summary = decls
+                        .iter()
+                        .map(|(m, _, c)| format!("'{}' declares '{}'", m, c))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+
+                    let breakdown_lines = decls
+                        .iter()
+                        .map(|(m, path, c)| {
+                            let rel = path
+                                .strip_prefix(&ctx.root)
+                                .unwrap_or(path)
+                                .to_string_lossy()
+                                .replace('\\', "/");
+                            format!("- {} ({}): {}", m, rel, c)
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n");
+
+                    diagnostics.push(
+                        Diagnostic::builder("DEP-001", Severity::Error, LanguageTarget::Python)
+                            .message(format!(
+                                "Conflicting dependency constraints for '{}' across workspace members: {}",
+                                pkg_name, member_summary
+                            ))
+                            .file(first_manifest)
+                            .explanation(format!(
+                                "Workspace members declare mutually incompatible version constraints for '{}'. {}\nAffected workspace members:\n{}",
+                                pkg_name, reason, breakdown_lines
+                            ))
+                            .remediation(format!(
+                                "Align '{}' version constraints across all workspace members.",
+                                pkg_name
+                            ))
+                            .build(),
+                    );
+                }
             }
         }
 

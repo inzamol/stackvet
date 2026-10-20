@@ -1,0 +1,7 @@
+{
+  "name": "clean-monorepo-root",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ]
+}

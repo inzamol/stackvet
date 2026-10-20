@@ -494,95 +494,135 @@ pub fn parse_package_json(content: &str, path: &Path) -> Result<NodeProjectInfo>
 /// Detects a Node project and loads its manifest, workspace packages, and lockfile versions.
 pub fn detect_node_project(root: &Path) -> Option<NodeProjectInfo> {
     let pkg_json = root.join("package.json");
-    if pkg_json.is_file() {
+    let mut info = if pkg_json.is_file() {
         if let Ok(content) = fs::read_to_string(&pkg_json) {
-            if let Ok(mut info) = parse_package_json(&content, &pkg_json) {
-                // Discover local workspace packages
-                if let Ok(pkg_val) = serde_json::from_str::<serde_json::Value>(&content) {
-                    info.workspace_packages = discover_workspace_packages(root, &pkg_val);
+            parse_package_json(&content, &pkg_json).ok()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let pnpm_ws = root.join("pnpm-workspace.yaml");
+    let lerna_json = root.join("lerna.json");
+    let bunfig_toml = root.join("bunfig.toml");
+
+    // Discover workspace members (from package.json workspaces, pnpm-workspace.yaml, lerna.json, or conventional subdirs)
+    let pkg_val: Option<serde_json::Value> = if pkg_json.is_file() {
+        fs::read_to_string(&pkg_json)
+            .ok()
+            .and_then(|c| serde_json::from_str(&strip_json_comments(&c)).ok())
+    } else {
+        None
+    };
+
+    let members = discover_workspace_members(root, pkg_val.as_ref());
+
+    if info.is_none() {
+        if !members.is_empty() || pnpm_ws.is_file() || lerna_json.is_file() || bunfig_toml.is_file()
+        {
+            let pm = if pnpm_ws.is_file() {
+                "pnpm".to_string()
+            } else if bunfig_toml.is_file() || root.join("bun.lock").is_file() {
+                "bun".to_string()
+            } else {
+                "npm".to_string()
+            };
+            info = Some(NodeProjectInfo {
+                package_manager: pm,
+                package_json_path: pkg_json.clone(),
+                ..Default::default()
+            });
+        }
+    }
+
+    let mut info = info?;
+
+    // Populate workspace members and packages
+    info.workspace_members = members;
+    for m in &info.workspace_members {
+        let v = m.version.clone().unwrap_or_else(|| "*".to_string());
+        info.workspace_packages.entry(m.name.clone()).or_insert(v);
+    }
+
+    // Detect and parse lockfiles
+    let pnpm_lock = root.join("pnpm-lock.yaml");
+    let yarn_lock = root.join("yarn.lock");
+    let npm_lock = root.join("package-lock.json");
+    let bun_text_lock = root.join("bun.lock");
+    let bun_lock = root.join("bun.lockb");
+
+    if pnpm_lock.is_file() {
+        info.lock_file = Some(pnpm_lock.clone());
+        info.package_manager = "pnpm".to_string();
+        if let Ok(lcontent) = fs::read_to_string(&pnpm_lock) {
+            if let Ok(lock_data) = parse_pnpm_lock(&lcontent) {
+                info.locked_packages = lock_data.locked_packages;
+                info.locked_versions = lock_data.locked_versions;
+                for (k, v) in lock_data.workspace_packages {
+                    info.workspace_packages.entry(k).or_insert(v);
                 }
-
-                // Detect and parse lockfiles
-                let pnpm_lock = root.join("pnpm-lock.yaml");
-                let yarn_lock = root.join("yarn.lock");
-                let npm_lock = root.join("package-lock.json");
-                let bun_text_lock = root.join("bun.lock");
-                let bun_lock = root.join("bun.lockb");
-
-                if pnpm_lock.is_file() {
-                    info.lock_file = Some(pnpm_lock.clone());
-                    info.package_manager = "pnpm".to_string();
-                    if let Ok(lcontent) = fs::read_to_string(&pnpm_lock) {
-                        if let Ok(lock_data) = parse_pnpm_lock(&lcontent) {
-                            info.locked_packages = lock_data.locked_packages;
-                            info.locked_versions = lock_data.locked_versions;
-                            for (k, v) in lock_data.workspace_packages {
-                                info.workspace_packages.entry(k).or_insert(v);
-                            }
-                        }
-                    }
-                } else if yarn_lock.is_file() {
-                    info.lock_file = Some(yarn_lock.clone());
-                    info.package_manager = "yarn".to_string();
-                    if let Ok(lcontent) = fs::read_to_string(&yarn_lock) {
-                        let lock_data = parse_yarn_lock(&lcontent);
-                        info.locked_packages = lock_data.locked_packages;
-                        info.locked_versions = lock_data.locked_versions;
-                    }
-                } else if npm_lock.is_file() {
-                    info.lock_file = Some(npm_lock.clone());
-                    info.package_manager = "npm".to_string();
-                    if let Ok(lcontent) = fs::read_to_string(&npm_lock) {
-                        if let Ok(lock_data) = parse_npm_lock(&lcontent) {
-                            info.locked_packages = lock_data.locked_packages;
-                            info.locked_versions = lock_data.locked_versions;
-                            for (k, v) in lock_data.workspace_packages {
-                                info.workspace_packages.entry(k).or_insert(v);
-                            }
-                        }
-                    }
-                } else if bun_text_lock.is_file() {
-                    info.lock_file = Some(bun_text_lock.clone());
-                    info.package_manager = "bun".to_string();
-                    if let Ok(lcontent) = fs::read_to_string(&bun_text_lock) {
-                        let lock_data = parse_bun_lock(&lcontent);
-                        info.locked_packages = lock_data.locked_packages;
-                        info.locked_versions = lock_data.locked_versions;
-                        for (k, v) in lock_data.workspace_packages {
-                            info.workspace_packages.entry(k).or_insert(v);
-                        }
-                    }
-                } else if bun_lock.is_file() {
-                    info.lock_file = Some(bun_lock);
-                    info.package_manager = "bun".to_string();
+            }
+        }
+    } else if yarn_lock.is_file() {
+        info.lock_file = Some(yarn_lock.clone());
+        info.package_manager = "yarn".to_string();
+        if let Ok(lcontent) = fs::read_to_string(&yarn_lock) {
+            let lock_data = parse_yarn_lock(&lcontent);
+            info.locked_packages = lock_data.locked_packages;
+            info.locked_versions = lock_data.locked_versions;
+        }
+    } else if npm_lock.is_file() {
+        info.lock_file = Some(npm_lock.clone());
+        info.package_manager = "npm".to_string();
+        if let Ok(lcontent) = fs::read_to_string(&npm_lock) {
+            if let Ok(lock_data) = parse_npm_lock(&lcontent) {
+                info.locked_packages = lock_data.locked_packages;
+                info.locked_versions = lock_data.locked_versions;
+                for (k, v) in lock_data.workspace_packages {
+                    info.workspace_packages.entry(k).or_insert(v);
                 }
+            }
+        }
+    } else if bun_text_lock.is_file() {
+        info.lock_file = Some(bun_text_lock.clone());
+        info.package_manager = "bun".to_string();
+        if let Ok(lcontent) = fs::read_to_string(&bun_text_lock) {
+            let lock_data = parse_bun_lock(&lcontent);
+            info.locked_packages = lock_data.locked_packages;
+            info.locked_versions = lock_data.locked_versions;
+            for (k, v) in lock_data.workspace_packages {
+                info.workspace_packages.entry(k).or_insert(v);
+            }
+        }
+    } else if bun_lock.is_file() {
+        info.lock_file = Some(bun_lock);
+        info.package_manager = "bun".to_string();
+    }
 
-                // Detect tsconfig.json / jsconfig.json paths
-                let tsconfig_candidates = [
-                    "tsconfig.json",
-                    "jsconfig.json",
-                    "tsconfig.base.json",
-                    "tsconfig.app.json",
-                ];
-                for file_name in tsconfig_candidates {
-                    let ts_path = root.join(file_name);
-                    if ts_path.is_file() {
-                        if let Ok(ts_content) = fs::read_to_string(&ts_path) {
-                            let (paths, base_url) = parse_tsconfig(&ts_content);
-                            if !paths.is_empty() || base_url.is_some() {
-                                info.tsconfig_paths = paths;
-                                info.tsconfig_base_url = base_url;
-                                break;
-                            }
-                        }
-                    }
+    // Detect tsconfig.json / jsconfig.json paths
+    let tsconfig_candidates = [
+        "tsconfig.json",
+        "jsconfig.json",
+        "tsconfig.base.json",
+        "tsconfig.app.json",
+    ];
+    for file_name in tsconfig_candidates {
+        let ts_path = root.join(file_name);
+        if ts_path.is_file() {
+            if let Ok(ts_content) = fs::read_to_string(&ts_path) {
+                let (paths, base_url) = parse_tsconfig(&ts_content);
+                if !paths.is_empty() || base_url.is_some() {
+                    info.tsconfig_paths = paths;
+                    info.tsconfig_base_url = base_url;
+                    break;
                 }
-
-                return Some(info);
             }
         }
     }
-    None
+
+    Some(info)
 }
 
 #[cfg(test)]

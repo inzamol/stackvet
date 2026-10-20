@@ -2,6 +2,7 @@ use crate::strip_json_comments;
 use anyhow::Result;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
+use stackvet_core::WorkspaceMemberInfo;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -395,34 +396,51 @@ pub fn parse_bun_lock(content: &str) -> LockfileData {
     data
 }
 
-/// Scans workspaces defined in package.json or pnpm-workspace.yaml to discover local packages.
-pub fn discover_workspace_packages(
-    root: &Path,
-    pkg_json: &serde_json::Value,
-) -> HashMap<String, String> {
-    let mut packages = HashMap::new();
-
-    // 1. Check "workspaces" in package.json
-    let mut globs: Vec<String> = Vec::new();
-    if let Some(ws) = pkg_json.get("workspaces") {
-        if let Some(arr) = ws.as_array() {
-            for item in arr {
-                if let Some(s) = item.as_str() {
-                    globs.push(s.to_string());
-                }
+fn extract_deps_map(val: Option<&serde_json::Value>) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    if let Some(obj) = val.and_then(|v| v.as_object()) {
+        for (k, v) in obj {
+            if let Some(s) = v.as_str() {
+                map.insert(k.clone(), s.to_string());
             }
-        } else if let Some(obj) = ws.as_object() {
-            if let Some(arr) = obj.get("packages").and_then(|p| p.as_array()) {
+        }
+    }
+    map
+}
+
+/// Discovers workspace members across package.json, pnpm-workspace.yaml, lerna.json, bun, and nested directories.
+pub fn discover_workspace_members(
+    root: &Path,
+    pkg_json: Option<&serde_json::Value>,
+) -> Vec<WorkspaceMemberInfo> {
+    let mut members = Vec::new();
+    let mut discovered_manifests = std::collections::HashSet::new();
+
+    // 1. Collect glob patterns
+    let mut globs: Vec<String> = Vec::new();
+
+    // Check package.json workspaces
+    if let Some(pkg) = pkg_json {
+        if let Some(ws) = pkg.get("workspaces") {
+            if let Some(arr) = ws.as_array() {
                 for item in arr {
                     if let Some(s) = item.as_str() {
                         globs.push(s.to_string());
+                    }
+                }
+            } else if let Some(obj) = ws.as_object() {
+                if let Some(arr) = obj.get("packages").and_then(|p| p.as_array()) {
+                    for item in arr {
+                        if let Some(s) = item.as_str() {
+                            globs.push(s.to_string());
+                        }
                     }
                 }
             }
         }
     }
 
-    // 2. Check pnpm-workspace.yaml
+    // Check pnpm-workspace.yaml
     let pnpm_ws = root.join("pnpm-workspace.yaml");
     if pnpm_ws.is_file() {
         if let Ok(content) = fs::read_to_string(&pnpm_ws) {
@@ -440,39 +458,17 @@ pub fn discover_workspace_packages(
         }
     }
 
-    // 3. Scan matching directories
-    for pattern in globs {
-        let pattern_clean = pattern.trim_end_matches('/').replace('\\', "/");
-        if pattern_clean.ends_with("/*") {
-            let parent_dir = &pattern_clean[..pattern_clean.len() - 2];
-            let target_parent = root.join(parent_dir);
-            if let Ok(entries) = fs::read_dir(target_parent) {
-                for entry in entries.flatten() {
-                    let sub_pkg = entry.path().join("package.json");
-                    if sub_pkg.is_file() {
-                        if let Ok(c) = fs::read_to_string(&sub_pkg) {
-                            if let Ok(sub_json) = serde_json::from_str::<serde_json::Value>(&c) {
-                                if let (Some(n), Some(v)) = (
-                                    sub_json.get("name").and_then(|x| x.as_str()),
-                                    sub_json.get("version").and_then(|x| x.as_str()),
-                                ) {
-                                    packages.insert(n.to_string(), v.to_string());
-                                }
+    // Check lerna.json
+    let lerna_json = root.join("lerna.json");
+    if lerna_json.is_file() {
+        if let Ok(content) = fs::read_to_string(&lerna_json) {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(arr) = val.get("packages").and_then(|p| p.as_array()) {
+                    for item in arr {
+                        if let Some(s) = item.as_str() {
+                            if !globs.contains(&s.to_string()) {
+                                globs.push(s.to_string());
                             }
-                        }
-                    }
-                }
-            }
-        } else {
-            let target_pkg = root.join(&pattern_clean).join("package.json");
-            if target_pkg.is_file() {
-                if let Ok(c) = fs::read_to_string(&target_pkg) {
-                    if let Ok(sub_json) = serde_json::from_str::<serde_json::Value>(&c) {
-                        if let (Some(n), Some(v)) = (
-                            sub_json.get("name").and_then(|x| x.as_str()),
-                            sub_json.get("version").and_then(|x| x.as_str()),
-                        ) {
-                            packages.insert(n.to_string(), v.to_string());
                         }
                     }
                 }
@@ -480,7 +476,342 @@ pub fn discover_workspace_packages(
         }
     }
 
+    // Fallback if no explicit workspaces configured: check conventional monorepo folders
+    if globs.is_empty() {
+        let conventions = ["packages/*", "apps/*", "services/*", "libs/*", "modules/*"];
+        for conv in conventions {
+            let parent = conv.trim_end_matches("/*");
+            if root.join(parent).is_dir() {
+                globs.push(conv.to_string());
+            }
+        }
+    }
+
+    let root_pkg_path = root.join("package.json");
+
+    // Helper closure to parse a member package.json
+    let mut add_member_from_dir = |dir: &Path| {
+        let manifest_path = dir.join("package.json");
+        if manifest_path.is_file() && manifest_path != root_pkg_path {
+            let canonical = manifest_path
+                .canonicalize()
+                .unwrap_or_else(|_| manifest_path.clone());
+            if !discovered_manifests.insert(canonical) {
+                return;
+            }
+            if let Ok(content) = fs::read_to_string(&manifest_path) {
+                let stripped = strip_json_comments(&content);
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&stripped) {
+                    let fallback_name = dir
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+                    let name = val
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or(&fallback_name)
+                        .to_string();
+                    let version = val
+                        .get("version")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    let dependencies = extract_deps_map(val.get("dependencies"));
+                    let dev_dependencies = extract_deps_map(val.get("devDependencies"));
+                    let peer_dependencies = extract_deps_map(val.get("peerDependencies"));
+                    let optional_dependencies = extract_deps_map(val.get("optionalDependencies"));
+
+                    members.push(WorkspaceMemberInfo {
+                        name,
+                        version,
+                        manifest_path,
+                        root_dir: dir.to_path_buf(),
+                        dependencies,
+                        dev_dependencies,
+                        peer_dependencies,
+                        optional_dependencies,
+                    });
+                }
+            }
+        }
+    };
+
+    // Scan matching directories for each pattern
+    for pattern in globs {
+        let pattern_clean = pattern.trim_end_matches('/').replace('\\', "/");
+        if pattern_clean.ends_with("/**") {
+            let parent_dir = &pattern_clean[..pattern_clean.len() - 3];
+            let target_parent = root.join(parent_dir);
+            if target_parent.is_dir() {
+                let mut stack = vec![(target_parent, 0)];
+                while let Some((curr, depth)) = stack.pop() {
+                    if depth > 4 {
+                        continue;
+                    }
+                    if let Ok(entries) = fs::read_dir(&curr) {
+                        for entry in entries.flatten() {
+                            let path = entry.path();
+                            if path.is_dir() {
+                                let name = path.file_name().unwrap_or_default().to_string_lossy();
+                                if matches!(
+                                    name.as_ref(),
+                                    "node_modules"
+                                        | ".git"
+                                        | "target"
+                                        | "dist"
+                                        | "build"
+                                        | ".venv"
+                                        | ".turbo"
+                                        | ".next"
+                                ) {
+                                    continue;
+                                }
+                                if path.join("package.json").is_file() {
+                                    add_member_from_dir(&path);
+                                } else {
+                                    stack.push((path, depth + 1));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else if pattern_clean.ends_with("/*") {
+            let parent_dir = &pattern_clean[..pattern_clean.len() - 2];
+            let target_parent = root.join(parent_dir);
+            if let Ok(entries) = fs::read_dir(target_parent) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        let name = path.file_name().unwrap_or_default().to_string_lossy();
+                        if !matches!(
+                            name.as_ref(),
+                            "node_modules" | ".git" | "target" | "dist" | "build"
+                        ) {
+                            add_member_from_dir(&path);
+                        }
+                    }
+                }
+            }
+        } else {
+            let target_dir = root.join(&pattern_clean);
+            if target_dir.is_dir() {
+                add_member_from_dir(&target_dir);
+            }
+        }
+    }
+
+    // Sort members deterministically by name and manifest_path
+    members.sort_by(|a, b| {
+        a.name
+            .cmp(&b.name)
+            .then_with(|| a.manifest_path.cmp(&b.manifest_path))
+    });
+    members
+}
+
+/// Scans workspaces defined in package.json or pnpm-workspace.yaml to discover local packages.
+pub fn discover_workspace_packages(
+    root: &Path,
+    pkg_json: &serde_json::Value,
+) -> HashMap<String, String> {
+    let members = discover_workspace_members(root, Some(pkg_json));
+    let mut packages = HashMap::new();
+    for m in members {
+        let v = m.version.unwrap_or_else(|| "*".to_string());
+        packages.insert(m.name, v);
+    }
     packages
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConstraintCompatibility {
+    Compatible {
+        suggested_resolution: Option<String>,
+    },
+    Incompatible {
+        conflicting_members: Vec<(String, String)>,
+        reason: String,
+    },
+}
+
+/// Extracts candidate versions from a version constraint string to test intersection.
+pub fn extract_candidate_versions(constraint: &str) -> Vec<Version> {
+    let mut candidates = Vec::new();
+    let c = constraint.trim();
+    if c.is_empty() || c == "*" || c == "latest" {
+        return candidates;
+    }
+
+    let clean = c.strip_prefix("workspace:").unwrap_or(c).trim();
+
+    let parts: Vec<&str> = clean
+        .split(|ch: char| !ch.is_ascii_digit() && ch != '.')
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    for p in parts {
+        let dots = p.chars().filter(|&c| c == '.').count();
+        let normalized = if dots == 2 {
+            p.to_string()
+        } else if dots == 1 {
+            format!("{}.0", p)
+        } else if dots == 0 {
+            format!("{}.0.0", p)
+        } else {
+            continue;
+        };
+
+        if let Ok(v) = Version::parse(&normalized) {
+            if !candidates.contains(&v) {
+                candidates.push(v.clone());
+            }
+            let patch_bump = Version::new(v.major, v.minor, v.patch + 1);
+            if !candidates.contains(&patch_bump) {
+                candidates.push(patch_bump);
+            }
+            let minor_bump = Version::new(v.major, v.minor + 1, 0);
+            if !candidates.contains(&minor_bump) {
+                candidates.push(minor_bump);
+            }
+        }
+    }
+
+    candidates
+}
+
+/// Checks whether declared npm version constraints from multiple workspace members are mutually compatible.
+pub fn check_npm_constraints_compatibility(
+    member_declarations: &[(&str, &str)],
+) -> ConstraintCompatibility {
+    if member_declarations.len() <= 1 {
+        let res = member_declarations.first().map(|(_, c)| c.to_string());
+        return ConstraintCompatibility::Compatible {
+            suggested_resolution: res,
+        };
+    }
+
+    // Filter wildcards and normalize workspace prefixes
+    let mut non_wildcards: Vec<(&str, String)> = Vec::new();
+    for &(member, constraint) in member_declarations {
+        let clean = constraint.trim();
+        let unworkspaced = clean.strip_prefix("workspace:").unwrap_or(clean).trim();
+        if unworkspaced.is_empty()
+            || unworkspaced == "*"
+            || unworkspaced == "latest"
+            || unworkspaced == "x"
+            || unworkspaced == "X"
+        {
+            continue;
+        }
+        non_wildcards.push((member, unworkspaced.to_string()));
+    }
+
+    // If all are wildcards, compatible!
+    if non_wildcards.is_empty() {
+        return ConstraintCompatibility::Compatible {
+            suggested_resolution: Some("*".to_string()),
+        };
+    }
+
+    if non_wildcards.iter().any(|(_, constraint)| {
+        constraint == "^"
+            || constraint == "~"
+            || constraint.contains("||")
+            || [
+                "file:", "link:", "portal:", "git+", "git://", "github:", "http://", "https://",
+            ]
+            .iter()
+            .any(|prefix| constraint.starts_with(prefix))
+            || extract_candidate_versions(constraint).is_empty()
+    }) {
+        return ConstraintCompatibility::Compatible {
+            suggested_resolution: None,
+        };
+    }
+
+    // If all non-wildcards are identical
+    let first_c = &non_wildcards[0].1;
+    if non_wildcards.iter().all(|(_, c)| c == first_c) {
+        return ConstraintCompatibility::Compatible {
+            suggested_resolution: Some(first_c.clone()),
+        };
+    }
+
+    // Collect candidate versions from all constraints
+    let mut all_candidates: Vec<Version> = Vec::new();
+    for (_, c) in &non_wildcards {
+        for v in extract_candidate_versions(c) {
+            if !all_candidates.contains(&v) {
+                all_candidates.push(v);
+            }
+        }
+    }
+
+    // Test each candidate version against all non-wildcard constraints
+    let mut satisfying_version: Option<Version> = None;
+    for v in &all_candidates {
+        let v_str = v.to_string();
+        if non_wildcards
+            .iter()
+            .all(|(_, c)| npm_version_satisfies(c, &v_str))
+        {
+            satisfying_version = Some(v.clone());
+            break;
+        }
+    }
+
+    if let Some(v) = satisfying_version {
+        // Find which member's constraint is tightest while satisfying all other constraints
+        let mut best_constraint: Option<String> = None;
+        for (_, c) in &non_wildcards {
+            let candidates = extract_candidate_versions(c);
+            if let Some(base_v) = candidates.first() {
+                let is_subset = all_candidates
+                    .iter()
+                    .filter(|cand| npm_version_satisfies(c, &cand.to_string()))
+                    .all(|cand| {
+                        non_wildcards
+                            .iter()
+                            .all(|(_, other)| npm_version_satisfies(other, &cand.to_string()))
+                    });
+                if is_subset {
+                    if let Some(prev) = &best_constraint {
+                        let prev_candidates = extract_candidate_versions(prev);
+                        if let Some(pb) = prev_candidates.first() {
+                            if base_v > pb {
+                                best_constraint = Some(c.clone());
+                            }
+                        }
+                    } else {
+                        best_constraint = Some(c.clone());
+                    }
+                }
+            }
+        }
+        let best_constraint = best_constraint.unwrap_or_else(|| format!("^{}", v));
+
+        ConstraintCompatibility::Compatible {
+            suggested_resolution: Some(best_constraint),
+        }
+    } else {
+        let conflicting_members = member_declarations
+            .iter()
+            .map(|&(m, c)| (m.to_string(), c.to_string()))
+            .collect();
+        let summary = member_declarations
+            .iter()
+            .map(|(m, c)| format!("'{}' declares '{}'", m, c))
+            .collect::<Vec<_>>()
+            .join(", ");
+        ConstraintCompatibility::Incompatible {
+            conflicting_members,
+            reason: format!(
+                "No compatible version satisfies all declared constraints ({})",
+                summary
+            ),
+        }
+    }
 }
 
 /// Checks whether a locked version satisfies a manifest version constraint in npm/Node ecosystems.
@@ -767,5 +1098,62 @@ packages:
         assert!(npm_version_satisfies("workspace:*", "2.5.0"));
         assert!(npm_version_satisfies("workspace:^2.0.0", "2.1.0"));
         assert!(!npm_version_satisfies("workspace:^2.0.0", "1.9.0"));
+    }
+
+    #[test]
+    fn test_check_npm_constraints_compatibility() {
+        // Compatible caret ranges
+        let decls = [("app", "^18.0.0"), ("admin", "^18.2.0")];
+        let res = check_npm_constraints_compatibility(&decls);
+        assert!(matches!(res, ConstraintCompatibility::Compatible { .. }));
+        if let ConstraintCompatibility::Compatible {
+            suggested_resolution,
+        } = res
+        {
+            assert_eq!(suggested_resolution, Some("^18.2.0".to_string()));
+        }
+
+        // Incompatible caret ranges
+        let conflict = [("app", "^18.2.0"), ("admin", "^17.0.2")];
+        let res_conflict = check_npm_constraints_compatibility(&conflict);
+        assert!(matches!(
+            res_conflict,
+            ConstraintCompatibility::Incompatible { .. }
+        ));
+
+        // Compatible with wildcard
+        let with_wildcard = [("app", "*"), ("utils", "^4.17.21")];
+        let res_wc = check_npm_constraints_compatibility(&with_wildcard);
+        assert!(matches!(res_wc, ConstraintCompatibility::Compatible { .. }));
+
+        // Incompatible exact pins
+        let exact_conflict = [("app", "1.0.0"), ("admin", "2.0.0")];
+        let res_exact = check_npm_constraints_compatibility(&exact_conflict);
+        assert!(matches!(
+            res_exact,
+            ConstraintCompatibility::Incompatible { .. }
+        ));
+
+        // Compatible with git/http URL, protocol prefix, or union
+        let with_git = [
+            ("app", "git+https://github.com/org/repo.git#v1.0.0"),
+            ("admin", "^1.0.0"),
+        ];
+        let res_git = check_npm_constraints_compatibility(&with_git);
+        assert!(matches!(
+            res_git,
+            ConstraintCompatibility::Compatible {
+                suggested_resolution: None
+            }
+        ));
+
+        let with_union = [("app", "^16.0.0 || ^17.0.0"), ("admin", "^17.0.0")];
+        let res_union = check_npm_constraints_compatibility(&with_union);
+        assert!(matches!(
+            res_union,
+            ConstraintCompatibility::Compatible {
+                suggested_resolution: None
+            }
+        ));
     }
 }
