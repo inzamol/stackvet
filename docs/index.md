@@ -127,26 +127,31 @@ Run `stackvet doctor` or `stackvet scan` directly in any Python project root:
 ### 2.1 Live Diagnostic Output
 
 ```text
-🔍 stackvet
-Project: payment-service
-Python:  3.12.7
-Package Manager: uv
+=======================================================================
+                StackVet Universal Project Health Report               
+=======================================================================
 
-🔴 1 Errors   🟡 1 Warnings   🟢 48 Checks Passed
+  Health Score: 92 / 100
+  Overall Grade: A (Healthy)
+  Calculation:   Base 100 - 8 deductions (1 unique finding, 0 duplicates ignored)
 
-┌────────────────── 🔴 DEP-001 Dependency constraint conflict ─────────────────┐
-│ celery 5.4.0 requires kombu<5.4.0,>=5.3.0, but installed is kombu 5.5.2.     │
-│                                                                              │
-│ Evidence:                                                                    │
-│   • celery declared requirement: kombu<5.4.0,>=5.3.0                         │
-│   • Installed kombu version: 5.5.2 in active environment                     │
-│                                                                              │
-│ Suggested fix:                                                               │
-│   Upgrade celery or pin kombu to <5.4.0,>=5.3.0.                             │
-│   $ uv add 'kombu<5.4.0,>=5.3.0'                                             │
-└──────────────────────────────────────────────────────────────────────────────┘
+  Critical: 0  |  Errors: 1  |  Warnings: 0
 
-Health Score: 85/100
+--- Health Score Deduction Breakdown ---
+  • [ERROR] DEP-001: -8 pts (1 finding) - Dependency constraint conflict
+
+--- Root Cause Clusters (1) ---
+1. [ERROR] Rule Violation: DEP-001
+   Summary: celery 5.4.0 requires kombu<5.4.0,>=5.3.0, but installed is kombu 5.5.2.
+   Remediation: Upgrade celery or pin kombu to <5.4.0,>=5.3.0.
+   Symptoms Count: 1
+
+--- Diagnostic Details ---
+╭─────────┬──────────┬──────────────┬──────────────────┬────────────────────────────────────────────────────────────────────────╮
+│ Rule    ┆ Severity ┆ Target       ┆ File Location    ┆ Message                                                                │
+╞═════════╪══════════╪══════════════╪══════════════════╪════════════════════════════════════════════════════════════════════════╡
+│ DEP-001 ┆ ERROR    ┆ Dependencies ┆ requirements.txt ┆ celery 5.4.0 requires kombu<5.4.0,>=5.3.0, but installed is kombu 5.5.2 │
+╰─────────┴──────────┴──────────────┴──────────────────┴────────────────────────────────────────────────────────────────────────╯
 ```
 
 ---

@@ -138,7 +138,7 @@ jobs:
           version: "latest"
 
       # Analyzes changed code, emits GitHub annotations, and generates step summary
-      - name: Run QV PR Intelligence
+      - name: Run StackVet PR Intelligence
         run: uv run stackvet pr --ci --github-annotations
 ```
 
@@ -161,7 +161,7 @@ jobs:
       - uses: astral-sh/setup-uv@v3
 
       # Verify that no new issues exist beyond .stackvet-baseline.json
-      - name: Verify QV Baseline
+      - name: Verify StackVet Baseline
         run: uv run stackvet baseline verify --strict
 ```
 
@@ -279,8 +279,8 @@ stackvet check --baseline .stackvet-baseline.json --fail-on error
 ```
 If developers resolve existing debt, StackVet automatically reports the resolved findings:
 ```text
-✓ Baseline CI Check Passed: No new regressions at or above ERROR threshold.
-  (42 legacy finding(s) tolerated by baseline)
+✓ Baseline Verified: No new regressions detected above ERROR threshold.
+  (42 legacy finding(s) tolerated)
 ✓ Resolved: 3 legacy baseline finding(s) fixed!
 ```
 

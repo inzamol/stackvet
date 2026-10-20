@@ -1457,6 +1457,10 @@ async fn main() -> Result<()> {
                 );
                 print_verification_summary(&result);
                 if !result.is_clean {
+                    println!(
+                        "{}",
+                        "To revert these changes, run 'stackvet fix --rollback'.".cyan()
+                    );
                     ExitCode::FindingsViolation.exit();
                 }
             } else {

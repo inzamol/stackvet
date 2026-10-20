@@ -100,13 +100,13 @@ stackvet init --force
 ```
 
 > [!NOTE]
-> When generating CI workflows (`stackvet init --ci github`), QV automatically detects package managers. For `uv` projects (`uv.lock` present), it configures `uvx --from stackvet stackvet scan --ci --github-annotations`, allowing `stackvet` to run in an ephemeral tool environment without requiring `stackvet` to be added as a project dependency. For standard pip projects, it installs `stackvet` and runs `stackvet scan --ci --github-annotations`.
+> When generating CI workflows (`stackvet init --ci github`), StackVet automatically detects package managers. For `uv` projects (`uv.lock` present), it configures `uvx --from stackvet stackvet scan --ci --github-annotations`, allowing `stackvet` to run in an ephemeral tool environment without requiring `stackvet` to be added as a project dependency. For standard pip projects, it installs `stackvet` and runs `stackvet scan --ci --github-annotations`.
 
 ---
 
 ## 3. `stackvet doctor`
 
-One command that provides a complete, high-level project health scorecard across all 6 core pillars (Dependencies, Security, Packaging, Architecture, Environment, Framework) with progress bars and top priority problems.
+One command that provides a complete, high-level project health scorecard across all 6 core pillars (Dependencies, Security, Packaging, Architecture, Environment, Framework) with health score, letter grade, root cause clusters, and detailed diagnostic breakdown.
 
 ```bash
 stackvet doctor [PATH] [OPTIONS]
@@ -115,28 +115,47 @@ stackvet doctor [PATH] [OPTIONS]
 Example:
 
 ```text
-QV Project Health
-────────────────────────────────────────
+=======================================================================
+                StackVet Universal Project Health Report               
+=======================================================================
 
-Dependencies      92/100   █████████░
-Security           84/100   ████████░░
-Packaging          96/100   ██████████
-Architecture       78/100   ████████░░
-Environment        91/100   █████████░
-Framework          88/100   █████████░
+  Health Score: 87 / 100
+  Overall Grade: B (Satisfactory)
+  Calculation:   Base 100 - 13 deductions (3 unique findings, 0 duplicates ignored)
 
-Health Score: 87/100
+  Critical: 0  |  Errors: 1  |  Warnings: 2
 
-3 high-priority issues
-7 warnings
-42 checks passed
+--- Health Score Deduction Breakdown ---
+  • [ERROR] SQL-014: -8 pts (1 finding) - N+1 query detected in user fetch
+  • [WARN] DEP-002: -2 pts (1 finding) - Missing dependency: httpx
+  • [WARN] ENV-003: -2 pts (1 finding) - Python version mismatch
 
-Top problems:
-  1. SQL-014  N+1 query detected
-  2. DEP-002  Missing dependency: httpx
-  3. ENV-003  Python version mismatch
+--- Root Cause Clusters (3) ---
+1. [ERROR] Rule Violation: SQL-014
+   Summary: Query loop executing separate queries for related entities without joined load or subquery eager load.
+   Remediation: Use selectinload() or joinedload() for relationship loading.
+   Symptoms Count: 1
 
-Run `stackvet explain SQL-014` for details.
+2. [WARN] Rule Violation: DEP-002
+   Summary: Imported package is used in source code but not declared in pyproject.toml or requirements.txt.
+   Remediation: Add the missing dependency to pyproject.toml or package.json.
+   Symptoms Count: 1
+
+3. [WARN] Rule Violation: ENV-003
+   Summary: Detected Python runtime discrepancy between pyproject.toml and Dockerfile.
+   Remediation: Align the python version specification across all configuration files.
+   Symptoms Count: 1
+
+--- Diagnostic Details ---
+╭─────────┬──────────┬────────┬─────────────────────────┬──────────────────────────────────╮
+│ Rule    ┆ Severity ┆ Target ┆ File Location           ┆ Message                          │
+╞═════════╪══════════╪════════╪═════════════════════════╪══════════════════════════════════╡
+│ SQL-014 ┆ ERROR    ┆ Code   ┆ app/routers/users.py:42 ┆ N+1 query detected in user fetch │
+├╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
+│ DEP-002 ┆ WARN     ┆ Deps   ┆ app/services/client.py  ┆ Missing dependency: httpx        │
+├╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
+│ ENV-003 ┆ WARN     ┆ Env    ┆ Dockerfile:1            ┆ Python version mismatch          │
+╰─────────┴──────────┴────────┴─────────────────────────┴──────────────────────────────────╯
 ```
 
 ### 3.1 Arguments
@@ -500,7 +519,7 @@ stackvet pr [PATH] [OPTIONS]
 
 Example Output:
 ```text
-QV Pull Request Analysis
+StackVet Pull Request Analysis
 
 Changed files: 8
 Affected checks: 17
