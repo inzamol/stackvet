@@ -300,7 +300,6 @@ impl Analyzer for PythonDependencyAnalyzer {
             let is_in_string_literals = all_string_literals.iter().any(|lit| {
                 lit == declared_pkg
                     || lit == &norm_declared
-                    || lit.contains(&norm_declared)
                     || lit
                         .split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
                         .any(|tok| normalize_package_name(tok) == norm_declared)

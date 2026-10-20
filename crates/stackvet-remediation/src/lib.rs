@@ -248,7 +248,9 @@ pub fn remove_dependency_from_pyproject(content: &str, package: &str) -> Result<
                 }
             }
         }
-    } else if let Some(tool) = doc.get_mut("tool").and_then(Item::as_table_mut) {
+    }
+
+    if let Some(tool) = doc.get_mut("tool").and_then(Item::as_table_mut) {
         if let Some(poetry) = tool.get_mut("poetry").and_then(Item::as_table_mut) {
             if let Some(deps) = poetry.get_mut("dependencies").and_then(Item::as_table_mut) {
                 let to_remove: Vec<String> = deps
@@ -572,6 +574,8 @@ pub struct RollbackSnapshot {
     pub descriptions: Vec<String>,
     #[serde(default)]
     pub pre_diagnostics: Vec<Diagnostic>,
+    #[serde(default)]
+    pub fixes: Vec<FixAction>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -754,6 +758,7 @@ impl RemediationEngine {
                 backups,
                 descriptions: fixes.iter().map(|f| f.description.clone()).collect(),
                 pre_diagnostics: pre_diagnostics.map(|d| d.to_vec()).unwrap_or_default(),
+                fixes: fixes.to_vec(),
             };
             let snapshot_path = root.join(ROLLBACK_FILENAME);
             if let Ok(json) = serde_json::to_string_pretty(&snapshot) {
@@ -1168,5 +1173,22 @@ unused-lib = "^1.0.0"
         assert_eq!(res.unresolved_diagnostics[0].rule_id.0, "NDEP-002");
         assert!(res.new_regressions.is_empty());
         assert!(!res.is_clean); // not clean because diag2 unresolved
+    }
+
+    #[test]
+    fn test_remove_dependency_from_poetry_with_project_table() {
+        let orig = r#"[project]
+name = "hybrid-app"
+version = "0.1.0"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+unused-poetry-pkg = "^1.2.0"
+requests = "^2.31.0"
+"#;
+        let modified = remove_dependency_from_pyproject(orig, "unused-poetry-pkg").unwrap();
+        assert!(!modified.contains("unused-poetry-pkg"));
+        assert!(modified.contains("requests = \"^2.31.0\""));
+        assert!(modified.contains("name = \"hybrid-app\""));
     }
 }

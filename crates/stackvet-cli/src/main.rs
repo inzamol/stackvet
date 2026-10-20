@@ -1351,20 +1351,19 @@ async fn main() -> Result<()> {
             dry_run,
             rollback,
             verify,
-            path,
+            ..
         }) => {
-            let root = path.as_deref().unwrap_or_else(|| Path::new("."));
             let engine = RemediationEngine::new();
 
             if *rollback {
-                if !engine.has_rollback_session(root) {
+                if !engine.has_rollback_session(&root) {
                     println!(
                         "{}",
                         "No active rollback session found in target directory.".yellow()
                     );
                     return Ok(());
                 }
-                let restored = engine.rollback_session(root)?;
+                let restored = engine.rollback_session(&root)?;
                 println!(
                     "{}",
                     format!("Successfully rolled back {} file(s):", restored.len())
@@ -1431,7 +1430,7 @@ async fn main() -> Result<()> {
 
             let report = engine.apply_fixes_transactional_with_diagnostics(
                 &fixable,
-                Some(root),
+                Some(&root),
                 Some(&diagnostics),
             )?;
             for fix in &fixable {
@@ -1450,7 +1449,7 @@ async fn main() -> Result<()> {
             if *verify {
                 println!("\n{}", "--- Running Fix Verification ---".cyan().bold());
                 let post_diagnostics =
-                    scan_and_collect_diagnostics(root, &cli.ignore, cli.offline, &config)?;
+                    scan_and_collect_diagnostics(&root, &cli.ignore, cli.offline, &config)?;
                 let result = stackvet_remediation::FixVerificationResult::verify(
                     &diagnostics,
                     &post_diagnostics,
@@ -1467,9 +1466,7 @@ async fn main() -> Result<()> {
                 );
             }
         }
-        Some(Commands::Verify { path }) => {
-            let root = path.as_deref().unwrap_or_else(|| Path::new("."));
-            let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+        Some(Commands::Verify { .. }) => {
             let engine = RemediationEngine::new();
             if !engine.has_rollback_session(&root) {
                 println!(
@@ -1513,22 +1510,62 @@ async fn main() -> Result<()> {
 
             let current_diagnostics =
                 scan_and_collect_diagnostics(&root, &cli.ignore, cli.offline, &config)?;
-            let dummy_fixes: Vec<stackvet_core::FixAction> = snapshot
-                .backups
-                .iter()
-                .map(|b| {
-                    stackvet_core::FixAction::new(
-                        snapshot.descriptions.first().cloned().unwrap_or_default(),
-                        b.path.clone(),
-                        String::new(),
-                    )
-                })
-                .collect();
+
+            if snapshot.pre_diagnostics.is_empty() {
+                println!(
+                    "{}",
+                    "Rollback snapshot does not contain a pre-fix diagnostic baseline. Verifying current project status across modified files..."
+                        .yellow()
+                );
+                let modified_paths: std::collections::HashSet<PathBuf> =
+                    snapshot.backups.iter().map(|b| b.path.clone()).collect();
+                let remaining_in_modified: Vec<_> = current_diagnostics
+                    .iter()
+                    .filter(|d| modified_paths.contains(&d.location.file_path))
+                    .collect();
+
+                if remaining_in_modified.is_empty() {
+                    println!(
+                        "{}",
+                        format!(
+                            "Verification SUCCESS: 0 unresolved issues across {} modified file(s).",
+                            modified_paths.len()
+                        )
+                        .green()
+                        .bold()
+                    );
+                    return Ok(());
+                } else {
+                    eprintln!(
+                        "{}",
+                        format!(
+                            "Verification WARNING: {} unresolved issue(s) remaining in modified files.",
+                            remaining_in_modified.len()
+                        )
+                        .red()
+                        .bold()
+                    );
+                    ExitCode::FindingsViolation.exit();
+                }
+            }
+
+            let fixes_to_verify: Vec<stackvet_core::FixAction> = if !snapshot.fixes.is_empty() {
+                snapshot.fixes.clone()
+            } else {
+                snapshot
+                    .backups
+                    .iter()
+                    .zip(snapshot.descriptions.iter())
+                    .map(|(b, desc)| {
+                        stackvet_core::FixAction::new(desc.clone(), b.path.clone(), String::new())
+                    })
+                    .collect()
+            };
 
             let result = stackvet_remediation::FixVerificationResult::verify(
                 &snapshot.pre_diagnostics,
                 &current_diagnostics,
-                &dummy_fixes,
+                &fixes_to_verify,
             );
             print_verification_summary(&result);
             if !result.is_clean {
