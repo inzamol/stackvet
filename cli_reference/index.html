@@ -1415,6 +1415,15 @@
 <a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="k">[rules.FAP-001]</span>
 <a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="n">severity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"error"</span>
 <a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="n">enabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>
+<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="k">[ignore]</span>
+<a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a><span class="n">patterns</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"legacy/**"</span><span class="p">,</span><span class="w"> </span><span class="s2">"benchmarks/**"</span><span class="p">]</span>
+<a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a>
+<a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a><span class="k">[[suppressions]]</span>
+<a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a><span class="n">rule</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"DEP-001"</span>
+<a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a><span class="n">path</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"legacy/**/*.py"</span>
+<a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a><span class="n">until</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"2026-12-31"</span>
+<a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a><span class="n">reason</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"Legacy package migration"</span>
 </code></pre></div>
 <hr />
 <h2 id="3-stackvet-init">3. <code>stackvet init</code></h2>
@@ -1532,6 +1541,14 @@
 <td>Generates an interactive, standalone HTML dashboard with health score breakdown</td>
 </tr>
 <tr>
+<td><code>--ignore &lt;PATTERN&gt;</code></td>
+<td>Glob pattern to ignore from analysis (repeatable)</td>
+</tr>
+<tr>
+<td><code>--verbose</code></td>
+<td>Print verbose analysis and discovery progress</td>
+</tr>
+<tr>
 <td><code>--offline</code></td>
 <td>Disables remote vulnerability/CVE queries (airgapped mode)</td>
 </tr>
@@ -1591,6 +1608,14 @@
 <tr>
 <td><code>--update-baseline</code></td>
 <td>Update baseline file with current findings and remove resolved issues</td>
+</tr>
+<tr>
+<td><code>--ignore &lt;PATTERN&gt;</code></td>
+<td>Glob pattern to ignore from analysis (repeatable)</td>
+</tr>
+<tr>
+<td><code>--verbose</code></td>
+<td>Print verbose analysis and discovery progress</td>
 </tr>
 <tr>
 <td><code>--json</code></td>
