@@ -1,6 +1,6 @@
 use stackvet_core::{
     byte_offset_to_line_col, byte_range_to_span, extract_snippet_from_source, Diagnostic,
-    DiagnosticLocation, FixAction, LanguageTarget, RuleId, Severity, TextSpan,
+    DiagnosticLocation, LanguageTarget, Severity, TextSpan,
 };
 use std::path::PathBuf;
 

@@ -372,12 +372,12 @@ impl Reporter {
                             .insert("startColumn".to_string(), serde_json::json!(span.start_col));
                         region_obj.insert("endLine".to_string(), serde_json::json!(span.end_line));
                         region_obj.insert("endColumn".to_string(), serde_json::json!(span.end_col));
-                    }
-                    if let Some(snippet) = &d.location.snippet {
-                        region_obj.insert(
-                            "snippet".to_string(),
-                            serde_json::json!({ "text": snippet }),
-                        );
+                        if let Some(snippet) = &d.location.snippet {
+                            region_obj.insert(
+                                "snippet".to_string(),
+                                serde_json::json!({ "text": snippet }),
+                            );
+                        }
                     }
 
                     let mut artifact_loc = serde_json::json!({
@@ -487,16 +487,45 @@ impl Reporter {
             driver_obj["rules"] = serde_json::Value::Array(driver_rules);
         }
 
+        let mut run_obj = serde_json::json!({
+            "tool": {
+                "driver": driver_obj
+            },
+            "columnKind": "unicodeCodePoints",
+            "results": results
+        });
+
+        let effective_root = self
+            .scan_root
+            .clone()
+            .or_else(|| std::env::current_dir().ok());
+
+        if let Some(ref root) = effective_root {
+            let clean_root = root
+                .to_string_lossy()
+                .replace(r"\\?\", "")
+                .replace('\\', "/");
+            let root_uri_path = if clean_root.ends_with('/') {
+                clean_root
+            } else {
+                format!("{clean_root}/")
+            };
+            let root_file_uri = if root_uri_path.starts_with('/') {
+                format!("file://{}", encode_uri_path(&root_uri_path))
+            } else {
+                format!("file:///{}", encode_uri_path(&root_uri_path))
+            };
+            run_obj["originalUriBaseIds"] = serde_json::json!({
+                "%SRCROOT%": {
+                    "uri": root_file_uri
+                }
+            });
+        }
+
         let sarif = serde_json::json!({
             "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
             "version": "2.1.0",
-            "runs": [{
-                "tool": {
-                    "driver": driver_obj
-                },
-                "columnKind": "unicodeCodePoints",
-                "results": results
-            }]
+            "runs": [run_obj]
         });
 
         Ok(serde_json::to_string_pretty(&sarif)?)
@@ -599,6 +628,48 @@ pub struct SarifUri {
     pub is_relative: bool,
 }
 
+fn encode_uri_segment(segment: &str) -> String {
+    let mut out = String::with_capacity(segment.len());
+    for byte in segment.bytes() {
+        match byte {
+            b'a'..=b'z'
+            | b'A'..=b'Z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'~'
+            | b'!'
+            | b'$'
+            | b'&'
+            | b'\''
+            | b'('
+            | b')'
+            | b'*'
+            | b'+'
+            | b','
+            | b';'
+            | b'='
+            | b':'
+            | b'@' => {
+                out.push(byte as char);
+            }
+            _ => {
+                use std::fmt::Write;
+                let _ = write!(out, "%{:02X}", byte);
+            }
+        }
+    }
+    out
+}
+
+pub fn encode_uri_path(path: &str) -> String {
+    path.split('/')
+        .map(encode_uri_segment)
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 pub fn relativize_sarif_uri(
     file_path: &std::path::Path,
     scan_root: Option<&std::path::Path>,
@@ -623,7 +694,7 @@ pub fn relativize_sarif_uri(
 
     if !is_rooted && !p_clean.starts_with("../") {
         return Some(SarifUri {
-            uri: p_clean.trim_start_matches("./").to_string(),
+            uri: encode_uri_path(p_clean.trim_start_matches("./")),
             is_relative: true,
         });
     }
@@ -648,12 +719,16 @@ pub fn relativize_sarif_uri(
                 .replace('\\', "/");
             let norm_root = clean_root.trim_end_matches('/');
 
+            let has_boundary = p_clean.len() == norm_root.len()
+                || p_clean.as_bytes().get(norm_root.len()) == Some(&b'/');
+
             #[cfg(windows)]
             let matches_prefix = p_clean
                 .to_lowercase()
-                .starts_with(&norm_root.to_lowercase());
+                .starts_with(&norm_root.to_lowercase())
+                && has_boundary;
             #[cfg(not(windows))]
-            let matches_prefix = p_clean.starts_with(norm_root);
+            let matches_prefix = p_clean.starts_with(norm_root) && has_boundary;
 
             if matches_prefix {
                 let remainder = &p_clean[norm_root.len()..];
@@ -671,15 +746,16 @@ pub fn relativize_sarif_uri(
             .replace(r"\\?\", "")
             .replace('\\', "/");
         Some(SarifUri {
-            uri: rel_str,
+            uri: encode_uri_path(&rel_str),
             is_relative: true,
         })
     } else {
         // Absolute path outside the root: preserve as file:/// URI and omit uriBaseId
-        let file_uri = if p_clean.starts_with('/') {
-            format!("file://{p_clean}")
+        let encoded_p = encode_uri_path(&p_clean);
+        let file_uri = if encoded_p.starts_with('/') {
+            format!("file://{encoded_p}")
         } else {
-            format!("file:///{p_clean}")
+            format!("file:///{encoded_p}")
         };
         Some(SarifUri {
             uri: file_uri,

@@ -318,7 +318,9 @@ fn test_sarif_uri_handling_with_root_and_external_paths() {
     // 1. Inside root: should be relativized and retain uriBaseId = %SRCROOT%
     let inside_diag = Diagnostic::builder("DEP-001", Severity::Error, LanguageTarget::Python)
         .message("Inside root issue")
-        .location(DiagnosticLocation::new("/project/root/src/module.py"))
+        .location(DiagnosticLocation::new(
+            "/project/root/src/my module/foo#1.py",
+        ))
         .build();
 
     // 2. Outside root: should be preserved as file:/// URI and omit uriBaseId
@@ -327,17 +329,47 @@ fn test_sarif_uri_handling_with_root_and_external_paths() {
         .location(DiagnosticLocation::new("/opt/external/lib.py"))
         .build();
 
+    // 3. Sibling prefix /project/root2: boundary check must NOT match /project/root
+    let sibling_diag = Diagnostic::builder("DEP-003", Severity::Warning, LanguageTarget::Python)
+        .message("Sibling root issue")
+        .location(DiagnosticLocation::new("/project/root2/other.py"))
+        .build();
+
+    // 4. Diagnostic with snippet but NO span: must NOT emit a snippet-only region
+    let snippet_only_diag = Diagnostic::builder("DEP-004", Severity::Info, LanguageTarget::Python)
+        .message("Snippet without span")
+        .location(
+            DiagnosticLocation::new("/project/root/src/main.py").with_snippet("some code snippet"),
+        )
+        .build();
+
     let sarif_str = reporter
-        .render_sarif(&[inside_diag, outside_diag])
+        .render_sarif(&[inside_diag, outside_diag, sibling_diag, snippet_only_diag])
         .expect("render sarif");
     let sarif: serde_json::Value = serde_json::from_str(&sarif_str).expect("parse sarif");
 
+    // originalUriBaseIds definition
+    let base_ids = &sarif["runs"][0]["originalUriBaseIds"];
+    assert_eq!(base_ids["%SRCROOT%"]["uri"], "file:///project/root/");
+
     let results = &sarif["runs"][0]["results"];
+
+    // 1. Inside root with URI encoding
     let loc_inside = &results[0]["locations"][0]["physicalLocation"]["artifactLocation"];
-    assert_eq!(loc_inside["uri"], "src/module.py");
+    assert_eq!(loc_inside["uri"], "src/my%20module/foo%231.py");
     assert_eq!(loc_inside["uriBaseId"], "%SRCROOT%");
 
+    // 2. Outside root
     let loc_outside = &results[1]["locations"][0]["physicalLocation"]["artifactLocation"];
     assert_eq!(loc_outside["uri"], "file:///opt/external/lib.py");
     assert!(loc_outside.get("uriBaseId").is_none());
+
+    // 3. Sibling root: outside root
+    let loc_sibling = &results[2]["locations"][0]["physicalLocation"]["artifactLocation"];
+    assert_eq!(loc_sibling["uri"], "file:///project/root2/other.py");
+    assert!(loc_sibling.get("uriBaseId").is_none());
+
+    // 4. Snippet without span: physicalLocation has no region
+    let phys_snippet = &results[3]["locations"][0]["physicalLocation"];
+    assert!(phys_snippet.get("region").is_none());
 }
