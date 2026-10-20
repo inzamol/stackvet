@@ -140,6 +140,7 @@ pub fn calculate_health_score_explained(diagnostics: &[Diagnostic]) -> HealthSco
         total_deductions,
         unique_findings_count: unique_diagnostics.len(),
         duplicate_findings_ignored: duplicates_ignored,
+        suppressed_findings_count: 0,
         rule_contributions,
         diagnostic_details,
     }

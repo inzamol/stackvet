@@ -6,7 +6,7 @@ use comfy_table::presets::UTF8_FULL;
 use comfy_table::{Cell, Color, Row, Table};
 use stackvet_analyzers::run_all_analyzers;
 use stackvet_core::{
-    config::parse_severity, get_rule_meta, BaselineData, ConfigError, ExitCode,
+    apply_suppressions, config::parse_severity, get_rule_meta, BaselineData, ConfigError, ExitCode,
     HealthScoreExplanation, ProjectContext, Severity, StackvetConfig, ALL_RULES,
 };
 use stackvet_correlation::{
@@ -48,6 +48,16 @@ pub struct Cli {
     #[arg(long, help = "Run offline without querying vulnerability databases")]
     pub offline: bool,
 
+    #[arg(
+        long = "ignore",
+        help = "Additional glob pattern to ignore (can be specified multiple times)",
+        action = clap::ArgAction::Append
+    )]
+    pub ignore: Vec<String>,
+
+    #[arg(short, long, help = "Show verbose diagnostic and scan details")]
+    pub verbose: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -76,6 +86,13 @@ pub enum Commands {
 
         #[arg(long, help = "Path to baseline file to compare against")]
         baseline: Option<PathBuf>,
+
+        #[arg(
+            long = "ignore",
+            help = "Additional glob pattern to ignore (can be specified multiple times)",
+            action = clap::ArgAction::Append
+        )]
+        ignore: Vec<String>,
     },
 
     #[command(
@@ -106,6 +123,13 @@ pub enum Commands {
             help = "Update baseline file with current findings and remove resolved issues"
         )]
         update_baseline: bool,
+
+        #[arg(
+            long = "ignore",
+            help = "Additional glob pattern to ignore (can be specified multiple times)",
+            action = clap::ArgAction::Append
+        )]
+        ignore: Vec<String>,
     },
 
     #[command(
@@ -118,6 +142,13 @@ pub enum Commands {
 
         #[arg(long, help = "Filter by rule ID prefix (e.g. FAP, DEP, RCT, DOC, SQL)")]
         rule: Option<String>,
+
+        #[arg(
+            long = "ignore",
+            help = "Additional glob pattern to ignore (can be specified multiple times)",
+            action = clap::ArgAction::Append
+        )]
+        ignore: Vec<String>,
     },
 
     #[command(about = "Display in-depth explanation and remediation guide for a specific rule ID")]
@@ -250,8 +281,17 @@ pub enum GraphFormat {
     Dot,
 }
 
-fn build_full_context(root: &Path) -> Result<ProjectContext> {
-    let scanner = ProjectScanner::new(root);
+fn build_full_context(
+    root: &Path,
+    config: &StackvetConfig,
+    cli_ignores: &[String],
+    verbose: bool,
+) -> Result<ProjectContext> {
+    let scanner = ProjectScanner::new(root)
+        .with_default_exclusions(config.ignore.use_defaults())
+        .with_ignores(config.ignore.patterns().iter().cloned())
+        .with_ignores(cli_ignores.iter().cloned())
+        .with_verbose(verbose);
     let mut ctx = scanner.build_context()?;
     ctx.python = detect_python_project(root);
     ctx.node = detect_node_project(root);
@@ -676,8 +716,17 @@ async fn main() -> Result<()> {
         ExitCode::Success.exit();
     }
 
-    // Build context
-    let ctx = match build_full_context(&root) {
+    // Gather all CLI ignore patterns from global and subcommand flags
+    let mut all_cli_ignores = cli.ignore.clone();
+    match &cli.command {
+        Some(Commands::Doctor { ignore, .. }) => all_cli_ignores.extend(ignore.clone()),
+        Some(Commands::Check { ignore, .. }) => all_cli_ignores.extend(ignore.clone()),
+        Some(Commands::Inspect { ignore, .. }) => all_cli_ignores.extend(ignore.clone()),
+        _ => {}
+    }
+
+    // Build context with ignore filtering (CLI --ignore > config.ignore > .stackvetignore > default exclusions)
+    let ctx = match build_full_context(&root, &config, &all_cli_ignores, cli.verbose) {
         Ok(c) => c,
         Err(e) => {
             eprintln!(
@@ -699,15 +748,23 @@ async fn main() -> Result<()> {
             ExitCode::ExecutionError.exit();
         }
     };
-    let diagnostics = match config.apply_rule_overrides(raw_diagnostics) {
+    let diagnostics_after_rules = match config.apply_rule_overrides(raw_diagnostics) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("{}", format!("Invalid configuration: {e}").red().bold());
             ExitCode::ConfigurationError.exit();
         }
     };
+
+    // Apply configured suppressions and inline comment suppressions
+    let suppression_outcome =
+        apply_suppressions(&root, &config.suppressions, diagnostics_after_rules, None);
+    let diagnostics = suppression_outcome.active_diagnostics;
+    let suppressed_diagnostics = suppression_outcome.suppressed;
+
     let mut explanation = calculate_health_score_explained(&diagnostics);
     explanation.duplicate_findings_ignored = duplicates_ignored;
+    explanation.suppressed_findings_count = suppressed_diagnostics.len();
     let score = explanation.final_score;
     let grade = score_grade(score);
 
@@ -792,6 +849,31 @@ async fn main() -> Result<()> {
 
             if explain_mode && cli.format == OutputFormat::Text {
                 print_score_explanation_details(&explanation);
+            }
+
+            if !suppressed_diagnostics.is_empty() && cli.format == OutputFormat::Text {
+                println!(
+                    "{}",
+                    format!(
+                        "  ({} finding(s) suppressed by configuration or inline comments)",
+                        suppressed_diagnostics.len()
+                    )
+                    .yellow()
+                );
+            }
+
+            if !suppression_outcome.expired_configured.is_empty()
+                && cli.format == OutputFormat::Text
+            {
+                eprintln!(
+                    "{}",
+                    format!(
+                        "⚠️ Warning: {} suppression entry(ies) in configuration have expired and are no longer active.",
+                        suppression_outcome.expired_configured.len()
+                    )
+                    .yellow()
+                    .bold()
+                );
             }
 
             if let Some(diff) = &baseline_diff {
@@ -928,6 +1010,23 @@ async fn main() -> Result<()> {
                                 .green()
                             );
                         }
+                        if !suppressed_diagnostics.is_empty() {
+                            println!(
+                                "  ({} finding(s) suppressed by configuration or inline comments)",
+                                suppressed_diagnostics.len()
+                            );
+                        }
+                        if !suppression_outcome.expired_configured.is_empty() {
+                            eprintln!(
+                                "{}",
+                                format!(
+                                    "⚠️ Warning: {} suppression entry(ies) in configuration have expired and are no longer active.",
+                                    suppression_outcome.expired_configured.len()
+                                )
+                                .yellow()
+                                .bold()
+                            );
+                        }
                         ExitCode::Success.exit();
                     } else {
                         eprintln!(
@@ -965,6 +1064,23 @@ async fn main() -> Result<()> {
                                     diff.resolved_fingerprints.len()
                                 )
                                 .green()
+                            );
+                        }
+                        if !suppressed_diagnostics.is_empty() {
+                            eprintln!(
+                                "  ({} finding(s) suppressed by configuration or inline comments)",
+                                suppressed_diagnostics.len()
+                            );
+                        }
+                        if !suppression_outcome.expired_configured.is_empty() {
+                            eprintln!(
+                                "{}",
+                                format!(
+                                    "⚠️ Warning: {} suppression entry(ies) in configuration have expired and are no longer active.",
+                                    suppression_outcome.expired_configured.len()
+                                )
+                                .yellow()
+                                .bold()
                             );
                         }
                         ExitCode::FindingsViolation.exit();
@@ -1013,6 +1129,23 @@ async fn main() -> Result<()> {
                             .green()
                             .bold()
                         );
+                        if !suppressed_diagnostics.is_empty() {
+                            println!(
+                                "  ({} finding(s) suppressed by configuration or inline comments)",
+                                suppressed_diagnostics.len()
+                            );
+                        }
+                        if !suppression_outcome.expired_configured.is_empty() {
+                            eprintln!(
+                                "{}",
+                                format!(
+                                    "⚠️ Warning: {} suppression entry(ies) in configuration have expired and are no longer active.",
+                                    suppression_outcome.expired_configured.len()
+                                )
+                                .yellow()
+                                .bold()
+                            );
+                        }
                         ExitCode::Success.exit();
                     } else {
                         eprintln!(
@@ -1039,6 +1172,23 @@ async fn main() -> Result<()> {
                                     span.start_line
                                 );
                             }
+                        }
+                        if !suppressed_diagnostics.is_empty() {
+                            eprintln!(
+                                "  ({} finding(s) suppressed by configuration or inline comments)",
+                                suppressed_diagnostics.len()
+                            );
+                        }
+                        if !suppression_outcome.expired_configured.is_empty() {
+                            eprintln!(
+                                "{}",
+                                format!(
+                                    "⚠️ Warning: {} suppression entry(ies) in configuration have expired and are no longer active.",
+                                    suppression_outcome.expired_configured.len()
+                                )
+                                .yellow()
+                                .bold()
+                            );
                         }
                         ExitCode::FindingsViolation.exit();
                     }

@@ -17,6 +17,8 @@ pub enum ConfigError {
     ValidationError(String),
 }
 
+use crate::suppression::SuppressionEntry;
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StackvetConfig {
     #[serde(default)]
@@ -27,6 +29,47 @@ pub struct StackvetConfig {
     pub ci: CiConfig,
     #[serde(default)]
     pub rules: HashMap<String, RuleSetting>,
+    #[serde(default)]
+    pub ignore: IgnoreConfig,
+    #[serde(default)]
+    pub suppressions: Vec<SuppressionEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum IgnoreConfig {
+    List(Vec<String>),
+    Table {
+        #[serde(default)]
+        patterns: Vec<String>,
+        #[serde(default = "default_true")]
+        use_defaults: bool,
+    },
+}
+
+impl Default for IgnoreConfig {
+    fn default() -> Self {
+        Self::Table {
+            patterns: Vec::new(),
+            use_defaults: true,
+        }
+    }
+}
+
+impl IgnoreConfig {
+    pub fn patterns(&self) -> &[String] {
+        match self {
+            Self::List(p) => p.as_slice(),
+            Self::Table { patterns, .. } => patterns.as_slice(),
+        }
+    }
+
+    pub fn use_defaults(&self) -> bool {
+        match self {
+            Self::List(_) => true,
+            Self::Table { use_defaults, .. } => *use_defaults,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -135,6 +178,10 @@ impl StackvetConfig {
         }
         if let Some(fail_on) = &self.ci.fail_on {
             parse_severity(fail_on)?;
+        }
+
+        for supp in &self.suppressions {
+            supp.validate().map_err(ConfigError::ValidationError)?;
         }
 
         Ok(())
