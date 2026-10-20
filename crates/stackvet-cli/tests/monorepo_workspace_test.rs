@@ -901,3 +901,134 @@ version = "0.1.0"
     );
     assert_eq!(py_info.workspace_members.len(), 1);
 }
+
+#[test]
+fn test_ndep001_fixaction_targets_member_manifest() {
+    let fixture = TestDir::new("ndep001-fix-target");
+    let root = fixture.path();
+
+    fs::write(
+        root.join("package.json"),
+        r#"{
+  "name": "root",
+  "private": true,
+  "workspaces": ["packages/*"]
+}"#,
+    )
+    .unwrap();
+
+    let pkg_a = root.join("packages").join("pkg-a");
+    fs::create_dir_all(pkg_a.join("src")).unwrap();
+    fs::write(
+        pkg_a.join("package.json"),
+        r#"{
+  "name": "pkg-a",
+  "version": "1.0.0"
+}"#,
+    )
+    .unwrap();
+    fs::write(
+        pkg_a.join("src").join("main.ts"),
+        r#"import axios from "axios"; console.log(axios);"#,
+    )
+    .unwrap();
+
+    let diags = analyze_test_dir(root);
+    let ndep001 = diags.iter().find(|d| d.rule_id.0 == "NDEP-001");
+    assert!(ndep001.is_some(), "Expected NDEP-001");
+    let diag = ndep001.unwrap();
+    let fix = diag.fix.as_ref().expect("FixAction should be present");
+    assert_eq!(
+        fix.file_path,
+        pkg_a.join("package.json"),
+        "FixAction file_path should point to member package.json, not root"
+    );
+}
+
+#[test]
+fn test_ndep005_member_production_and_dev_dependencies() {
+    let fixture = TestDir::new("ndep005-member-scope");
+    let root = fixture.path();
+
+    // Root declares typescript in devDependencies
+    fs::write(
+        root.join("package.json"),
+        r#"{
+  "name": "root",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}"#,
+    )
+    .unwrap();
+
+    let pkg_prod = root.join("packages").join("pkg-prod");
+    let pkg_dev = root.join("packages").join("pkg-dev");
+    fs::create_dir_all(pkg_prod.join("src")).unwrap();
+    fs::create_dir_all(pkg_dev.join("src")).unwrap();
+
+    // pkg-prod lists typescript in dependencies (production override)
+    fs::write(
+        pkg_prod.join("package.json"),
+        r#"{
+  "name": "pkg-prod",
+  "version": "1.0.0",
+  "dependencies": {
+    "typescript": "^5.0.0"
+  }
+}"#,
+    )
+    .unwrap();
+    fs::write(
+        pkg_prod.join("src").join("index.ts"),
+        r#"import ts from "typescript"; console.log(ts);"#,
+    )
+    .unwrap();
+
+    // pkg-dev lists jest in its member devDependencies, and imports it in production file
+    fs::write(
+        pkg_dev.join("package.json"),
+        r#"{
+  "name": "pkg-dev",
+  "version": "1.0.0",
+  "devDependencies": {
+    "jest": "^29.0.0"
+  }
+}"#,
+    )
+    .unwrap();
+    fs::write(
+        pkg_dev.join("src").join("index.ts"),
+        r#"import jest from "jest"; console.log(jest);"#,
+    )
+    .unwrap();
+
+    let diags = analyze_test_dir(root);
+
+    // typescript in pkg-prod should NOT trigger NDEP-005
+    let ts_violation = diags
+        .iter()
+        .find(|d| d.rule_id.0 == "NDEP-005" && d.message.contains("typescript"));
+    assert!(
+        ts_violation.is_none(),
+        "Expected 0 NDEP-005 for member production dependency overriding root devDependency, got: {:?}",
+        ts_violation
+    );
+
+    // jest in pkg-dev SHOULD trigger NDEP-005 targeting pkg-dev/package.json
+    let jest_violation = diags
+        .iter()
+        .find(|d| d.rule_id.0 == "NDEP-005" && d.message.contains("jest"));
+    assert!(
+        jest_violation.is_some(),
+        "Expected NDEP-005 for member-level devDependency imported in production"
+    );
+    let remediation = &jest_violation.unwrap().suggested_remediation;
+    assert!(
+        remediation.contains("package.json"),
+        "Remediation should mention manifest: {}",
+        remediation
+    );
+}

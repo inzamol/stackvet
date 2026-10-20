@@ -118,6 +118,20 @@ impl Analyzer for NodeDependencyAnalyzer {
             });
 
             if let Some(&(first_file, first_line)) = uncovered_occurrence {
+                let enclosing_member = node_info
+                    .workspace_members
+                    .iter()
+                    .find(|m| first_file.starts_with(&m.root_dir));
+
+                let target_manifest = enclosing_member
+                    .map(|m| m.manifest_path.clone())
+                    .unwrap_or_else(|| node_info.package_json_path.clone());
+
+                let manifest_name = target_manifest
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy();
+
                 // Check if target package is an internal workspace package that was imported without declaration
                 let is_internal_pkg = node_info
                     .workspace_members
@@ -125,26 +139,22 @@ impl Analyzer for NodeDependencyAnalyzer {
                     .any(|m| m.name == *pkg_name);
 
                 let remediation = if is_internal_pkg {
-                    let spec = match node_info.package_manager.to_string().as_str() {
-                        "npm" => "*",
-                        _ => "workspace:*",
-                    };
                     format!(
-                        "Add '{}' as a workspace dependency in package.json (e.g. \"{}\": \"{}\").",
-                        pkg_name, pkg_name, spec
+                        "Add '{}' as a workspace dependency in {} (e.g. \"{}\": \"workspace:*\").",
+                        pkg_name, manifest_name, pkg_name
                     )
                 } else {
                     format!(
-                        "Run '{} add {}' or add to package.json dependencies.",
-                        node_info.package_manager, pkg_name
+                        "Run '{} add {}' or add to {} dependencies.",
+                        node_info.package_manager, pkg_name, manifest_name
                     )
                 };
 
                 diagnostics.push(
                     Diagnostic::builder("NDEP-001", Severity::Error, LanguageTarget::Node)
                         .message(format!(
-                            "Package '{}' is imported in source code but not declared in package.json",
-                            pkg_name
+                            "Package '{}' is imported in source code but not declared in {}",
+                            pkg_name, manifest_name
                         ))
                         .location(
                             DiagnosticLocation::new(first_file.to_path_buf())
@@ -156,8 +166,8 @@ impl Analyzer for NodeDependencyAnalyzer {
                         ))
                         .remediation(remediation)
                         .fix(FixAction::new(
-                            format!("Add {} to package.json", pkg_name),
-                            node_info.package_json_path.clone(),
+                            format!("Add {} to {}", pkg_name, manifest_name),
+                            target_manifest,
                             pkg_name.clone(),
                         ))
                         .build(),
@@ -202,8 +212,13 @@ impl Analyzer for NodeDependencyAnalyzer {
         }
 
         // NDEP-005: DevDependency in Production Source
-        let mut dev_pkgs: Vec<&String> = node_info.dev_dependencies.keys().collect();
+        let mut all_dev_names: HashSet<&String> = node_info.dev_dependencies.keys().collect();
+        for member in &node_info.workspace_members {
+            all_dev_names.extend(member.dev_dependencies.keys());
+        }
+        let mut dev_pkgs: Vec<&String> = all_dev_names.into_iter().collect();
         dev_pkgs.sort();
+
         for dev_pkg in dev_pkgs {
             if let Some(occurrences) = imported_packages.get(dev_pkg) {
                 for (file, line) in occurrences {
@@ -215,7 +230,48 @@ impl Analyzer for NodeDependencyAnalyzer {
                         || file_str.ends_with(".config.ts")
                         || file_str.ends_with(".config.js");
 
-                    if !is_test_file {
+                    if is_test_file {
+                        continue;
+                    }
+
+                    let member = node_info
+                        .workspace_members
+                        .iter()
+                        .find(|m| file.starts_with(&m.root_dir));
+
+                    let is_dev_violation = if let Some(m) = member {
+                        // If member lists it as production dependency, it's valid in production
+                        if m.dependencies.contains_key(dev_pkg) {
+                            false
+                        } else if m.dev_dependencies.contains_key(dev_pkg) {
+                            true
+                        } else {
+                            // Fall back to root definitions
+                            !node_info.dependencies.contains_key(dev_pkg)
+                                && node_info.dev_dependencies.contains_key(dev_pkg)
+                        }
+                    } else {
+                        // Root file: check root dependencies
+                        !node_info.dependencies.contains_key(dev_pkg)
+                            && node_info.dev_dependencies.contains_key(dev_pkg)
+                    };
+
+                    if is_dev_violation {
+                        let manifest_name = member
+                            .map(|m| {
+                                m.manifest_path
+                                    .file_name()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                            })
+                            .unwrap_or_else(|| {
+                                node_info
+                                    .package_json_path
+                                    .file_name()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                            });
+
                         diagnostics.push(
                             Diagnostic::builder("NDEP-005", Severity::Error, LanguageTarget::Node)
                                 .message(format!(
@@ -226,14 +282,14 @@ impl Analyzer for NodeDependencyAnalyzer {
                                 .location(
                                     DiagnosticLocation::new((*file).clone())
                                         .with_span(stackvet_core::TextSpan::single_line(*line, 1, 1)),
-                                 )
+                                )
                                 .explanation(format!(
                                     "Packages in devDependencies are not installed in production environments (NODE_ENV=production), causing runtime crash when '{}' is imported.",
                                     dev_pkg
                                 ))
                                 .remediation(format!(
-                                    "Move '{}' to dependencies in package.json.",
-                                    dev_pkg
+                                    "Move '{}' to dependencies in {}.",
+                                    dev_pkg, manifest_name
                                 ))
                                 .build(),
                         );

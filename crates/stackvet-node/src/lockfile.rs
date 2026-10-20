@@ -714,6 +714,22 @@ pub fn check_npm_constraints_compatibility(
         };
     }
 
+    if non_wildcards.iter().any(|(_, constraint)| {
+        constraint == "^"
+            || constraint == "~"
+            || constraint.contains("||")
+            || [
+                "file:", "link:", "portal:", "git+", "git://", "github:", "http://", "https://",
+            ]
+            .iter()
+            .any(|prefix| constraint.starts_with(prefix))
+            || extract_candidate_versions(constraint).is_empty()
+    }) {
+        return ConstraintCompatibility::Compatible {
+            suggested_resolution: None,
+        };
+    }
+
     // If all non-wildcards are identical
     let first_c = &non_wildcards[0].1;
     if non_wildcards.iter().all(|(_, c)| c == first_c) {
@@ -1112,6 +1128,28 @@ packages:
         assert!(matches!(
             res_exact,
             ConstraintCompatibility::Incompatible { .. }
+        ));
+
+        // Compatible with git/http URL, protocol prefix, or union
+        let with_git = [
+            ("app", "git+https://github.com/org/repo.git#v1.0.0"),
+            ("admin", "^1.0.0"),
+        ];
+        let res_git = check_npm_constraints_compatibility(&with_git);
+        assert!(matches!(
+            res_git,
+            ConstraintCompatibility::Compatible {
+                suggested_resolution: None
+            }
+        ));
+
+        let with_union = [("app", "^16.0.0 || ^17.0.0"), ("admin", "^17.0.0")];
+        let res_union = check_npm_constraints_compatibility(&with_union);
+        assert!(matches!(
+            res_union,
+            ConstraintCompatibility::Compatible {
+                suggested_resolution: None
+            }
         ));
     }
 }
