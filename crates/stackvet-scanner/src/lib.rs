@@ -89,15 +89,22 @@ impl ProjectScanner {
                 if trimmed.is_empty() || trimmed.starts_with('#') {
                     continue;
                 }
-                let rule = if trimmed.starts_with('!') {
-                    trimmed[1..].to_string()
-                } else {
-                    format!("!{trimmed}")
-                };
-                let _ = ov_builder.add(&rule);
+                if trimmed.starts_with('!') {
+                    tracing::warn!("Ignoring exclusion pattern beginning with '!': {}", trimmed);
+                    continue;
+                }
+                let rule = format!("!{trimmed}");
+                if let Err(e) = ov_builder.add(&rule) {
+                    tracing::warn!("Failed to add ignore override '{}': {}", rule, e);
+                }
             }
-            if let Ok(overrides) = ov_builder.build() {
-                builder.overrides(overrides);
+            match ov_builder.build() {
+                Ok(overrides) => {
+                    builder.overrides(overrides);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to build ignore overrides: {}", e);
+                }
             }
         }
 

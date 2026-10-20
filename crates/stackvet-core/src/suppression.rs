@@ -7,6 +7,7 @@ use std::path::Path;
 
 /// Configured diagnostic suppression entry from `stackvet.toml` or `pyproject.toml`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct SuppressionEntry {
     /// Target rule ID (e.g. "DEP-001")
     pub rule: Option<String>,
@@ -159,13 +160,7 @@ pub fn path_matches_pattern(file_path: &Path, pattern: &str, root: &Path) -> boo
     }
     if clean_pat.ends_with("/**") {
         let prefix = &clean_pat[..clean_pat.len() - 3];
-        if rel_str.starts_with(prefix) || rel_str.contains(&format!("{prefix}/")) {
-            return true;
-        }
-    }
-    if clean_pat.ends_with("/*") {
-        let prefix = &clean_pat[..clean_pat.len() - 2];
-        if rel_str.starts_with(prefix) {
+        if rel_str.starts_with(&format!("{prefix}/")) || rel_str.contains(&format!("/{prefix}/")) {
             return true;
         }
     }
@@ -221,16 +216,18 @@ pub fn parse_inline_suppressions(source: &str) -> Vec<InlineSuppression> {
         // 4. ignore: stackvet:ignore[RULE]: reason
         // 5. disable: stackvet:disable=RULE
         // 6. noqa: noqa: stackvet[RULE]
+        let full_line = is_full_line_comment(trimmed);
         if let Some(rest) = comment.strip_prefix("stackvet:") {
             parse_stackvet_directive(
                 rest.trim(),
                 line_num,
-                line_num <= 15 && is_full_line_comment(trimmed),
+                line_num <= 15 && full_line,
+                full_line,
                 &mut suppressions,
             );
         } else if let Some(pos) = comment.find("stackvet:") {
             let rest = &comment[pos + 9..];
-            parse_stackvet_directive(rest.trim(), line_num, false, &mut suppressions);
+            parse_stackvet_directive(rest.trim(), line_num, false, false, &mut suppressions);
         } else if let Some(pos) = comment.find("noqa: stackvet[") {
             let rest = &comment[pos + 15..];
             if let Some(end) = rest.find(']') {
@@ -261,6 +258,7 @@ fn parse_stackvet_directive(
     directive: &str,
     line_num: usize,
     can_be_file_level: bool,
+    is_full_line: bool,
     out: &mut Vec<InlineSuppression>,
 ) {
     if let Some(rest) = directive.strip_prefix("disable-next-line=") {
@@ -332,12 +330,13 @@ fn parse_stackvet_directive(
             let rule_str = &rest[..end];
             let after = rest[end + 1..].trim();
             let reason = after.strip_prefix(':').map(|s| s.trim().to_string());
+            let target_line = if is_full_line { line_num + 1 } else { line_num };
             for r in rule_str.split(',') {
                 let r_clean = r.trim();
                 if !r_clean.is_empty() {
                     out.push(InlineSuppression {
                         rule_id: r_clean.to_string(),
-                        line: line_num,
+                        line: target_line,
                         is_file_level: false,
                         reason: reason.clone(),
                     });
@@ -544,7 +543,7 @@ fn epoch_days_to_date(days: i64) -> String {
     let z = days + 719468;
     let era = if z >= 0 { z } else { z - 146096 } / 146097;
     let doe = (z - era * 146097) as u32;
-    let yoe = (doe - doe / 1024 + doe / 1461 - doe / 142400) / 365;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
     let y = yoe as i64 + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
@@ -581,6 +580,21 @@ mod tests {
 
         let today = current_utc_date_str();
         assert!(is_valid_iso_date(&today));
+
+        assert_eq!(epoch_days_to_date(0), "1970-01-01");
+        assert_eq!(epoch_days_to_date(20877), "2027-02-28");
+        assert_eq!(epoch_days_to_date(20878), "2027-03-01");
+        assert_eq!(epoch_days_to_date(11016), "2000-02-29");
+    }
+
+    #[test]
+    fn test_suppression_entry_deny_unknown_fields() {
+        let toml_str = r#"
+rule = "DEP-001"
+unknown_key = "value"
+"#;
+        let res: Result<SuppressionEntry, _> = toml::from_str(toml_str);
+        assert!(res.is_err());
     }
 
     #[test]
@@ -664,7 +678,7 @@ def foo():
         assert_eq!(cel.line, 9); // same-line comment
 
         let sql = inlines.iter().find(|i| i.rule_id == "SQL-001").unwrap();
-        assert_eq!(sql.line, 10);
+        assert_eq!(sql.line, 11);
         assert_eq!(sql.reason, Some("Legacy unindexed query".to_string()));
     }
 }

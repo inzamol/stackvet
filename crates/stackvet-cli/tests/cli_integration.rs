@@ -747,7 +747,7 @@ export const dynamic = 'force-dynamic';
         rule_id: RuleId::new("RCT-001"),
         message: "Legacy hook".to_string(),
         severity: Severity::Warning,
-        location: DiagnosticLocation::new("app.tsx").with_span(TextSpan::new(4, 4, 1, 16)),
+        location: DiagnosticLocation::new("app.tsx").with_span(TextSpan::new(5, 5, 1, 16)),
         explanation: "".to_string(),
         suggested_remediation: "".to_string(),
         fix: None,
@@ -798,6 +798,17 @@ reason = "Malformed date"
 "#;
     let err = StackvetConfig::from_toml_str(bad_date_toml).unwrap_err();
     assert!(err.to_string().to_lowercase().contains("invalid date"));
+
+    // Unknown fields must be rejected (serde deny_unknown_fields)
+    let bad_field_toml = r#"
+[[suppressions]]
+rule = "DEP-001"
+unexpected_field = "test"
+"#;
+    let err = StackvetConfig::from_toml_str(bad_field_toml).unwrap_err();
+    assert!(
+        err.to_string().contains("unexpected_field") || err.to_string().contains("unknown field")
+    );
 
     // Valid rule and date must pass validation
     let good_toml = r#"
