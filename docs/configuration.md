@@ -125,10 +125,10 @@ By default, StackVet automatically excludes known build artifacts and package de
 - `.git`
 - `node_modules`
 - `target`
-- `dist`, `build`, `out`, `.output`
-- `.venv`, `venv`, `env`, `.env`
+- `dist`, `build`, `.output`
+- `.venv`, `venv`
 - `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `.tox`
-- `.next`, `.nuxt`, `.turbo`, `.cache`
+- `.next`, `.nuxt`, `.turbo`
 
 Root project manifests (`package.json`, `pyproject.toml`, `requirements.txt`, `Cargo.toml`, etc.) are always discovered and inspected even when build folders exist in the repository root.
 
