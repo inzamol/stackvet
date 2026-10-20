@@ -200,21 +200,31 @@ impl ProjectScanner {
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    fn make_temp_dir() -> PathBuf {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn make_temp_dir(test_name: &str) -> PathBuf {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let temp_dir = std::env::temp_dir().join(format!("stackvet_test_scanner_{}", unique));
+        let count = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let temp_dir = std::env::temp_dir().join(format!(
+            "stackvet_test_scanner_{}_{}_{}_{}",
+            test_name,
+            std::process::id(),
+            unique,
+            count
+        ));
         fs::create_dir_all(&temp_dir).unwrap();
         temp_dir
     }
 
     #[test]
     fn test_scanner_discovers_files() {
-        let temp_dir = make_temp_dir();
+        let temp_dir = make_temp_dir("discovers");
 
         fs::write(temp_dir.join("main.py"), "print('hello')").unwrap();
         fs::write(temp_dir.join("index.ts"), "console.log('hi');").unwrap();
@@ -234,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_scanner_default_exclusions() {
-        let temp_dir = make_temp_dir();
+        let temp_dir = make_temp_dir("default_exclusions");
 
         fs::write(temp_dir.join("app.py"), "import os").unwrap();
 
@@ -261,7 +271,7 @@ mod tests {
 
     #[test]
     fn test_scanner_custom_ignores_and_stackvetignore() {
-        let temp_dir = make_temp_dir();
+        let temp_dir = make_temp_dir("custom_ignores");
 
         fs::write(temp_dir.join("app.py"), "import os").unwrap();
         fs::write(temp_dir.join("ignored_script.py"), "pass").unwrap();
