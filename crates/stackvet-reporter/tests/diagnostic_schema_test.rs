@@ -74,7 +74,7 @@ fn test_json_report_serialization_and_deserialization() {
         .build();
 
     let json_str = reporter
-        .render_json(85, "B", &[], &[diag.clone()], None)
+        .render_json(85, "B", &[], std::slice::from_ref(&diag), None)
         .expect("render json");
 
     // Verify root schema fields
@@ -241,7 +241,7 @@ fn test_missing_location_explicitly_represented() {
 
     // Check SARIF: locations should be explicitly empty, NOT fabricated as uri: "<unknown>", startLine: 1
     let sarif_str = reporter
-        .render_sarif(&[diag.clone()])
+        .render_sarif(std::slice::from_ref(&diag))
         .expect("render sarif");
     let sarif: serde_json::Value = serde_json::from_str(&sarif_str).expect("parse sarif");
     let r0 = &sarif["runs"][0]["results"][0];
@@ -291,11 +291,11 @@ fn test_formats_location_agreement() {
     assert_eq!(diag.location.display_location(), expected_display);
 
     // Text format contains exact location
-    let text_out = reporter.render_text(80, "B", &[], &[diag.clone()], None);
+    let text_out = reporter.render_text(80, "B", &[], std::slice::from_ref(&diag), None);
     assert!(text_out.contains(expected_display));
 
     // HTML format contains exact location
-    let html_out = reporter.render_html(80, "B", &[], &[diag.clone()], None);
+    let html_out = reporter.render_html(80, "B", &[], std::slice::from_ref(&diag), None);
     assert!(html_out.contains(expected_display));
 
     // SARIF format normalized path and matching startLine / startColumn
