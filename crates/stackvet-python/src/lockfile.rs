@@ -304,25 +304,20 @@ pub fn check_pep_constraints_compatibility(
         }
     }
 
-    if let Some(v) = satisfying_version {
-        let best_constraint = non_wildcards
-            .iter()
-            .map(|(_, c)| c.clone())
-            .find(|c| {
-                let nums: Vec<&str> = c.split(',').collect();
-                let base = nums
-                    .first()
-                    .map(|s| s.trim_start_matches(|ch: char| !ch.is_ascii_digit()).trim())
-                    .unwrap_or("");
-                !base.is_empty()
-                    && non_wildcards
+    if satisfying_version.is_some() {
+        let best_constraint = non_wildcards.iter().map(|(_, c)| c.clone()).find(|c| {
+            all_candidates
+                .iter()
+                .filter(|cand| pep_version_satisfies(c, cand))
+                .all(|cand| {
+                    non_wildcards
                         .iter()
-                        .all(|(_, other)| pep_version_satisfies(other, base))
-            })
-            .unwrap_or_else(|| format!(">={}", v));
+                        .all(|(_, other)| pep_version_satisfies(other, cand))
+                })
+        });
 
         ConstraintCompatibility::Compatible {
-            suggested_resolution: Some(best_constraint),
+            suggested_resolution: best_constraint,
         }
     } else {
         let conflicting_members = member_declarations
