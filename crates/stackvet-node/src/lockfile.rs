@@ -767,11 +767,15 @@ pub fn check_npm_constraints_compatibility(
         for (_, c) in &non_wildcards {
             let candidates = extract_candidate_versions(c);
             if let Some(base_v) = candidates.first() {
-                let base_str = base_v.to_string();
-                if non_wildcards
+                let is_subset = all_candidates
                     .iter()
-                    .all(|(_, other)| npm_version_satisfies(other, &base_str))
-                {
+                    .filter(|cand| npm_version_satisfies(c, &cand.to_string()))
+                    .all(|cand| {
+                        non_wildcards
+                            .iter()
+                            .all(|(_, other)| npm_version_satisfies(other, &cand.to_string()))
+                    });
+                if is_subset {
                     if let Some(prev) = &best_constraint {
                         let prev_candidates = extract_candidate_versions(prev);
                         if let Some(pb) = prev_candidates.first() {
