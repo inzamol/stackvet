@@ -24,10 +24,20 @@ pub use suppression::{
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Severity {
+    #[serde(alias = "HINT", alias = "hint")]
     Hint,
+    #[serde(alias = "INFO", alias = "info")]
     Info,
+    #[serde(alias = "WARN", alias = "WARNING", alias = "warning", alias = "warn")]
     Warning,
+    #[serde(alias = "ERROR", alias = "error")]
     Error,
+    #[serde(
+        alias = "CRITICAL",
+        alias = "critical",
+        alias = "fatal",
+        alias = "FATAL"
+    )]
     Critical,
 }
 
@@ -130,7 +140,7 @@ impl fmt::Display for LanguageTarget {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TextSpan {
     pub start_line: usize,
     pub start_col: usize,
@@ -151,13 +161,95 @@ impl TextSpan {
     pub fn single_line(line: usize, start_col: usize, end_col: usize) -> Self {
         Self::new(line, line, start_col, end_col)
     }
+
+    pub fn is_multiline(&self) -> bool {
+        self.start_line != self.end_line
+    }
+
+    pub fn line_count(&self) -> usize {
+        if self.end_line >= self.start_line {
+            self.end_line - self.start_line + 1
+        } else {
+            1
+        }
+    }
+
+    pub fn contains_line(&self, line: usize) -> bool {
+        line >= self.start_line && line <= self.end_line
+    }
+}
+
+/// Converts a 0-based byte offset within a UTF-8 source string to 1-based (line, column).
+/// The column is 1-based Unicode character (code point) offset on that line.
+pub fn byte_offset_to_line_col(source: &str, byte_offset: usize) -> (usize, usize) {
+    let clamped_offset = byte_offset.min(source.len());
+    let prefix = &source[..clamped_offset];
+    let line = prefix.chars().filter(|&c| c == '\n').count() + 1;
+    let last_newline_pos = prefix.rfind('\n').map(|idx| idx + 1).unwrap_or(0);
+    let line_prefix = &prefix[last_newline_pos..];
+    let col = line_prefix.chars().count() + 1;
+    (line, col)
+}
+
+/// Converts a byte range (start_byte..end_byte) in a UTF-8 source string to a `TextSpan`.
+/// Lines and columns are 1-based, and columns count Unicode characters.
+pub fn byte_range_to_span(source: &str, start_byte: usize, end_byte: usize) -> TextSpan {
+    let (start_line, start_col) = byte_offset_to_line_col(source, start_byte);
+    let (end_line, end_col) = byte_offset_to_line_col(source, end_byte.max(start_byte));
+    TextSpan::new(start_line, end_line, start_col, end_col)
+}
+
+/// Extracts a snippet corresponding to a TextSpan from the given source string.
+pub fn extract_snippet_from_source(source: &str, span: &TextSpan) -> Option<String> {
+    if span.start_line == 0
+        || span.end_line == 0
+        || span.start_line > span.end_line
+        || span.start_col == 0
+        || span.end_col == 0
+    {
+        return None;
+    }
+    let lines: Vec<&str> = source.lines().collect();
+    if span.start_line > lines.len() {
+        return None;
+    }
+    let start_idx = span.start_line - 1;
+    let end_idx = (span.end_line - 1).min(lines.len() - 1);
+
+    if start_idx == end_idx {
+        let line = lines[start_idx];
+        if span.start_col > 1 || span.end_col > span.start_col {
+            let chars: Vec<char> = line.chars().collect();
+            if span.start_col <= chars.len() + 1 {
+                let s_col = span.start_col - 1;
+                let e_col = (span.end_col - 1).min(chars.len());
+                if e_col >= s_col {
+                    return Some(chars[s_col..e_col].iter().collect());
+                }
+            }
+        }
+        return Some(line.trim_end().to_string());
+    }
+
+    let mut snippet = String::new();
+    for line in &lines[start_idx..=end_idx] {
+        if !snippet.is_empty() {
+            snippet.push('\n');
+        }
+        snippet.push_str(line.trim_end());
+    }
+    Some(snippet)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct DiagnosticLocation {
     pub file_path: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub span: Option<TextSpan>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snippet: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
 impl DiagnosticLocation {
@@ -166,6 +258,7 @@ impl DiagnosticLocation {
             file_path: file_path.into(),
             span: None,
             snippet: None,
+            message: None,
         }
     }
 
@@ -178,6 +271,63 @@ impl DiagnosticLocation {
         self.snippet = Some(snippet.into());
         self
     }
+
+    pub fn with_message(mut self, message: impl Into<String>) -> Self {
+        self.message = Some(message.into());
+        self
+    }
+
+    /// Checks if this location points to a known file on disk (not empty or synthetic placeholder).
+    pub fn is_empty(&self) -> bool {
+        self.file_path.as_os_str().is_empty() || self.file_path.to_str() == Some("<unknown>")
+    }
+
+    /// Returns a normalized, cross-platform path (forward slashes, stripped UNC prefix),
+    /// or `None` if the location is empty or synthetic.
+    pub fn normalized_path(&self) -> Option<String> {
+        if self.is_empty() {
+            None
+        } else {
+            Some(
+                self.file_path
+                    .to_string_lossy()
+                    .replace(r"\\?\", "")
+                    .replace('\\', "/"),
+            )
+        }
+    }
+
+    /// Consistent human-readable display string across CLI, tables, and reports.
+    /// Format: `path:line:col` or `path:start_line-end_line` or `path` or `-`.
+    pub fn display_location(&self) -> String {
+        if let Some(path) = self.normalized_path() {
+            if let Some(span) = &self.span {
+                if span.start_line == span.end_line {
+                    if span.start_col > 1 {
+                        format!("{}:{}:{}", path, span.start_line, span.start_col)
+                    } else {
+                        format!("{}:{}", path, span.start_line)
+                    }
+                } else if span.start_col > 1 || span.end_col > 1 {
+                    format!(
+                        "{}:{}:{}-{}:{}",
+                        path, span.start_line, span.start_col, span.end_line, span.end_col
+                    )
+                } else {
+                    format!("{}:{}-{}", path, span.start_line, span.end_line)
+                }
+            } else {
+                path
+            }
+        } else {
+            "-".to_string()
+        }
+    }
+
+    /// Extracts code snippet from source for this location's span if present.
+    pub fn extract_snippet_from_source(source: &str, span: &TextSpan) -> Option<String> {
+        extract_snippet_from_source(source, span)
+    }
 }
 
 impl Default for DiagnosticLocation {
@@ -186,6 +336,7 @@ impl Default for DiagnosticLocation {
             file_path: PathBuf::new(),
             span: None,
             snippet: None,
+            message: None,
         }
     }
 }
@@ -280,6 +431,8 @@ pub struct Diagnostic {
     pub language: LanguageTarget,
     #[serde(default)]
     pub confidence: Confidence,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related_locations: Vec<DiagnosticLocation>,
 }
 
 impl Default for Diagnostic {
@@ -294,6 +447,7 @@ impl Default for Diagnostic {
             fix: None,
             language: LanguageTarget::General,
             confidence: Confidence::High,
+            related_locations: Vec::new(),
         }
     }
 }
@@ -364,6 +518,7 @@ pub struct DiagnosticBuilder {
     fix: Option<FixAction>,
     language: LanguageTarget,
     confidence: Confidence,
+    related_locations: Vec<DiagnosticLocation>,
 }
 
 impl DiagnosticBuilder {
@@ -378,6 +533,7 @@ impl DiagnosticBuilder {
             fix: None,
             language,
             confidence: Confidence::High,
+            related_locations: Vec::new(),
         }
     }
 
@@ -416,6 +572,16 @@ impl DiagnosticBuilder {
         self
     }
 
+    pub fn related_location(mut self, loc: DiagnosticLocation) -> Self {
+        self.related_locations.push(loc);
+        self
+    }
+
+    pub fn related_locations(mut self, locs: Vec<DiagnosticLocation>) -> Self {
+        self.related_locations = locs;
+        self
+    }
+
     pub fn build(self) -> Diagnostic {
         let location = self
             .location
@@ -430,6 +596,7 @@ impl DiagnosticBuilder {
             fix: self.fix,
             language: self.language,
             confidence: self.confidence,
+            related_locations: self.related_locations,
         }
     }
 }
@@ -514,7 +681,7 @@ impl ProjectContext {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RootCause {
     pub id: String,
     pub title: String,

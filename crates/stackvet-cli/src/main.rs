@@ -1220,7 +1220,7 @@ async fn main() -> Result<()> {
 
     let correlator = CorrelationEngine::new();
     let root_causes = correlator.correlate(diagnostics.clone());
-    let reporter = Reporter::new();
+    let reporter = Reporter::with_root(&root);
 
     match &cli.command {
         None | Some(Commands::Doctor { .. }) => {

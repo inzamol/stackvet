@@ -102,9 +102,14 @@ impl Analyzer for PythonDependencyAnalyzer {
             .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("py"))
             .collect();
 
+        type PackageOccurrences<'a> = Vec<(
+            &'a std::path::PathBuf,
+            usize,
+            Option<stackvet_core::TextSpan>,
+        )>;
+
         // 1. Scan all imports in python files
-        let mut imported_packages: BTreeMap<String, Vec<(&std::path::PathBuf, usize)>> =
-            BTreeMap::new();
+        let mut imported_packages: BTreeMap<String, PackageOccurrences> = BTreeMap::new();
         let mut all_string_literals: HashSet<String> = HashSet::new();
 
         for file in &py_files {
@@ -119,10 +124,23 @@ impl Analyzer for PythonDependencyAnalyzer {
                         continue;
                     }
                     let norm = normalize_package_name(root_pkg);
-                    imported_packages
-                        .entry(norm)
-                        .or_default()
-                        .push((file, imp.line));
+                    let effective_span = imp.span.map(|s| {
+                        if imp.statement_line < s.start_line {
+                            stackvet_core::TextSpan::new(
+                                imp.statement_line,
+                                s.end_line,
+                                1,
+                                s.end_col,
+                            )
+                        } else {
+                            s
+                        }
+                    });
+                    imported_packages.entry(norm).or_default().push((
+                        file,
+                        imp.statement_line,
+                        effective_span,
+                    ));
                 }
                 all_string_literals.extend(parse_python_string_literals(&content));
             }
@@ -157,9 +175,9 @@ impl Analyzer for PythonDependencyAnalyzer {
                 })
             };
 
-            let (first_file, first_line) = occurrences
+            let (first_file, first_line, first_span) = occurrences
                 .iter()
-                .find(|(file, _)| !covered_by_member(file))
+                .find(|(file, _, _)| !covered_by_member(file))
                 .copied()
                 .unwrap_or(occurrences[0]);
 
@@ -180,69 +198,98 @@ impl Analyzer for PythonDependencyAnalyzer {
                     .and_then(|alts| alts.first().copied())
                     .unwrap_or(pkg_name.as_str());
 
+                let loc = if let Some(span) = first_span {
+                    DiagnosticLocation::new(first_file.to_path_buf()).with_span(span)
+                } else {
+                    DiagnosticLocation::new(first_file.to_path_buf())
+                        .with_span(stackvet_core::TextSpan::single_line(first_line, 1, 1))
+                };
+
                 // Check if in lockfile (transitive dependency) -> DEP-007
                 if py_info.installed_packages.contains_key(target_pypi_name) {
-                    diagnostics.push(
-                        Diagnostic::builder(
-                            "DEP-007",
-                            Severity::Warning,
-                            LanguageTarget::Python,
-                        )
-                        .message(format!(
-                            "Transitive dependency '{}' imported without direct declaration in pyproject.toml",
-                            target_pypi_name
-                        ))
-                        .location(
-                            DiagnosticLocation::new(first_file.to_path_buf())
-                                .with_span(stackvet_core::TextSpan::single_line(first_line, 1, 1)),
-                        )
-                        .explanation(format!(
-                            "The package '{}' is resolved via lockfile/transitive dependencies but is missing from direct dependencies. Upgrading transitive dependencies can break production.",
-                            target_pypi_name
-                        ))
-                        .remediation(format!(
-                            "Add '{}' to [project.dependencies] or requirements.txt.",
-                            target_pypi_name
-                        ))
-                        .fix(FixAction::new(
-                            format!("Declare direct dependency on {}", target_pypi_name),
-                            py_info.manifest_file.clone(),
-                            target_pypi_name,
-                        ))
-                        .build(),
-                    );
+                    let mut builder = Diagnostic::builder(
+                        "DEP-007",
+                        Severity::Warning,
+                        LanguageTarget::Python,
+                    )
+                    .message(format!(
+                        "Transitive dependency '{}' imported without direct declaration in pyproject.toml",
+                        target_pypi_name
+                    ))
+                    .location(loc)
+                    .explanation(format!(
+                        "The package '{}' is resolved via lockfile/transitive dependencies but is missing from direct dependencies. Upgrading transitive dependencies can break production.",
+                        target_pypi_name
+                    ))
+                    .remediation(format!(
+                        "Add '{}' to [project.dependencies] or requirements.txt.",
+                        target_pypi_name
+                    ))
+                    .fix(FixAction::new(
+                        format!("Declare direct dependency on {}", target_pypi_name),
+                        py_info.manifest_file.clone(),
+                        target_pypi_name,
+                    ));
+
+                    for &(occ_file, occ_line, ref occ_span) in
+                        occurrences.iter().filter(|&&(f, l, _)| {
+                            (f != first_file || l != first_line) && !covered_by_member(f)
+                        })
+                    {
+                        let rel_loc = if let Some(s) = occ_span {
+                            DiagnosticLocation::new(occ_file.to_path_buf()).with_span(*s)
+                        } else {
+                            DiagnosticLocation::new(occ_file.to_path_buf())
+                                .with_span(stackvet_core::TextSpan::single_line(occ_line, 1, 1))
+                        };
+                        builder =
+                            builder.related_location(rel_loc.with_message("Also imported here"));
+                    }
+
+                    diagnostics.push(builder.build());
                 } else {
                     // Missing completely -> DEP-002
-                    diagnostics.push(
-                        Diagnostic::builder(
-                            "DEP-002",
-                            Severity::Error,
-                            LanguageTarget::Python,
-                        )
-                        .message(format!(
-                            "Package '{}' is imported in source code but not declared in {}",
-                            pkg_name,
-                            py_info.manifest_file.file_name().unwrap_or_default().to_string_lossy()
-                        ))
-                        .location(
-                            DiagnosticLocation::new(first_file.to_path_buf())
-                                .with_span(stackvet_core::TextSpan::single_line(first_line, 1, 1)),
-                        )
-                        .explanation(format!(
-                            "Import of '{}' will fail at runtime with ModuleNotFoundError unless installed.",
-                            pkg_name
-                        ))
-                        .remediation(format!(
-                            "Run 'uv add {}' or add '{}' to pyproject.toml dependencies.",
-                            target_pypi_name, target_pypi_name
-                        ))
-                        .fix(FixAction::new(
-                            format!("Add {} to pyproject.toml", target_pypi_name),
-                            py_info.manifest_file.clone(),
-                            target_pypi_name,
-                        ))
-                        .build(),
-                    );
+                    let mut builder = Diagnostic::builder(
+                        "DEP-002",
+                        Severity::Error,
+                        LanguageTarget::Python,
+                    )
+                    .message(format!(
+                        "Package '{}' is imported in source code but not declared in {}",
+                        pkg_name,
+                        py_info.manifest_file.file_name().unwrap_or_default().to_string_lossy()
+                    ))
+                    .location(loc)
+                    .explanation(format!(
+                        "Import of '{}' will fail at runtime with ModuleNotFoundError unless installed.",
+                        pkg_name
+                    ))
+                    .remediation(format!(
+                        "Run 'uv add {}' or add '{}' to pyproject.toml dependencies.",
+                        target_pypi_name, target_pypi_name
+                    ))
+                    .fix(FixAction::new(
+                        format!("Add {} to pyproject.toml", target_pypi_name),
+                        py_info.manifest_file.clone(),
+                        target_pypi_name,
+                    ));
+
+                    for &(occ_file, occ_line, ref occ_span) in
+                        occurrences.iter().filter(|&&(f, l, _)| {
+                            (f != first_file || l != first_line) && !covered_by_member(f)
+                        })
+                    {
+                        let rel_loc = if let Some(s) = occ_span {
+                            DiagnosticLocation::new(occ_file.to_path_buf()).with_span(*s)
+                        } else {
+                            DiagnosticLocation::new(occ_file.to_path_buf())
+                                .with_span(stackvet_core::TextSpan::single_line(occ_line, 1, 1))
+                        };
+                        builder =
+                            builder.related_location(rel_loc.with_message("Also imported here"));
+                    }
+
+                    diagnostics.push(builder.build());
                 }
             }
         }
