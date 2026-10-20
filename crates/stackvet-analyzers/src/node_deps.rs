@@ -125,9 +125,13 @@ impl Analyzer for NodeDependencyAnalyzer {
                     .any(|m| m.name == *pkg_name);
 
                 let remediation = if is_internal_pkg {
+                    let spec = match node_info.package_manager.to_string().as_str() {
+                        "npm" => "*",
+                        _ => "workspace:*",
+                    };
                     format!(
-                        "Add '{}' as a workspace dependency in package.json (e.g. \"{}\": \"workspace:*\").",
-                        pkg_name, pkg_name
+                        "Add '{}' as a workspace dependency in package.json (e.g. \"{}\": \"{}\").",
+                        pkg_name, pkg_name, spec
                     )
                 } else {
                     format!(
