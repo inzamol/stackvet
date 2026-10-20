@@ -354,7 +354,7 @@ impl Reporter {
                 });
 
                 // Locations: only emit if physical location exists (explicit, not fabricated)
-                if let Some(uri) = d.location.normalized_path() {
+                if let Some(uri) = relativize_sarif_uri(&d.location.file_path) {
                     let mut region_obj = serde_json::Map::new();
                     if let Some(span) = &d.location.span {
                         region_obj
@@ -395,7 +395,7 @@ impl Reporter {
                         .iter()
                         .enumerate()
                         .filter_map(|(idx, rel)| {
-                            let uri = rel.normalized_path()?;
+                            let uri = relativize_sarif_uri(&rel.file_path)?;
                             let mut phys = serde_json::json!({
                                 "artifactLocation": {
                                     "uri": uri,
@@ -425,34 +425,34 @@ impl Reporter {
                     }
                 }
 
-                // Suggested fixes
+                // Suggested fixes: emit only when fix contains a specific code span
                 if let Some(fix) = &d.fix {
-                    let fix_uri = fix
-                        .file_path
-                        .to_string_lossy()
-                        .replace(r"\\?\", "")
-                        .replace('\\', "/");
-                    let mut replacement_obj = serde_json::json!({
-                        "insertedContent": { "text": fix.replacement }
-                    });
                     if let Some(span) = &fix.span {
-                        replacement_obj["deletedRegion"] = serde_json::json!({
-                            "startLine": span.start_line,
-                            "startColumn": span.start_col,
-                            "endLine": span.end_line,
-                            "endColumn": span.end_col
+                        let fix_uri = relativize_sarif_uri(&fix.file_path).unwrap_or_else(|| {
+                            fix.file_path
+                                .to_string_lossy()
+                                .replace(r"\\?\", "")
+                                .replace('\\', "/")
                         });
+                        result_obj["fixes"] = serde_json::json!([{
+                            "description": { "text": fix.description },
+                            "fileChanges": [{
+                                "artifactLocation": {
+                                    "uri": fix_uri,
+                                    "uriBaseId": "%SRCROOT%"
+                                },
+                                "replacements": [{
+                                    "deletedRegion": {
+                                        "startLine": span.start_line,
+                                        "startColumn": span.start_col,
+                                        "endLine": span.end_line,
+                                        "endColumn": span.end_col
+                                    },
+                                    "insertedContent": { "text": fix.replacement }
+                                }]
+                            }]
+                        }]);
                     }
-                    result_obj["fixes"] = serde_json::json!([{
-                        "description": { "text": fix.description },
-                        "fileChanges": [{
-                            "artifactLocation": {
-                                "uri": fix_uri,
-                                "uriBaseId": "%SRCROOT%"
-                            },
-                            "replacements": [replacement_obj]
-                        }]
-                    }]);
                 }
 
                 result_obj
@@ -571,4 +571,37 @@ impl Reporter {
             rows = rows
         )
     }
+}
+
+fn relativize_sarif_uri(file_path: &std::path::Path) -> Option<String> {
+    let raw = file_path.to_string_lossy();
+    if raw.is_empty() || raw == "<unknown>" {
+        return None;
+    }
+    let p_clean = raw.replace(r"\\?\", "").replace('\\', "/");
+    let p = std::path::Path::new(&p_clean);
+    let rel = if p.is_absolute() {
+        if let Ok(current_dir) = std::env::current_dir() {
+            let canonical_root = current_dir.canonicalize().unwrap_or(current_dir);
+            if let Ok(canonical_p) = file_path.canonicalize() {
+                canonical_p
+                    .strip_prefix(&canonical_root)
+                    .map(|s| s.to_path_buf())
+                    .unwrap_or_else(|_| p.to_path_buf())
+            } else if let Ok(stripped) = p.strip_prefix(&canonical_root) {
+                stripped.to_path_buf()
+            } else {
+                p.to_path_buf()
+            }
+        } else {
+            p.to_path_buf()
+        }
+    } else {
+        p.to_path_buf()
+    };
+    Some(
+        rel.to_string_lossy()
+            .replace(r"\\?\", "")
+            .replace('\\', "/"),
+    )
 }

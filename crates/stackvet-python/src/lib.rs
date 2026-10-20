@@ -22,6 +22,7 @@ pub struct PythonImport {
     pub level: usize,
     pub is_dynamic: bool,
     pub span: Option<TextSpan>,
+    pub statement_line: usize,
 }
 
 struct ImportVisitor<'b> {
@@ -32,7 +33,12 @@ struct ImportVisitor<'b> {
 impl<'a, 'b> Visitor<'a> for ImportVisitor<'b> {
     fn visit_stmt(&mut self, stmt: &'a Stmt) {
         match stmt {
-            Stmt::Import(StmtImport { names, .. }) => {
+            Stmt::Import(StmtImport { names, range, .. }) => {
+                let stmt_span = byte_range_to_span(
+                    self.content,
+                    usize::from(range.start()),
+                    usize::from(range.end()),
+                );
                 for alias in names {
                     let start_offset = usize::from(alias.range.start());
                     let end_offset = usize::from(alias.range.end());
@@ -45,6 +51,7 @@ impl<'a, 'b> Visitor<'a> for ImportVisitor<'b> {
                         level: 0,
                         is_dynamic: false,
                         span: Some(span),
+                        statement_line: stmt_span.start_line,
                     });
                 }
             }
@@ -52,10 +59,16 @@ impl<'a, 'b> Visitor<'a> for ImportVisitor<'b> {
                 module,
                 names,
                 level,
+                range,
                 ..
             }) => {
                 let mod_name = module.as_ref().map(|m| m.to_string()).unwrap_or_default();
                 let lvl = *level as usize;
+                let stmt_span = byte_range_to_span(
+                    self.content,
+                    usize::from(range.start()),
+                    usize::from(range.end()),
+                );
                 for alias in names {
                     let start_offset = usize::from(alias.range.start());
                     let end_offset = usize::from(alias.range.end());
@@ -68,6 +81,7 @@ impl<'a, 'b> Visitor<'a> for ImportVisitor<'b> {
                         level: lvl,
                         is_dynamic: false,
                         span: Some(span),
+                        statement_line: stmt_span.start_line,
                     });
                 }
             }
@@ -118,6 +132,7 @@ impl<'a, 'b> Visitor<'a> for ImportVisitor<'b> {
                         level: leading_dots,
                         is_dynamic: true,
                         span: Some(span),
+                        statement_line: span.start_line,
                     });
                 }
             }

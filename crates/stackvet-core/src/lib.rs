@@ -201,7 +201,12 @@ pub fn byte_range_to_span(source: &str, start_byte: usize, end_byte: usize) -> T
 
 /// Extracts a snippet corresponding to a TextSpan from the given source string.
 pub fn extract_snippet_from_source(source: &str, span: &TextSpan) -> Option<String> {
-    if span.start_line == 0 || span.end_line == 0 || span.start_line > span.end_line {
+    if span.start_line == 0
+        || span.end_line == 0
+        || span.start_line > span.end_line
+        || span.start_col == 0
+        || span.end_col == 0
+    {
         return None;
     }
     let lines: Vec<&str> = source.lines().collect();

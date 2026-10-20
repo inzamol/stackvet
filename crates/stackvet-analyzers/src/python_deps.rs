@@ -124,10 +124,23 @@ impl Analyzer for PythonDependencyAnalyzer {
                         continue;
                     }
                     let norm = normalize_package_name(root_pkg);
-                    imported_packages
-                        .entry(norm)
-                        .or_default()
-                        .push((file, imp.line, imp.span));
+                    let effective_span = imp.span.map(|s| {
+                        if imp.statement_line < s.start_line {
+                            stackvet_core::TextSpan::new(
+                                imp.statement_line,
+                                s.end_line,
+                                1,
+                                s.end_col,
+                            )
+                        } else {
+                            s
+                        }
+                    });
+                    imported_packages.entry(norm).or_default().push((
+                        file,
+                        imp.statement_line,
+                        effective_span,
+                    ));
                 }
                 all_string_literals.extend(parse_python_string_literals(&content));
             }

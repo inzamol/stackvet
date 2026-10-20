@@ -1,6 +1,5 @@
 use stackvet_core::{
-    Confidence, Diagnostic, DiagnosticLocation, FixAction, HealthScoreExplanation, LanguageTarget,
-    RuleId, Severity, TextSpan,
+    Confidence, Diagnostic, DiagnosticLocation, FixAction, LanguageTarget, Severity, TextSpan,
 };
 use stackvet_reporter::{FullReport, ReportSummary, Reporter, ToolInfo, SCHEMA_VERSION};
 
@@ -249,8 +248,31 @@ fn test_missing_location_explicitly_represented() {
     assert_eq!(r0["locations"].as_array().unwrap().len(), 0);
 
     // Check Text: displays explicit "-"
+    assert_eq!(diag.location.display_location(), "-");
     let text = reporter.render_text(100, "A", &[], &[diag], None);
-    assert!(text.contains("-"));
+    assert!(!text.contains("<unknown>"));
+    assert!(text.contains("DOCKER-001") && text.contains(" - "));
+}
+
+#[test]
+fn test_sarif_omits_fixes_when_fix_has_no_span() {
+    let reporter = Reporter::new();
+
+    // Fix without a code span (e.g. general instruction / external action)
+    let diag = Diagnostic::builder("DEP-002", Severity::Error, LanguageTarget::Python)
+        .message("Undeclared package")
+        .location(DiagnosticLocation::new("src/main.py").with_span(TextSpan::single_line(1, 1, 15)))
+        .fix(stackvet_core::FixAction::new(
+            "Add package to pyproject.toml",
+            "pyproject.toml",
+            "requests = \"^2.31.0\"",
+        ))
+        .build();
+
+    let sarif_str = reporter.render_sarif(&[diag]).expect("render sarif");
+    let sarif: serde_json::Value = serde_json::from_str(&sarif_str).expect("parse sarif");
+    let r0 = &sarif["runs"][0]["results"][0];
+    assert!(r0.get("fixes").is_none());
 }
 
 #[test]
