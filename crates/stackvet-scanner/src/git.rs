@@ -362,9 +362,9 @@ impl PrAnalysisResult {
 
         for d in head_diagnostics {
             let fp = stackvet_core::BaselineData::compute_fingerprint(d);
-            let in_changed_file = changed_paths.contains(&d.location.file_path);
+            let _in_changed_file = changed_paths.contains(&d.location.file_path);
 
-            let touches_diff_line = if let Some(cf) = changed_map.get(&d.location.file_path) {
+            let _touches_diff_line = if let Some(cf) = changed_map.get(&d.location.file_path) {
                 if let Some(span) = &d.location.span {
                     cf.touches_line(span.start_line)
                 } else {
@@ -374,10 +374,10 @@ impl PrAnalysisResult {
                 false
             };
 
-            // Diagnostic is considered "new" if:
-            // 1. It was not in base diagnostics, OR
-            // 2. It directly touches changed lines in a modified file.
-            if !base_fingerprints.contains(&fp) || (in_changed_file && touches_diff_line) {
+            // A diagnostic is "new" only if the base revision did not report it.
+            // `in_changed_file` / `touches_diff_line` may be surfaced separately
+            // (e.g. as "existing, touched by this PR") but must not override the baseline.
+            if !base_fingerprints.contains(&fp) {
                 new_diagnostics.push(d.clone());
             } else {
                 existing_diagnostics.push(d.clone());
