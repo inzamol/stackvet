@@ -231,9 +231,10 @@ impl Analyzer for PythonDependencyAnalyzer {
                         target_pypi_name,
                     ));
 
-                    for &(occ_file, occ_line, ref occ_span) in occurrences
-                        .iter()
-                        .filter(|&&(f, l, _)| f != first_file || l != first_line)
+                    for &(occ_file, occ_line, ref occ_span) in
+                        occurrences.iter().filter(|&&(f, l, _)| {
+                            (f != first_file || l != first_line) && !covered_by_member(f)
+                        })
                     {
                         let rel_loc = if let Some(s) = occ_span {
                             DiagnosticLocation::new(occ_file.to_path_buf()).with_span(*s)
@@ -273,9 +274,10 @@ impl Analyzer for PythonDependencyAnalyzer {
                         target_pypi_name,
                     ));
 
-                    for &(occ_file, occ_line, ref occ_span) in occurrences
-                        .iter()
-                        .filter(|&&(f, l, _)| f != first_file || l != first_line)
+                    for &(occ_file, occ_line, ref occ_span) in
+                        occurrences.iter().filter(|&&(f, l, _)| {
+                            (f != first_file || l != first_line) && !covered_by_member(f)
+                        })
                     {
                         let rel_loc = if let Some(s) = occ_span {
                             DiagnosticLocation::new(occ_file.to_path_buf()).with_span(*s)
