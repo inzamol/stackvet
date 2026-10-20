@@ -285,7 +285,9 @@ pub fn check_pep_constraints_compatibility(
                     all_candidates.push(format!("{}.{}.{}", nums[0], nums[1], nums[2] + 1));
                     all_candidates.push(format!("{}.{}.0", nums[0], nums[1] + 1));
                 } else if nums.len() == 2 {
+                    all_candidates.push(format!("{}.{}.0", nums[0], nums[1]));
                     all_candidates.push(format!("{}.{}", nums[0], nums[1] + 1));
+                    all_candidates.push(format!("{}.{}.0", nums[0], nums[1] + 1));
                 }
             }
         }
@@ -647,5 +649,13 @@ develop = true
         let with_wc = [("api", "*"), ("worker", ">=1.0.0")];
         let res_wc = check_pep_constraints_compatibility(&with_wc);
         assert!(matches!(res_wc, ConstraintCompatibility::Compatible { .. }));
+
+        // Compatible with two-part versions and padded candidates
+        let two_part = [("api", ">=2.25"), ("worker", ">=2.25.0,<3.0.0")];
+        let res_two_part = check_pep_constraints_compatibility(&two_part);
+        assert!(matches!(
+            res_two_part,
+            ConstraintCompatibility::Compatible { .. }
+        ));
     }
 }

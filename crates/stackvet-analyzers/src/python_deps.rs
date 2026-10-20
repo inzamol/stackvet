@@ -142,7 +142,19 @@ impl Analyzer for PythonDependencyAnalyzer {
 
             // Check if matches a package directly or mapped via known PyPI distribution names
             let pypi_alts = stackvet_python::stdlib::get_known_pypi_packages(pkg_name);
-            let (first_file, first_line) = occurrences[0];
+            let (first_file, first_line) = occurrences
+                .iter()
+                .find(|(file, _)| {
+                    !py_info.workspace_members.iter().any(|m| {
+                        file.starts_with(&m.root_dir)
+                            && (m.dependencies.contains_key(pkg_name.as_str())
+                                || m.dev_dependencies.contains_key(pkg_name.as_str())
+                                || m.name == *pkg_name)
+                    })
+                })
+                .copied()
+                .unwrap_or(occurrences[0]);
+
             let is_member_dep = py_info.workspace_members.iter().any(|m| {
                 first_file.starts_with(&m.root_dir)
                     && (m.dependencies.contains_key(pkg_name.as_str())

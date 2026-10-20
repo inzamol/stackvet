@@ -320,11 +320,19 @@ pub fn detect_python_project(root: &Path) -> Option<PythonProjectInfo> {
     };
 
     if info.is_none() && !members.is_empty() {
-        info = Some(PythonProjectInfo {
-            package_manager: "uv".to_string(),
-            manifest_file: pyproject.clone(),
-            ..Default::default()
-        });
+        let reqs = root.join("requirements.txt");
+        if reqs.is_file() {
+            if let Ok(content) = fs::read_to_string(&reqs) {
+                info = Some(parse_requirements_txt(&content, &reqs));
+            }
+        }
+        if info.is_none() {
+            info = Some(PythonProjectInfo {
+                package_manager: "uv".to_string(),
+                manifest_file: pyproject.clone(),
+                ..Default::default()
+            });
+        }
     }
 
     if let Some(mut info) = info {

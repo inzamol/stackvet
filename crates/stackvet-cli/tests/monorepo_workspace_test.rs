@@ -675,3 +675,229 @@ fn test_workspace_protocol_version_mismatch() {
         msg
     );
 }
+
+#[test]
+fn test_workspace_packages_with_wildcard_version() {
+    let fixture = TestDir::new("ws-wildcard-ver");
+    let root = fixture.path();
+
+    fs::write(
+        root.join("package.json"),
+        r#"{
+  "name": "root",
+  "private": true,
+  "workspaces": ["packages/*"]
+}"#,
+    )
+    .unwrap();
+
+    let pkg_a = root.join("packages").join("pkg-a");
+    let pkg_b = root.join("packages").join("pkg-b");
+    fs::create_dir_all(pkg_a.join("src")).unwrap();
+    fs::create_dir_all(pkg_b.join("src")).unwrap();
+
+    // pkg-b has no explicit version, defaulting to "*"
+    fs::write(
+        pkg_b.join("package.json"),
+        r#"{
+  "name": "@myorg/utils"
+}"#,
+    )
+    .unwrap();
+    fs::write(
+        pkg_b.join("src").join("index.ts"),
+        "export const util = true;",
+    )
+    .unwrap();
+
+    // pkg-a requires @myorg/utils: workspace:*
+    fs::write(
+        pkg_a.join("package.json"),
+        r#"{
+  "name": "pkg-a",
+  "version": "1.0.0",
+  "dependencies": {
+    "@myorg/utils": "workspace:*"
+  }
+}"#,
+    )
+    .unwrap();
+    fs::write(
+        pkg_a.join("src").join("main.ts"),
+        r#"import { util } from "@myorg/utils"; console.log(util);"#,
+    )
+    .unwrap();
+
+    let diags = analyze_test_dir(root);
+    let ndep004 = diags.iter().find(|d| d.rule_id.0 == "NDEP-004");
+    assert!(
+        ndep004.is_none(),
+        "Expected 0 NDEP-004 when local workspace package version is wildcard '*', got: {:?}",
+        ndep004
+    );
+}
+
+#[test]
+fn test_multi_occurrence_member_scoping_node() {
+    let fixture = TestDir::new("multi-occ-node");
+    let root = fixture.path();
+
+    fs::write(
+        root.join("package.json"),
+        r#"{
+  "name": "root",
+  "private": true,
+  "workspaces": ["packages/*"]
+}"#,
+    )
+    .unwrap();
+
+    let pkg_a = root.join("packages").join("pkg-a");
+    let pkg_b = root.join("packages").join("pkg-b");
+    fs::create_dir_all(pkg_a.join("src")).unwrap();
+    fs::create_dir_all(pkg_b.join("src")).unwrap();
+
+    // pkg-a declares axios
+    fs::write(
+        pkg_a.join("package.json"),
+        r#"{
+  "name": "pkg-a",
+  "version": "1.0.0",
+  "dependencies": {
+    "axios": "^1.0.0"
+  }
+}"#,
+    )
+    .unwrap();
+    fs::write(
+        pkg_a.join("src").join("a.ts"),
+        r#"import axios from "axios"; console.log(axios);"#,
+    )
+    .unwrap();
+
+    // pkg-b does NOT declare axios
+    fs::write(
+        pkg_b.join("package.json"),
+        r#"{
+  "name": "pkg-b",
+  "version": "1.0.0"
+}"#,
+    )
+    .unwrap();
+    fs::write(
+        pkg_b.join("src").join("b.ts"),
+        r#"import axios from "axios"; console.log(axios);"#,
+    )
+    .unwrap();
+
+    let diags = analyze_test_dir(root);
+    let ndep001 = diags.iter().find(|d| d.rule_id.0 == "NDEP-001");
+    assert!(
+        ndep001.is_some(),
+        "Expected NDEP-001 for pkg-b missing axios declaration, even though pkg-a declared it"
+    );
+    let diag = ndep001.unwrap();
+    assert!(
+        diag.location.file_path.to_string_lossy().contains("pkg-b"),
+        "Diagnostic should point to the uncovered occurrence in pkg-b: {:?}",
+        diag.location.file_path
+    );
+}
+
+#[test]
+fn test_multi_occurrence_member_scoping_python() {
+    let fixture = TestDir::new("multi-occ-py");
+    let root = fixture.path();
+
+    fs::write(
+        root.join("pyproject.toml"),
+        r#"[project]
+name = "uv-root"
+version = "0.1.0"
+
+[tool.uv.workspace]
+members = ["packages/*"]
+"#,
+    )
+    .unwrap();
+
+    let pkg_a = root.join("packages").join("pkg-a");
+    let pkg_b = root.join("packages").join("pkg-b");
+    fs::create_dir_all(pkg_a.join("src")).unwrap();
+    fs::create_dir_all(pkg_b.join("src")).unwrap();
+
+    // pkg-a declares requests
+    fs::write(
+        pkg_a.join("pyproject.toml"),
+        r#"[project]
+name = "pkg-a"
+version = "0.1.0"
+dependencies = [
+    "requests>=2.25.0",
+]
+"#,
+    )
+    .unwrap();
+    fs::write(
+        pkg_a.join("src").join("a.py"),
+        "import requests\nprint(requests)\n",
+    )
+    .unwrap();
+
+    // pkg-b does NOT declare requests
+    fs::write(
+        pkg_b.join("pyproject.toml"),
+        r#"[project]
+name = "pkg-b"
+version = "0.1.0"
+"#,
+    )
+    .unwrap();
+    fs::write(
+        pkg_b.join("src").join("b.py"),
+        "import requests\nprint(requests)\n",
+    )
+    .unwrap();
+
+    let diags = analyze_test_dir(root);
+    let dep002 = diags.iter().find(|d| d.rule_id.0 == "DEP-002");
+    assert!(
+        dep002.is_some(),
+        "Expected DEP-002 for pkg-b missing requests declaration, even though pkg-a declared it"
+    );
+    let diag = dep002.unwrap();
+    assert!(
+        diag.location.file_path.to_string_lossy().contains("pkg-b"),
+        "Diagnostic should point to the uncovered occurrence in pkg-b: {:?}",
+        diag.location.file_path
+    );
+}
+
+#[test]
+fn test_synthetic_python_project_seeded_from_requirements_txt() {
+    let fixture = TestDir::new("synth-py-reqs");
+    let root = fixture.path();
+
+    // No root pyproject.toml, but root requirements.txt
+    fs::write(root.join("requirements.txt"), "requests==2.28.0\n").unwrap();
+
+    let member_pkg = root.join("packages").join("member");
+    fs::create_dir_all(member_pkg.join("src")).unwrap();
+    fs::write(
+        member_pkg.join("pyproject.toml"),
+        r#"[project]
+name = "member"
+version = "0.1.0"
+"#,
+    )
+    .unwrap();
+
+    let py_info = detect_python_project(root).expect("detect Python project");
+    assert_eq!(py_info.package_manager, "pip");
+    assert!(
+        py_info.direct_dependencies.contains_key("requests"),
+        "Expected direct_dependencies to be seeded from root requirements.txt: {:?}",
+        py_info.direct_dependencies
+    );
+    assert_eq!(py_info.workspace_members.len(), 1);
+}

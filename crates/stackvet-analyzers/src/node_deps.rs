@@ -97,23 +97,27 @@ impl Analyzer for NodeDependencyAnalyzer {
 
         // NDEP-001: Missing Node Package
         for (pkg_name, occurrences) in &imported_packages {
-            let (first_file, first_line) = occurrences[0];
-
-            // A package is declared if in root dependencies/devDependencies, or in the enclosing workspace member
+            // A package is declared if in root dependencies/devDependencies
             let is_root =
                 all_deps.contains(pkg_name.as_str()) || all_dev_deps.contains(pkg_name.as_str());
 
-            // Or declared in the enclosing workspace member (or self-referential import within member)
-            let is_member_dep = node_info.workspace_members.iter().any(|m| {
-                first_file.starts_with(&m.root_dir)
-                    && (m.dependencies.contains_key(pkg_name.as_str())
-                        || m.dev_dependencies.contains_key(pkg_name.as_str())
-                        || m.peer_dependencies.contains_key(pkg_name.as_str())
-                        || m.optional_dependencies.contains_key(pkg_name.as_str())
-                        || m.name == *pkg_name)
+            if is_root {
+                continue;
+            }
+
+            // Find the first occurrence not covered by its enclosing member's dependencies or self-reference
+            let uncovered_occurrence = occurrences.iter().find(|(file, _)| {
+                !node_info.workspace_members.iter().any(|m| {
+                    file.starts_with(&m.root_dir)
+                        && (m.dependencies.contains_key(pkg_name.as_str())
+                            || m.dev_dependencies.contains_key(pkg_name.as_str())
+                            || m.peer_dependencies.contains_key(pkg_name.as_str())
+                            || m.optional_dependencies.contains_key(pkg_name.as_str())
+                            || m.name == *pkg_name)
+                })
             });
 
-            if !is_root && !is_member_dep {
+            if let Some(&(first_file, first_line)) = uncovered_occurrence {
                 // Check if target package is an internal workspace package that was imported without declaration
                 let is_internal_pkg = node_info
                     .workspace_members
@@ -260,7 +264,7 @@ impl Analyzer for NodeDependencyAnalyzer {
                     // Check workspace dependency resolution
                     if constraint.starts_with("workspace:") {
                         if let Some(ws_ver) = node_info.workspace_packages.get(dep_name) {
-                            if !npm_version_satisfies(constraint, ws_ver) {
+                            if ws_ver != "*" && !npm_version_satisfies(constraint, ws_ver) {
                                 diagnostics.push(
                                     Diagnostic::builder("NDEP-004", Severity::Warning, LanguageTarget::Node)
                                         .message(format!(
@@ -454,7 +458,7 @@ impl Analyzer for NodeDependencyAnalyzer {
             for (dep_name, constraint) in member_deps {
                 if constraint.starts_with("workspace:") {
                     if let Some(ws_ver) = node_info.workspace_packages.get(dep_name) {
-                        if !npm_version_satisfies(constraint, ws_ver) {
+                        if ws_ver != "*" && !npm_version_satisfies(constraint, ws_ver) {
                             diagnostics.push(
                                 Diagnostic::builder("NDEP-004", Severity::Warning, LanguageTarget::Node)
                                     .message(format!(
