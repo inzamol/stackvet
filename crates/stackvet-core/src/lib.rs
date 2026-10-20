@@ -11,7 +11,7 @@ pub mod baseline;
 pub use baseline::{BaselineData, BaselineDiff, BaselineIssueEntry};
 
 pub mod config;
-pub use config::{ConfigError, StackvetConfig};
+pub use config::{CacheConfig, ConfigError, StackvetConfig};
 
 pub mod exit_codes;
 pub use exit_codes::ExitCode;

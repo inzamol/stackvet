@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use colored::Colorize;
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
@@ -18,7 +18,12 @@ use stackvet_node::detect_node_project;
 use stackvet_python::detect_python_project;
 use stackvet_remediation::RemediationEngine;
 use stackvet_reporter::Reporter;
-use stackvet_scanner::ProjectScanner;
+use stackvet_scanner::{
+    collect_git_diff, hash_bytes, hash_file_content, normalize_rel_path, parse_explicit_files,
+    parse_patch_file, CacheValidationResult, FileCacheEntry, IncrementalCacheManager,
+    PrAnalysisResult, ProjectScanner, ScanCacheData,
+};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -57,6 +62,18 @@ pub struct Cli {
 
     #[arg(short, long, help = "Show verbose diagnostic and scan details")]
     pub verbose: bool,
+
+    #[arg(
+        long,
+        help = "Enable incremental scanning reusing cached file diagnostics"
+    )]
+    pub incremental: bool,
+
+    #[arg(long, help = "Disable scan caching (force full scan)")]
+    pub no_cache: bool,
+
+    #[arg(long, help = "Custom directory for incremental scan cache")]
+    pub cache_dir: Option<PathBuf>,
 
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -234,6 +251,67 @@ pub enum Commands {
         #[arg(help = "Filter rules by category or keyword (e.g. docker, fastapi, react)")]
         filter: Option<String>,
     },
+
+    #[command(
+        about = "Pull request intelligence analyzing changed code vs base branch",
+        aliases = ["pr-analysis"]
+    )]
+    Pr {
+        #[arg(help = "Target project directory [default: .]")]
+        path: Option<PathBuf>,
+
+        #[arg(
+            short = 'b',
+            long,
+            help = "Base git branch or ref (default: auto-detected or origin/main)"
+        )]
+        base: Option<String>,
+
+        #[arg(long, default_value = "HEAD", help = "Head git commit or ref")]
+        head: String,
+
+        #[arg(
+            long,
+            help = "Comma-separated list of changed files (e.g. 'users.py,requirements.txt')"
+        )]
+        files: Option<String>,
+
+        #[arg(long, help = "Path to unified diff patch file")]
+        diff: Option<PathBuf>,
+
+        #[arg(long, help = "Treat warnings as errors")]
+        strict: bool,
+
+        #[arg(
+            long,
+            help = "Run non-interactively with step summary & inline annotations"
+        )]
+        ci: bool,
+
+        #[arg(
+            long,
+            help = "Emits GitHub Actions inline workflow command annotations"
+        )]
+        github_annotations: bool,
+
+        #[arg(
+            long,
+            help = "Outputs formatted Markdown suitable for GitHub PR comments"
+        )]
+        comment: bool,
+
+        #[arg(long, help = "Emits PR analysis results as structured JSON")]
+        json: bool,
+
+        #[arg(long, help = "Emits new PR findings in standard SARIF v2.1.0 format")]
+        sarif: bool,
+
+        #[arg(long, help = "Compare against an established baseline file")]
+        baseline: Option<PathBuf>,
+
+        #[arg(short = 'o', long, help = "Writes report directly to a file")]
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -313,24 +391,8 @@ fn build_full_context(
     Ok(ctx)
 }
 
-fn collect_all_diagnostics(
-    ctx: &ProjectContext,
-    offline: bool,
-) -> Result<(Vec<stackvet_core::Diagnostic>, usize)> {
-    let mut diagnostics = run_all_analyzers(ctx, offline)?;
-    let mut fw_diags = run_all_framework_analyzers(ctx)?;
-    diagnostics.append(&mut fw_diags);
-
-    // Deduplicate diagnostics to prevent duplicate findings from distorting scores or reports
-    let (mut deduped, duplicates_count) = deduplicate_diagnostics(&diagnostics);
-
-    // Deterministic sorting across repeated runs:
-    // Primary: severity descending (Critical > Error > Warning > Info > Hint)
-    // Secondary: rule_id ascending
-    // Tertiary: file_path ascending
-    // Quaternary: line ascending
-    // Quinary: message ascending
-    deduped.sort_by(|a, b| {
+fn sort_diagnostics_deterministic(diagnostics: &mut [stackvet_core::Diagnostic]) {
+    diagnostics.sort_by(|a, b| {
         b.severity
             .cmp(&a.severity)
             .then_with(|| a.rule_id.0.cmp(&b.rule_id.0))
@@ -342,8 +404,271 @@ fn collect_all_diagnostics(
             })
             .then_with(|| a.message.cmp(&b.message))
     });
+}
+
+fn collect_all_diagnostics(
+    ctx: &ProjectContext,
+    offline: bool,
+) -> Result<(Vec<stackvet_core::Diagnostic>, usize)> {
+    let mut diagnostics = run_all_analyzers(ctx, offline)?;
+    let mut fw_diags = run_all_framework_analyzers(ctx)?;
+    diagnostics.append(&mut fw_diags);
+
+    // Deduplicate diagnostics to prevent duplicate findings from distorting scores or reports
+    let (mut deduped, duplicates_count) = deduplicate_diagnostics(&diagnostics);
+    sort_diagnostics_deterministic(&mut deduped);
 
     Ok((deduped, duplicates_count))
+}
+
+fn collect_diagnostics_incremental(
+    root: &Path,
+    ctx: &ProjectContext,
+    config: &StackvetConfig,
+    cli_ignores: &[String],
+    offline: bool,
+    verbose: bool,
+    custom_cache_dir: Option<&Path>,
+) -> Result<(Vec<stackvet_core::Diagnostic>, usize, bool)> {
+    let resolve_cache_dir = |dir: &Path| -> PathBuf {
+        if dir.is_absolute() {
+            dir.to_path_buf()
+        } else {
+            root.join(dir)
+        }
+    };
+    let cache_mgr = if let Some(dir) = custom_cache_dir {
+        IncrementalCacheManager::with_custom_cache_dir(root, resolve_cache_dir(dir))
+    } else if let Some(dir) = &config.cache.dir {
+        IncrementalCacheManager::with_custom_cache_dir(root, resolve_cache_dir(dir))
+    } else {
+        IncrementalCacheManager::new(root)
+    };
+
+    let config_val = serde_json::to_value(config)
+        .context("Failed to serialize configuration for cache validation")?;
+    let mut config_bytes = serde_json::to_vec(&config_val)
+        .context("Failed to serialize configuration value for cache validation")?;
+    for ign in cli_ignores {
+        config_bytes.push(b'\0');
+        config_bytes.extend_from_slice(ign.as_bytes());
+    }
+    let config_hash = hash_bytes(&config_bytes);
+
+    let validation = cache_mgr.validate(&ctx.manifest_files, &ctx.source_files, &config_hash);
+
+    match validation {
+        CacheValidationResult::Valid {
+            mut cached_data,
+            changes,
+        } => {
+            if !changes.has_changes() {
+                if verbose {
+                    println!(
+                        "{}",
+                        format!(
+                            "Incremental scan: All {} file(s) up-to-date (cache hit).",
+                            ctx.source_files.len()
+                        )
+                        .green()
+                    );
+                }
+                let mut all_diags: Vec<stackvet_core::Diagnostic> = cached_data
+                    .files
+                    .values()
+                    .flat_map(|e| e.diagnostics.clone())
+                    .collect();
+                all_diags.extend(cached_data.project_diagnostics.clone());
+
+                let (mut deduped, duplicates_count) = deduplicate_diagnostics(&all_diags);
+                sort_diagnostics_deterministic(&mut deduped);
+                return Ok((deduped, duplicates_count, true));
+            }
+
+            if verbose {
+                println!(
+                    "{}",
+                    format!(
+                        "Incremental scan: {} file(s) reused from cache, {} file(s) re-analyzed.",
+                        changes.unchanged_files.len(),
+                        changes.modified_files.len() + changes.added_files.len()
+                    )
+                    .cyan()
+                );
+            }
+
+            let unchanged_set: HashSet<String> = changes
+                .unchanged_files
+                .iter()
+                .map(|p| normalize_rel_path(root, p))
+                .collect();
+
+            // 1. Restore cached diagnostics for unchanged source files
+            let mut all_diags: Vec<stackvet_core::Diagnostic> = Vec::new();
+            for (rel_path, entry) in &cached_data.files {
+                if unchanged_set.contains(rel_path) {
+                    all_diags.extend(entry.diagnostics.clone());
+                }
+            }
+
+            // 2. Identify modified and added files
+            let mut reanalyze_files = changes.modified_files.clone();
+            reanalyze_files.extend(changes.added_files.clone());
+            let reanalyze_set: HashSet<PathBuf> = reanalyze_files.iter().cloned().collect();
+            let source_files_set: HashSet<PathBuf> = ctx.source_files.iter().cloned().collect();
+
+            let is_source_file = |p: &Path| -> bool {
+                source_files_set.contains(p) || source_files_set.contains(&root.join(p))
+            };
+            let is_reanalyzed = |p: &Path| -> bool {
+                reanalyze_set.contains(p) || reanalyze_set.contains(&root.join(p))
+            };
+
+            // 3. Project-wide analyzers receive the full ctx.source_files so rules inspecting
+            // full sets (unused deps, lockfile drift, import graph cycles) remain sound.
+            let project_wide_diags = run_all_analyzers(ctx, offline)?;
+
+            // 4. Per-file framework analyzers only inspect reanalyzed files
+            let mut sub_ctx = ctx.clone();
+            sub_ctx.source_files = reanalyze_files.clone();
+            let fresh_fw_diags = run_all_framework_analyzers(&sub_ctx)?;
+
+            let mut fresh_diags = project_wide_diags;
+            fresh_diags.extend(fresh_fw_diags);
+
+            let mut fresh_by_file: HashMap<PathBuf, Vec<stackvet_core::Diagnostic>> =
+                HashMap::new();
+            let mut fresh_project_diags: Vec<stackvet_core::Diagnostic> = Vec::new();
+
+            for d in fresh_diags {
+                if is_reanalyzed(&d.location.file_path) {
+                    all_diags.push(d.clone());
+                    let key = if d.location.file_path.is_absolute() {
+                        d.location.file_path.clone()
+                    } else {
+                        root.join(&d.location.file_path)
+                    };
+                    fresh_by_file.entry(key).or_default().push(d);
+                } else if !is_source_file(&d.location.file_path) {
+                    fresh_project_diags.push(d);
+                }
+            }
+
+            // Replace cached project diagnostics with fresh results
+            cached_data.project_diagnostics = fresh_project_diags;
+            all_diags.extend(cached_data.project_diagnostics.clone());
+
+            // Remove deleted files from cache
+            for del in &changes.deleted_files {
+                let rel = normalize_rel_path(root, del);
+                cached_data.files.remove(&rel);
+            }
+
+            // Update cache entries for reanalyzed files
+            for p in &reanalyze_files {
+                let rel = normalize_rel_path(root, p);
+                if let Ok(metadata) = fs::metadata(p) {
+                    let file_size = metadata.len();
+                    let mtime = metadata
+                        .modified()
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_nanos())
+                        .unwrap_or(0);
+                    let content_hash = hash_file_content(p).unwrap_or_default();
+                    let diags = fresh_by_file
+                        .remove(p)
+                        .or_else(|| fresh_by_file.remove(&root.join(p)))
+                        .unwrap_or_default();
+
+                    cached_data.files.insert(
+                        rel,
+                        FileCacheEntry {
+                            content_hash,
+                            file_size,
+                            mtime,
+                            diagnostics: diags,
+                        },
+                    );
+                }
+            }
+
+            let _ = cache_mgr.save(&cached_data);
+
+            let (mut deduped, duplicates_count) = deduplicate_diagnostics(&all_diags);
+            sort_diagnostics_deterministic(&mut deduped);
+            Ok((deduped, duplicates_count, false))
+        }
+        CacheValidationResult::Invalid(reason) => {
+            if verbose {
+                println!(
+                    "{}",
+                    format!("Incremental scan cache invalidated: {reason}. Running full scan.")
+                        .yellow()
+                );
+            }
+
+            let (all_diags, duplicates_count) = collect_all_diagnostics(ctx, offline)?;
+
+            let mut new_cache = ScanCacheData::new(config_hash);
+            for m in &ctx.manifest_files {
+                let rel = normalize_rel_path(root, m);
+                if let Ok(h) = hash_file_content(m) {
+                    new_cache.manifest_hashes.insert(rel, h);
+                }
+            }
+
+            let mut diags_by_file: HashMap<PathBuf, Vec<stackvet_core::Diagnostic>> =
+                HashMap::new();
+            for d in &all_diags {
+                let key = if d.location.file_path.is_absolute() {
+                    d.location.file_path.clone()
+                } else {
+                    root.join(&d.location.file_path)
+                };
+                diags_by_file.entry(key).or_default().push(d.clone());
+            }
+
+            for p in &ctx.source_files {
+                let rel = normalize_rel_path(root, p);
+                if let Ok(metadata) = fs::metadata(p) {
+                    let file_size = metadata.len();
+                    let mtime = metadata
+                        .modified()
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_nanos())
+                        .unwrap_or(0);
+                    let content_hash = hash_file_content(p).unwrap_or_default();
+                    let diags = diags_by_file
+                        .remove(p)
+                        .or_else(|| diags_by_file.remove(&root.join(p)))
+                        .unwrap_or_default();
+
+                    new_cache.files.insert(
+                        rel,
+                        FileCacheEntry {
+                            content_hash,
+                            file_size,
+                            mtime,
+                            diagnostics: diags,
+                        },
+                    );
+                }
+            }
+
+            // Save all remaining diags_by_file entries into project_diagnostics
+            let mut remaining_project_diags: Vec<stackvet_core::Diagnostic> = Vec::new();
+            for diags in diags_by_file.into_values() {
+                remaining_project_diags.extend(diags);
+            }
+            new_cache.project_diagnostics = remaining_project_diags;
+
+            let _ = cache_mgr.save(&new_cache);
+
+            Ok((all_diags, duplicates_count, false))
+        }
+    }
 }
 
 fn print_rules_catalog(filter_term: Option<&str>) {
@@ -739,6 +1064,7 @@ async fn main() -> Result<()> {
         Some(Commands::Verify { path }) => path.clone(),
         Some(Commands::Graph { path, .. }) => path.clone(),
         Some(Commands::Init { path, .. }) => path.clone(),
+        Some(Commands::Pr { path, .. }) => path.clone(),
         Some(Commands::Baseline { action }) => match action {
             BaselineAction::Record { path, .. } => path.clone(),
             BaselineAction::Verify { path, .. } => path.clone(),
@@ -832,14 +1158,44 @@ async fn main() -> Result<()> {
             ExitCode::ExecutionError.exit();
         }
     };
-    let (raw_diagnostics, duplicates_ignored) = match collect_all_diagnostics(&ctx, cli.offline) {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!(
-                "{}",
-                format!("Failed to collect diagnostics: {e}").red().bold()
-            );
-            ExitCode::ExecutionError.exit();
+    let use_incremental = (cli.incremental || config.cache.enabled) && !cli.no_cache;
+    let (raw_diagnostics, duplicates_ignored) = if use_incremental {
+        match collect_diagnostics_incremental(
+            &root,
+            &ctx,
+            &config,
+            &all_cli_ignores,
+            cli.offline,
+            cli.verbose,
+            cli.cache_dir.as_deref(),
+        ) {
+            Ok((diags, dupes, _)) => (diags, dupes),
+            Err(e) => {
+                if cli.verbose {
+                    eprintln!("{}", format!("Incremental scan fallback: {e}").yellow());
+                }
+                match collect_all_diagnostics(&ctx, cli.offline) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        eprintln!(
+                            "{}",
+                            format!("Failed to collect diagnostics: {e}").red().bold()
+                        );
+                        ExitCode::ExecutionError.exit();
+                    }
+                }
+            }
+        }
+    } else {
+        match collect_all_diagnostics(&ctx, cli.offline) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!(
+                    "{}",
+                    format!("Failed to collect diagnostics: {e}").red().bold()
+                );
+                ExitCode::ExecutionError.exit();
+            }
         }
     };
     let diagnostics_after_rules = match config.apply_rule_overrides(raw_diagnostics) {
@@ -1768,6 +2124,209 @@ async fn main() -> Result<()> {
                         ExitCode::FindingsViolation.exit();
                     }
                 }
+            }
+        }
+        Some(Commands::Pr {
+            base,
+            head,
+            files,
+            diff,
+            strict,
+            ci,
+            github_annotations,
+            comment,
+            json,
+            sarif,
+            baseline,
+            output,
+            ..
+        }) => {
+            let changed_files = if let Some(diff_path) = diff {
+                let p = if diff_path.is_absolute() {
+                    diff_path.clone()
+                } else {
+                    root.join(diff_path)
+                };
+                match parse_patch_file(&p, &root) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!(
+                            "{}",
+                            format!("Failed to parse diff file '{}': {e}", p.display())
+                                .red()
+                                .bold()
+                        );
+                        ExitCode::ExecutionError.exit();
+                    }
+                }
+            } else if let Some(files_str) = files {
+                parse_explicit_files(files_str, &root)
+            } else {
+                match collect_git_diff(&root, base.as_deref(), Some(head)) {
+                    Ok(summary) => summary.changed_files,
+                    Err(e) => {
+                        eprintln!("{}", format!("Git diff detection failed: {e}").red().bold());
+                        ExitCode::ExecutionError.exit();
+                    }
+                }
+            };
+
+            let base_diagnostics: Vec<stackvet_core::Diagnostic> = if let Some(b_file) = baseline {
+                let baseline_path = if b_file.is_absolute() {
+                    b_file.clone()
+                } else {
+                    root.join(b_file)
+                };
+                if !baseline_path.is_file() {
+                    eprintln!(
+                        "{}",
+                        format!("Baseline file not found: '{}'", baseline_path.display())
+                            .red()
+                            .bold()
+                    );
+                    ExitCode::ExecutionError.exit();
+                }
+                match BaselineData::load_from_file(&baseline_path) {
+                    Ok(bdata) => bdata
+                        .issues
+                        .iter()
+                        .map(|entry| {
+                            stackvet_core::Diagnostic::builder(
+                                &entry.rule_id,
+                                stackvet_core::config::parse_severity(&entry.severity)
+                                    .unwrap_or(Severity::Warning),
+                                stackvet_core::LanguageTarget::General,
+                            )
+                            .message(&entry.message)
+                            .location(
+                                stackvet_core::DiagnosticLocation::new(&entry.file_path).with_span(
+                                    stackvet_core::TextSpan::single_line(entry.line, 1, 1),
+                                ),
+                            )
+                            .build()
+                        })
+                        .collect(),
+                    Err(e) => {
+                        eprintln!(
+                            "{}",
+                            format!(
+                                "Failed to load baseline file '{}': {e}",
+                                baseline_path.display()
+                            )
+                            .red()
+                            .bold()
+                        );
+                        ExitCode::ExecutionError.exit();
+                    }
+                }
+            } else if root.join(".stackvet-baseline.json").is_file() {
+                if let Ok(bdata) =
+                    BaselineData::load_from_file(&root.join(".stackvet-baseline.json"))
+                {
+                    bdata
+                        .issues
+                        .iter()
+                        .map(|entry| {
+                            stackvet_core::Diagnostic::builder(
+                                &entry.rule_id,
+                                stackvet_core::config::parse_severity(&entry.severity)
+                                    .unwrap_or(Severity::Warning),
+                                stackvet_core::LanguageTarget::General,
+                            )
+                            .message(&entry.message)
+                            .location(
+                                stackvet_core::DiagnosticLocation::new(&entry.file_path).with_span(
+                                    stackvet_core::TextSpan::single_line(entry.line, 1, 1),
+                                ),
+                            )
+                            .build()
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            };
+
+            let pr_result =
+                PrAnalysisResult::analyze(changed_files, &diagnostics, &base_diagnostics);
+
+            if *github_annotations || *ci {
+                for ann in pr_result.render_github_annotations() {
+                    println!("{ann}");
+                }
+            }
+
+            if *comment {
+                let md = pr_result.render_markdown_comment();
+                if let Some(out_file) = output {
+                    if let Err(e) = fs::write(out_file, &md) {
+                        eprintln!(
+                            "{}",
+                            format!("Failed to write report to '{}': {e}", out_file.display())
+                                .red()
+                                .bold()
+                        );
+                        ExitCode::ExecutionError.exit();
+                    }
+                } else {
+                    println!("{md}");
+                }
+            } else if *json {
+                let json_str =
+                    serde_json::to_string_pretty(&pr_result).unwrap_or_else(|_| "{}".to_string());
+                if let Some(out_file) = output {
+                    if let Err(e) = fs::write(out_file, &json_str) {
+                        eprintln!(
+                            "{}",
+                            format!("Failed to write report to '{}': {e}", out_file.display())
+                                .red()
+                                .bold()
+                        );
+                        ExitCode::ExecutionError.exit();
+                    }
+                } else {
+                    println!("{json_str}");
+                }
+            } else if *sarif {
+                let sarif_str = reporter
+                    .render_sarif(&pr_result.new_diagnostics)
+                    .unwrap_or_else(|_| "{}".to_string());
+                if let Some(out_file) = output {
+                    if let Err(e) = fs::write(out_file, &sarif_str) {
+                        eprintln!(
+                            "{}",
+                            format!("Failed to write report to '{}': {e}", out_file.display())
+                                .red()
+                                .bold()
+                        );
+                        ExitCode::ExecutionError.exit();
+                    }
+                } else {
+                    println!("{sarif_str}");
+                }
+            } else {
+                let text = pr_result.render_text();
+                if let Some(out_file) = output {
+                    if let Err(e) = fs::write(out_file, &text) {
+                        eprintln!(
+                            "{}",
+                            format!("Failed to write report to '{}': {e}", out_file.display())
+                                .red()
+                                .bold()
+                        );
+                        ExitCode::ExecutionError.exit();
+                    }
+                } else {
+                    println!("{text}");
+                }
+            }
+
+            if pr_result.is_clean(*strict) {
+                ExitCode::Success.exit();
+            } else {
+                ExitCode::FindingsViolation.exit();
             }
         }
         Some(Commands::Explain { .. })

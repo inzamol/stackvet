@@ -33,6 +33,15 @@ pub struct StackvetConfig {
     pub ignore: IgnoreConfig,
     #[serde(default)]
     pub suppressions: Vec<SuppressionEntry>,
+    #[serde(default)]
+    pub cache: CacheConfig,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CacheConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    pub dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

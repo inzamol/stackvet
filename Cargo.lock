@@ -1950,6 +1950,8 @@ dependencies = [
  "colored",
  "comfy-table",
  "crossterm 0.28.1",
+ "serde",
+ "serde_json",
  "stackvet-analyzers",
  "stackvet-core",
  "stackvet-correlation",
@@ -1961,6 +1963,7 @@ dependencies = [
  "stackvet-reporter",
  "stackvet-scanner",
  "tokio",
+ "toml",
  "tracing",
  "tracing-subscriber",
 ]
@@ -2085,6 +2088,8 @@ version = "0.1.2"
 dependencies = [
  "anyhow",
  "ignore",
+ "serde",
+ "serde_json",
  "stackvet-core",
  "tracing",
  "walkdir",

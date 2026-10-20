@@ -12,6 +12,11 @@
       - "!**/fixtures/**"
       - "!tests/fixtures/**"
   ```
+- **Pre-PR Code Scanning**: Always run CodeRabbit scanning on local changes before creating or updating a Pull Request:
+  ```bash
+  npx -y coderabbit review
+  ```
+  Inspect and address all valid findings prior to submitting or updating the PR.
 
 ## Release & Versioning Guidelines
 Whenever asked to make or prepare a release:
@@ -53,4 +58,5 @@ cargo clippy --all-targets --all-features
 cargo test --all-targets --all-features
 node scripts/sync_version.js --check
 node scripts/smoke_test.js
+npx -y coderabbit review
 ```

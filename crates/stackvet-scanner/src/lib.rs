@@ -4,6 +4,20 @@ use ignore::WalkBuilder;
 use stackvet_core::ProjectContext;
 use std::path::{Path, PathBuf};
 
+pub mod cache;
+pub mod git;
+
+pub use cache::{
+    hash_bytes, hash_file_content, normalize_rel_path, CacheInvalidationReason,
+    CacheValidationResult, FileCacheEntry, IncrementalCacheManager, ScanCacheData, ScanChanges,
+    CACHE_SCHEMA_VERSION, DEFAULT_CACHE_DIR, DEFAULT_CACHE_FILE,
+};
+pub use git::{
+    collect_git_diff, get_merge_base, is_git_repository, is_shallow_repository,
+    parse_explicit_files, parse_name_status, parse_patch_file, parse_unified_diff_hunks,
+    ChangedFile, FileDiffKind, GitDiffSummary, PrAnalysisResult,
+};
+
 /// Sensible default directories and artifacts excluded from project scanning.
 pub const DEFAULT_EXCLUSIONS: &[&str] = &[
     ".git",
@@ -123,7 +137,7 @@ impl ProjectScanner {
         let walker = builder.build();
 
         for entry_res in walker.flatten() {
-            if entry_res.file_type().map_or(false, |ft| ft.is_file()) {
+            if entry_res.file_type().is_some_and(|ft| ft.is_file()) {
                 let path = entry_res.into_path();
                 let file_name = path
                     .file_name()
