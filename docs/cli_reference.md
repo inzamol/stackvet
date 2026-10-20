@@ -65,6 +65,15 @@ ARC-001 = "error"
 [rules.FAP-001]
 severity = "error"
 enabled = true
+
+[ignore]
+patterns = ["legacy/**", "benchmarks/**"]
+
+[[suppressions]]
+rule = "DEP-001"
+path = "legacy/**/*.py"
+until = "2026-12-31"
+reason = "Legacy package migration"
 ```
 
 ---
@@ -150,6 +159,8 @@ Run `stackvet explain SQL-014` for details.
 | `--top <N>` | Number of top problems to highlight (default: 3) |
 | `--format`, `-f <FORMAT>` | Specify output format (`text`, `json`, `sarif`, `html`) |
 | `--html` | Generates an interactive, standalone HTML dashboard with health score breakdown |
+| `--ignore <PATTERN>` | Glob pattern to ignore from analysis (repeatable) |
+| `--verbose` | Print verbose analysis and discovery progress |
 | `--offline` | Disables remote vulnerability/CVE queries (airgapped mode) |
 | `--output`, `-o <FILE>` | Writes output directly to a file |
 
@@ -178,6 +189,8 @@ stackvet scan [PATH] [OPTIONS]
 | `--ci` | Runs non-interactively with strict mode enabled |
 | `--baseline <FILE>` | Filter findings against an established baseline file (ignores pre-existing issues) |
 | `--update-baseline` | Update baseline file with current findings and remove resolved issues |
+| `--ignore <PATTERN>` | Glob pattern to ignore from analysis (repeatable) |
+| `--verbose` | Print verbose analysis and discovery progress |
 | `--json` | Emits scan results as structured JSON |
 | `--sarif` | Emits scan results as standard SARIF v2.1.0 format |
 | `--format`, `-f <FORMAT>` | Specify output format (`json`, `sarif`, `html`, `terminal`, `text`) |

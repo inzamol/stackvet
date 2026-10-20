@@ -471,6 +471,30 @@ ARC-001 = "error"
 [rules.FAP-001]
 severity = "error"
 enabled = true
+
+# Ignore patterns (file/directory globs relative to project root)
+[ignore]
+patterns = ["legacy/**", "benchmarks/**", "*.generated.ts"]
+
+# Configured suppressions with rule, path pattern, and expiration date
+[[suppressions]]
+rule = "DEP-001"
+path = "legacy/**/*.py"
+reason = "Legacy package scheduled for removal"
+
+[[suppressions]]
+rule = "SQL-001"
+until = "2026-12-31"   # ISO 8601 YYYY-MM-DD expiration
+reason = "Temporary bypass during query optimization"
+```
+
+Inline comment suppressions are also supported in Python, JavaScript, and TypeScript files:
+```python
+# Inline comment suppression examples
+time.sleep(1)  # stackvet:ignore[FAP-001]: intentional delay
+# stackvet:ignore-next-line[DEP-001]
+import optional_pkg
+# stackvet:ignore-file[DJG-001]: legacy file exempt from django check
 ```
 
 ---

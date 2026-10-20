@@ -16,6 +16,12 @@ pub use config::{ConfigError, StackvetConfig};
 pub mod exit_codes;
 pub use exit_codes::ExitCode;
 
+pub mod suppression;
+pub use suppression::{
+    apply_suppressions, parse_inline_suppressions, InlineSuppression, SuppressedDiagnostic,
+    SuppressionEntry, SuppressionOutcome, SuppressionSource,
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Severity {
     Hint,
@@ -285,6 +291,9 @@ pub struct HealthScoreExplanation {
     pub unique_findings_count: usize,
     /// Count of duplicate or redundant findings ignored during scoring.
     pub duplicate_findings_ignored: usize,
+    /// Count of findings suppressed via configuration or inline comments.
+    #[serde(default)]
+    pub suppressed_findings_count: usize,
     /// Deductions grouped by rule ID.
     pub rule_contributions: Vec<RuleScoreContribution>,
     /// Exact diagnostics that incurred deductions.

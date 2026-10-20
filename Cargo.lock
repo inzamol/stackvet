@@ -1987,6 +1987,7 @@ name = "stackvet-core"
 version = "0.1.2"
 dependencies = [
  "anyhow",
+ "ignore",
  "serde",
  "serde_json",
  "thiserror 1.0.69",

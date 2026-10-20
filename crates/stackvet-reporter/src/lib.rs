@@ -74,6 +74,13 @@ impl Reporter {
                 exp.duplicate_findings_ignored,
                 if exp.duplicate_findings_ignored == 1 { "" } else { "s" }
             ));
+            if exp.suppressed_findings_count > 0 {
+                out.push_str(&format!(
+                    "  Suppression:   {} finding{} suppressed by configuration or inline comments\n",
+                    exp.suppressed_findings_count,
+                    if exp.suppressed_findings_count == 1 { "" } else { "s" }
+                ));
+            }
         }
         out.push_str("\n");
 
