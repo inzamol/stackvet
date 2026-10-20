@@ -240,8 +240,11 @@ impl Analyzer for NodeDependencyAnalyzer {
                         .find(|m| file.starts_with(&m.root_dir));
 
                     let is_dev_violation = if let Some(m) = member {
-                        // If member lists it as production dependency, it's valid in production
-                        if m.dependencies.contains_key(dev_pkg) {
+                        // If member lists it as production, peer, or optional dependency, it's valid in production
+                        if m.dependencies.contains_key(dev_pkg)
+                            || m.peer_dependencies.contains_key(dev_pkg)
+                            || m.optional_dependencies.contains_key(dev_pkg)
+                        {
                             false
                         } else if m.dev_dependencies.contains_key(dev_pkg) {
                             true

@@ -159,12 +159,21 @@ pub fn pep_version_satisfies(req_str: &str, locked_version: &str) -> bool {
                 if !l.starts_with(prefix) {
                     return false;
                 }
-            } else if target_trim != l {
+            } else if target_trim != l
+                && compare_numeric_versions(l, target_trim) != Ordering::Equal
+            {
                 return false;
             }
         } else if let Some(target) = spec.strip_prefix("!=") {
             let target_trim = target.trim();
-            if target_trim == l {
+            if target_trim.ends_with(".*") {
+                let prefix = target_trim.trim_end_matches(".*");
+                if l.starts_with(prefix) {
+                    return false;
+                }
+            } else if target_trim == l
+                || compare_numeric_versions(l, target_trim) == Ordering::Equal
+            {
                 return false;
             }
         } else if let Some(target) = spec.strip_prefix("~=") {
@@ -269,11 +278,12 @@ pub fn check_pep_constraints_compatibility(
     }
 
     // Extract candidate versions
-    let mut all_candidates: Vec<String> = Vec::new();
+    let mut all_candidates: Vec<String> = vec!["0.0.0".to_string()];
     for (_, c) in &non_wildcards {
         for part in c.split(',') {
             let clean_part = part
                 .trim_start_matches(|ch: char| !ch.is_ascii_digit())
+                .trim_end_matches(|ch: char| !ch.is_ascii_digit())
                 .trim();
             if !clean_part.is_empty() && !all_candidates.contains(&clean_part.to_string()) {
                 all_candidates.push(clean_part.to_string());
@@ -282,12 +292,88 @@ pub fn check_pep_constraints_compatibility(
                     .filter_map(|s| s.parse().ok())
                     .collect();
                 if nums.len() >= 3 {
-                    all_candidates.push(format!("{}.{}.{}", nums[0], nums[1], nums[2] + 1));
-                    all_candidates.push(format!("{}.{}.0", nums[0], nums[1] + 1));
+                    let c1 = format!("{}.{}.{}", nums[0], nums[1], nums[2] + 1);
+                    if !all_candidates.contains(&c1) {
+                        all_candidates.push(c1);
+                    }
+                    let c2 = format!("{}.{}.0", nums[0], nums[1] + 1);
+                    if !all_candidates.contains(&c2) {
+                        all_candidates.push(c2);
+                    }
+                    if nums[2] > 0 {
+                        let c3 = format!("{}.{}.{}", nums[0], nums[1], nums[2] - 1);
+                        if !all_candidates.contains(&c3) {
+                            all_candidates.push(c3);
+                        }
+                    }
+                    if nums[1] > 0 {
+                        let c4 = format!("{}.{}.0", nums[0], nums[1] - 1);
+                        if !all_candidates.contains(&c4) {
+                            all_candidates.push(c4);
+                        }
+                    }
+                    if nums[0] > 0 {
+                        let c5 = format!("{}.0.0", nums[0] - 1);
+                        if !all_candidates.contains(&c5) {
+                            all_candidates.push(c5);
+                        }
+                    }
                 } else if nums.len() == 2 {
-                    all_candidates.push(format!("{}.{}.0", nums[0], nums[1]));
-                    all_candidates.push(format!("{}.{}", nums[0], nums[1] + 1));
-                    all_candidates.push(format!("{}.{}.0", nums[0], nums[1] + 1));
+                    let c1 = format!("{}.{}.0", nums[0], nums[1]);
+                    if !all_candidates.contains(&c1) {
+                        all_candidates.push(c1);
+                    }
+                    let c2 = format!("{}.{}", nums[0], nums[1] + 1);
+                    if !all_candidates.contains(&c2) {
+                        all_candidates.push(c2);
+                    }
+                    let c3 = format!("{}.{}.0", nums[0], nums[1] + 1);
+                    if !all_candidates.contains(&c3) {
+                        all_candidates.push(c3);
+                    }
+                    if nums[1] > 0 {
+                        let c4 = format!("{}.{}", nums[0], nums[1] - 1);
+                        if !all_candidates.contains(&c4) {
+                            all_candidates.push(c4);
+                        }
+                        let c5 = format!("{}.{}.0", nums[0], nums[1] - 1);
+                        if !all_candidates.contains(&c5) {
+                            all_candidates.push(c5);
+                        }
+                    }
+                    if nums[0] > 0 {
+                        let c6 = format!("{}.0", nums[0] - 1);
+                        if !all_candidates.contains(&c6) {
+                            all_candidates.push(c6);
+                        }
+                        let c7 = format!("{}.0.0", nums[0] - 1);
+                        if !all_candidates.contains(&c7) {
+                            all_candidates.push(c7);
+                        }
+                    }
+                } else if nums.len() == 1 {
+                    let c1 = format!("{}.0.0", nums[0]);
+                    if !all_candidates.contains(&c1) {
+                        all_candidates.push(c1);
+                    }
+                    let c2 = format!("{}", nums[0] + 1);
+                    if !all_candidates.contains(&c2) {
+                        all_candidates.push(c2);
+                    }
+                    let c3 = format!("{}.0.0", nums[0] + 1);
+                    if !all_candidates.contains(&c3) {
+                        all_candidates.push(c3);
+                    }
+                    if nums[0] > 0 {
+                        let c4 = format!("{}", nums[0] - 1);
+                        if !all_candidates.contains(&c4) {
+                            all_candidates.push(c4);
+                        }
+                        let c5 = format!("{}.0.0", nums[0] - 1);
+                        if !all_candidates.contains(&c5) {
+                            all_candidates.push(c5);
+                        }
+                    }
                 }
             }
         }
@@ -603,5 +689,41 @@ develop = true
             res_two_part,
             ConstraintCompatibility::Compatible { .. }
         ));
+
+        // Rejection of looser constraint when one has != exclusion
+        let with_exclusion = [("api", ">=2.0.0"), ("worker", ">=2.0.0, !=2.1.0")];
+        let res_excl = check_pep_constraints_compatibility(&with_exclusion);
+        if let ConstraintCompatibility::Compatible {
+            suggested_resolution,
+        } = res_excl
+        {
+            assert_eq!(suggested_resolution.as_deref(), Some(">=2.0.0, !=2.1.0"));
+        } else {
+            panic!("Expected compatible with exclusion resolution");
+        }
+
+        // Differing lower bounds pick the tighter lower bound
+        let diff_lower = [("api", ">=2.0.0"), ("worker", ">=2.4.0")];
+        let res_lower = check_pep_constraints_compatibility(&diff_lower);
+        if let ConstraintCompatibility::Compatible {
+            suggested_resolution,
+        } = res_lower
+        {
+            assert_eq!(suggested_resolution.as_deref(), Some(">=2.4.0"));
+        } else {
+            panic!("Expected compatible with tighter lower bound");
+        }
+
+        // Upper and lower bound overlap where neither alone is a subset
+        let upper_lower = [("api", ">=1.0.0"), ("worker", "<=3.0.0")];
+        let res_ul = check_pep_constraints_compatibility(&upper_lower);
+        if let ConstraintCompatibility::Compatible {
+            suggested_resolution,
+        } = res_ul
+        {
+            assert_eq!(suggested_resolution, None);
+        } else {
+            panic!("Expected compatible with None suggested_resolution");
+        }
     }
 }

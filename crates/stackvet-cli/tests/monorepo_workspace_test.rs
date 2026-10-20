@@ -950,7 +950,7 @@ fn test_ndep005_member_production_and_dev_dependencies() {
     let fixture = TestDir::new("ndep005-member-scope");
     let root = fixture.path();
 
-    // Root declares typescript in devDependencies
+    // Root declares typescript, react, and lodash in devDependencies
     fs::write(
         root.join("package.json"),
         r#"{
@@ -958,7 +958,9 @@ fn test_ndep005_member_production_and_dev_dependencies() {
   "private": true,
   "workspaces": ["packages/*"],
   "devDependencies": {
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "react": "^18.0.0",
+    "lodash": "^4.17.21"
   }
 }"#,
     )
@@ -966,8 +968,12 @@ fn test_ndep005_member_production_and_dev_dependencies() {
 
     let pkg_prod = root.join("packages").join("pkg-prod");
     let pkg_dev = root.join("packages").join("pkg-dev");
+    let pkg_peer = root.join("packages").join("pkg-peer");
+    let pkg_opt = root.join("packages").join("pkg-opt");
     fs::create_dir_all(pkg_prod.join("src")).unwrap();
     fs::create_dir_all(pkg_dev.join("src")).unwrap();
+    fs::create_dir_all(pkg_peer.join("src")).unwrap();
+    fs::create_dir_all(pkg_opt.join("src")).unwrap();
 
     // pkg-prod lists typescript in dependencies (production override)
     fs::write(
@@ -984,6 +990,42 @@ fn test_ndep005_member_production_and_dev_dependencies() {
     fs::write(
         pkg_prod.join("src").join("index.ts"),
         r#"import ts from "typescript"; console.log(ts);"#,
+    )
+    .unwrap();
+
+    // pkg-peer lists react in peerDependencies
+    fs::write(
+        pkg_peer.join("package.json"),
+        r#"{
+  "name": "pkg-peer",
+  "version": "1.0.0",
+  "peerDependencies": {
+    "react": "^18.0.0"
+  }
+}"#,
+    )
+    .unwrap();
+    fs::write(
+        pkg_peer.join("src").join("index.ts"),
+        r#"import React from "react"; console.log(React);"#,
+    )
+    .unwrap();
+
+    // pkg-opt lists lodash in optionalDependencies
+    fs::write(
+        pkg_opt.join("package.json"),
+        r#"{
+  "name": "pkg-opt",
+  "version": "1.0.0",
+  "optionalDependencies": {
+    "lodash": "^4.17.21"
+  }
+}"#,
+    )
+    .unwrap();
+    fs::write(
+        pkg_opt.join("src").join("index.ts"),
+        r#"import lodash from "lodash"; console.log(lodash);"#,
     )
     .unwrap();
 
@@ -1015,6 +1057,26 @@ fn test_ndep005_member_production_and_dev_dependencies() {
         ts_violation.is_none(),
         "Expected 0 NDEP-005 for member production dependency overriding root devDependency, got: {:?}",
         ts_violation
+    );
+
+    // react in pkg-peer should NOT trigger NDEP-005
+    let react_violation = diags
+        .iter()
+        .find(|d| d.rule_id.0 == "NDEP-005" && d.message.contains("react"));
+    assert!(
+        react_violation.is_none(),
+        "Expected 0 NDEP-005 for member peerDependency overriding root devDependency, got: {:?}",
+        react_violation
+    );
+
+    // lodash in pkg-opt should NOT trigger NDEP-005
+    let lodash_violation = diags
+        .iter()
+        .find(|d| d.rule_id.0 == "NDEP-005" && d.message.contains("lodash"));
+    assert!(
+        lodash_violation.is_none(),
+        "Expected 0 NDEP-005 for member optionalDependency overriding root devDependency, got: {:?}",
+        lodash_violation
     );
 
     // jest in pkg-dev SHOULD trigger NDEP-005 targeting pkg-dev/package.json
