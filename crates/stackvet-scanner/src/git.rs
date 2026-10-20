@@ -341,11 +341,6 @@ impl PrAnalysisResult {
         head_diagnostics: &[Diagnostic],
         base_diagnostics: &[Diagnostic],
     ) -> Self {
-        let changed_paths: HashSet<PathBuf> =
-            changed_files.iter().map(|f| f.path.clone()).collect();
-        let changed_map: HashMap<PathBuf, &ChangedFile> =
-            changed_files.iter().map(|f| (f.path.clone(), f)).collect();
-
         // Fingerprint base diagnostics for comparison
         let base_fingerprints: HashSet<String> = base_diagnostics
             .iter()
@@ -362,21 +357,8 @@ impl PrAnalysisResult {
 
         for d in head_diagnostics {
             let fp = stackvet_core::BaselineData::compute_fingerprint(d);
-            let _in_changed_file = changed_paths.contains(&d.location.file_path);
-
-            let _touches_diff_line = if let Some(cf) = changed_map.get(&d.location.file_path) {
-                if let Some(span) = &d.location.span {
-                    cf.touches_line(span.start_line)
-                } else {
-                    true
-                }
-            } else {
-                false
-            };
 
             // A diagnostic is "new" only if the base revision did not report it.
-            // `in_changed_file` / `touches_diff_line` may be surfaced separately
-            // (e.g. as "existing, touched by this PR") but must not override the baseline.
             if !base_fingerprints.contains(&fp) {
                 new_diagnostics.push(d.clone());
             } else {
