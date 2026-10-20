@@ -112,8 +112,8 @@ impl Analyzer for NodeDependencyAnalyzer {
             }
 
             // Find the first occurrence not covered by its enclosing member's dependencies or self-reference
-            let uncovered_occurrence = occurrences.iter().find(|(file, _, _)| {
-                !node_info.workspace_members.iter().any(|m| {
+            let covered_by_member = |file: &Path| {
+                node_info.workspace_members.iter().any(|m| {
                     file.starts_with(&m.root_dir)
                         && (m.dependencies.contains_key(pkg_name.as_str())
                             || m.dev_dependencies.contains_key(pkg_name.as_str())
@@ -121,7 +121,11 @@ impl Analyzer for NodeDependencyAnalyzer {
                             || m.optional_dependencies.contains_key(pkg_name.as_str())
                             || m.name == *pkg_name)
                 })
-            });
+            };
+
+            let uncovered_occurrence = occurrences
+                .iter()
+                .find(|(file, _, _)| !covered_by_member(file));
 
             if let Some(&(first_file, first_line, ref first_span)) = uncovered_occurrence {
                 let enclosing_member = node_info
@@ -181,9 +185,10 @@ impl Analyzer for NodeDependencyAnalyzer {
                             pkg_name.clone(),
                         ));
 
-                for &(occ_file, occ_line, ref occ_span) in occurrences
-                    .iter()
-                    .filter(|&&(f, l, _)| f != first_file || l != first_line)
+                for &(occ_file, occ_line, ref occ_span) in
+                    occurrences.iter().filter(|&&(f, l, _)| {
+                        (f != first_file || l != first_line) && !covered_by_member(f)
+                    })
                 {
                     let rel_loc = if let Some(s) = occ_span {
                         DiagnosticLocation::new(occ_file.to_path_buf()).with_span(*s)

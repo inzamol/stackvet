@@ -180,6 +180,8 @@ fn test_sarif_v210_spec_compliance() {
         "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
     );
 
+    assert_eq!(sarif["runs"][0]["columnKind"], "unicodeCodePoints");
+
     let driver = &sarif["runs"][0]["tool"]["driver"];
     assert_eq!(driver["name"], "stackvet");
 
@@ -204,6 +206,7 @@ fn test_sarif_v210_spec_compliance() {
     // Location region with startLine, startColumn, endLine, endColumn and snippet
     let loc = &r0["locations"][0]["physicalLocation"];
     assert_eq!(loc["artifactLocation"]["uri"], "src/api/client.py");
+    assert_eq!(loc["artifactLocation"]["uriBaseId"], "%SRCROOT%");
     assert_eq!(loc["region"]["startLine"], 10);
     assert_eq!(loc["region"]["startColumn"], 5);
     assert_eq!(loc["region"]["endLine"], 12);
@@ -305,4 +308,36 @@ fn test_formats_location_agreement() {
     assert_eq!(loc["artifactLocation"]["uri"], "app/routers/users.py");
     assert_eq!(loc["region"]["startLine"], 42);
     assert_eq!(loc["region"]["startColumn"], 5);
+}
+
+#[test]
+fn test_sarif_uri_handling_with_root_and_external_paths() {
+    let scan_root = std::path::PathBuf::from("/project/root");
+    let reporter = Reporter::with_root(&scan_root);
+
+    // 1. Inside root: should be relativized and retain uriBaseId = %SRCROOT%
+    let inside_diag = Diagnostic::builder("DEP-001", Severity::Error, LanguageTarget::Python)
+        .message("Inside root issue")
+        .location(DiagnosticLocation::new("/project/root/src/module.py"))
+        .build();
+
+    // 2. Outside root: should be preserved as file:/// URI and omit uriBaseId
+    let outside_diag = Diagnostic::builder("DEP-002", Severity::Warning, LanguageTarget::Python)
+        .message("Outside root issue")
+        .location(DiagnosticLocation::new("/opt/external/lib.py"))
+        .build();
+
+    let sarif_str = reporter
+        .render_sarif(&[inside_diag, outside_diag])
+        .expect("render sarif");
+    let sarif: serde_json::Value = serde_json::from_str(&sarif_str).expect("parse sarif");
+
+    let results = &sarif["runs"][0]["results"];
+    let loc_inside = &results[0]["locations"][0]["physicalLocation"]["artifactLocation"];
+    assert_eq!(loc_inside["uri"], "src/module.py");
+    assert_eq!(loc_inside["uriBaseId"], "%SRCROOT%");
+
+    let loc_outside = &results[1]["locations"][0]["physicalLocation"]["artifactLocation"];
+    assert_eq!(loc_outside["uri"], "file:///opt/external/lib.py");
+    assert!(loc_outside.get("uriBaseId").is_none());
 }

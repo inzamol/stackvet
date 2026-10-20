@@ -104,9 +104,11 @@ impl SuppressionEntry {
 
         // Line match check
         if let Some(target_line) = self.line {
-            let matches_line = d.location.span.as_ref().is_some_and(|s| {
-                target_line >= s.start_line && target_line <= s.end_line
-            });
+            let matches_line = d
+                .location
+                .span
+                .as_ref()
+                .is_some_and(|s| target_line >= s.start_line && target_line <= s.end_line);
             if !matches_line {
                 return false;
             }
@@ -472,9 +474,10 @@ pub fn apply_suppressions(
 
             let matches_location = inline.is_file_level
                 || inline.line == d_line
-                || d.location.span.as_ref().is_some_and(|s| {
-                    inline.line >= s.start_line && inline.line <= s.end_line
-                });
+                || d.location
+                    .span
+                    .as_ref()
+                    .is_some_and(|s| inline.line >= s.start_line && inline.line <= s.end_line);
             if matches_location {
                 suppressed.push(SuppressedDiagnostic {
                     diagnostic: d.clone(),
