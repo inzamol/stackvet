@@ -1,0 +1,8 @@
+{
+  "name": "admin-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "@myorg/shared-ui": "workspace:*",
+    "lodash": "^4.17.0"
+  }
+}

@@ -4,11 +4,12 @@ use stackvet_core::{
 };
 use stackvet_node::builtins::is_node_builtin;
 use stackvet_node::{
-    extract_package_name, is_tsconfig_alias, npm_version_satisfies, parse_node_imports,
-    resolve_aliased_import,
+    check_npm_constraints_compatibility, extract_package_name, is_tsconfig_alias,
+    npm_version_satisfies, parse_node_imports, resolve_aliased_import, ConstraintCompatibility,
 };
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
+use std::path::Path;
 
 pub struct NodeDependencyAnalyzer;
 
@@ -96,11 +97,41 @@ impl Analyzer for NodeDependencyAnalyzer {
 
         // NDEP-001: Missing Node Package
         for (pkg_name, occurrences) in &imported_packages {
-            if !all_deps.contains(pkg_name.as_str())
-                && !all_dev_deps.contains(pkg_name.as_str())
-                && !node_info.workspace_packages.contains_key(pkg_name.as_str())
-            {
-                let (first_file, first_line) = occurrences[0];
+            let (first_file, first_line) = occurrences[0];
+
+            // A package is declared if in root dependencies/devDependencies, or in the enclosing workspace member
+            let is_root =
+                all_deps.contains(pkg_name.as_str()) || all_dev_deps.contains(pkg_name.as_str());
+
+            // Or declared in the enclosing workspace member (or self-referential import within member)
+            let is_member_dep = node_info.workspace_members.iter().any(|m| {
+                first_file.starts_with(&m.root_dir)
+                    && (m.dependencies.contains_key(pkg_name.as_str())
+                        || m.dev_dependencies.contains_key(pkg_name.as_str())
+                        || m.peer_dependencies.contains_key(pkg_name.as_str())
+                        || m.optional_dependencies.contains_key(pkg_name.as_str())
+                        || m.name == *pkg_name)
+            });
+
+            if !is_root && !is_member_dep {
+                // Check if target package is an internal workspace package that was imported without declaration
+                let is_internal_pkg = node_info
+                    .workspace_members
+                    .iter()
+                    .any(|m| m.name == *pkg_name);
+
+                let remediation = if is_internal_pkg {
+                    format!(
+                        "Add '{}' as a workspace dependency in package.json (e.g. \"{}\": \"workspace:*\").",
+                        pkg_name, pkg_name
+                    )
+                } else {
+                    format!(
+                        "Run '{} add {}' or add to package.json dependencies.",
+                        node_info.package_manager, pkg_name
+                    )
+                };
+
                 diagnostics.push(
                     Diagnostic::builder("NDEP-001", Severity::Error, LanguageTarget::Node)
                         .message(format!(
@@ -115,10 +146,7 @@ impl Analyzer for NodeDependencyAnalyzer {
                             "Importing undeclared package '{}' will fail at runtime or during production build.",
                             pkg_name
                         ))
-                        .remediation(format!(
-                            "Run '{} add {}' or add to package.json dependencies.",
-                            node_info.package_manager, pkg_name
-                        ))
+                        .remediation(remediation)
                         .fix(FixAction::new(
                             format!("Add {} to package.json", pkg_name),
                             node_info.package_json_path.clone(),
@@ -230,42 +258,69 @@ impl Analyzer for NodeDependencyAnalyzer {
 
                 if is_workspace_dep {
                     // Check workspace dependency resolution
-                    if let Some(ws_ver) = node_info.workspace_packages.get(dep_name) {
-                        if !npm_version_satisfies(constraint, ws_ver) {
+                    if constraint.starts_with("workspace:") {
+                        if let Some(ws_ver) = node_info.workspace_packages.get(dep_name) {
+                            if !npm_version_satisfies(constraint, ws_ver) {
+                                diagnostics.push(
+                                    Diagnostic::builder("NDEP-004", Severity::Warning, LanguageTarget::Node)
+                                        .message(format!(
+                                            "Workspace dependency '{}' constraint '{}' in package.json does not match local package version '{}'",
+                                            dep_name, constraint, ws_ver
+                                        ))
+                                        .file(&node_info.package_json_path)
+                                        .explanation(
+                                            "The declared workspace dependency constraint conflicts with the actual version of the local package in the workspace.",
+                                        )
+                                        .remediation(format!(
+                                            "Update package.json constraint to match workspace package version '{}'.",
+                                            ws_ver
+                                        ))
+                                        .build(),
+                                );
+                            }
+                        } else if !node_info.locked_packages.contains_key(dep_name) {
                             diagnostics.push(
                                 Diagnostic::builder("NDEP-004", Severity::Warning, LanguageTarget::Node)
                                     .message(format!(
-                                        "Workspace dependency '{}' constraint '{}' in package.json does not match local package version '{}'",
-                                        dep_name, constraint, ws_ver
+                                        "Workspace dependency '{}' declared in package.json cannot be resolved in workspace or lockfile",
+                                        dep_name
                                     ))
                                     .file(&node_info.package_json_path)
                                     .explanation(
-                                        "The declared workspace dependency constraint conflicts with the actual version of the local package in the workspace.",
+                                        "Workspace dependency references a local package that does not exist or is not linked in the lockfile.",
                                     )
                                     .remediation(format!(
-                                        "Update package.json constraint to match workspace package version '{}'.",
-                                        ws_ver
+                                        "Verify package '{}' exists in workspace packages or run '{} install'.",
+                                        dep_name, node_info.package_manager
                                     ))
                                     .build(),
                             );
                         }
-                    } else if !node_info.locked_packages.contains_key(dep_name) {
-                        diagnostics.push(
-                            Diagnostic::builder("NDEP-004", Severity::Warning, LanguageTarget::Node)
-                                .message(format!(
-                                    "Workspace dependency '{}' declared in package.json cannot be resolved in workspace or lockfile",
-                                    dep_name
-                                ))
-                                .file(&node_info.package_json_path)
-                                .explanation(
-                                    "Workspace dependency references a local package that does not exist or is not linked in the lockfile.",
-                                )
-                                .remediation(format!(
-                                    "Verify package '{}' exists in workspace packages or run '{} install'.",
-                                    dep_name, node_info.package_manager
-                                ))
-                                .build(),
-                        );
+                    } else if constraint.starts_with("file:") || constraint.starts_with("link:") {
+                        let raw_path = constraint
+                            .strip_prefix("file:")
+                            .or_else(|| constraint.strip_prefix("link:"))
+                            .unwrap_or(constraint)
+                            .trim();
+                        let target_path = ctx.root.join(raw_path);
+                        if !target_path.exists() {
+                            diagnostics.push(
+                                Diagnostic::builder("NDEP-004", Severity::Warning, LanguageTarget::Node)
+                                    .message(format!(
+                                        "Local dependency path '{}' declared in package.json cannot be resolved on disk",
+                                        raw_path
+                                    ))
+                                    .file(&node_info.package_json_path)
+                                    .explanation(
+                                        "Local file or link dependency references a path that does not exist on disk.",
+                                    )
+                                    .remediation(format!(
+                                        "Verify the relative path '{}' points to an existing directory or package.",
+                                        raw_path
+                                    ))
+                                    .build(),
+                            );
+                        }
                     }
                 } else {
                     // Regular package: check stale entries and constraint drift
@@ -380,6 +435,214 @@ impl Analyzer for NodeDependencyAnalyzer {
                     .remediation(format!("Run '{} install' to generate a lockfile.", node_info.package_manager))
                     .build(),
             );
+        }
+
+        // Validate workspace member dependencies and broken references
+        for member in &node_info.workspace_members {
+            let mut member_deps = Vec::new();
+            for (k, v) in &member.dependencies {
+                member_deps.push((k, v));
+            }
+            for (k, v) in &member.dev_dependencies {
+                member_deps.push((k, v));
+            }
+            for (k, v) in &member.peer_dependencies {
+                member_deps.push((k, v));
+            }
+            member_deps.sort_by(|a, b| a.0.cmp(b.0));
+
+            for (dep_name, constraint) in member_deps {
+                if constraint.starts_with("workspace:") {
+                    if let Some(ws_ver) = node_info.workspace_packages.get(dep_name) {
+                        if !npm_version_satisfies(constraint, ws_ver) {
+                            diagnostics.push(
+                                Diagnostic::builder("NDEP-004", Severity::Warning, LanguageTarget::Node)
+                                    .message(format!(
+                                        "Workspace dependency '{}' constraint '{}' in {} does not match local package version '{}'",
+                                        dep_name,
+                                        constraint,
+                                        member.manifest_path.file_name().unwrap_or_default().to_string_lossy(),
+                                        ws_ver
+                                    ))
+                                    .file(&member.manifest_path)
+                                    .explanation(
+                                        "The declared workspace dependency constraint conflicts with the actual version of the local package in the workspace.",
+                                    )
+                                    .remediation(format!(
+                                        "Update package.json constraint to match workspace package version '{}'.",
+                                        ws_ver
+                                    ))
+                                    .build(),
+                            );
+                        }
+                    } else if !node_info.locked_packages.contains_key(dep_name) {
+                        diagnostics.push(
+                            Diagnostic::builder("NDEP-004", Severity::Warning, LanguageTarget::Node)
+                                .message(format!(
+                                    "Workspace dependency '{}' declared in {} cannot be resolved in workspace or lockfile",
+                                    dep_name,
+                                    member.manifest_path.file_name().unwrap_or_default().to_string_lossy()
+                                ))
+                                .file(&member.manifest_path)
+                                .explanation(
+                                    "Workspace dependency references a local package that does not exist in the workspace.",
+                                )
+                                .remediation(format!(
+                                    "Verify package '{}' exists in workspace packages or run '{} install'.",
+                                    dep_name, node_info.package_manager
+                                ))
+                                .build(),
+                        );
+                    }
+                } else if constraint.starts_with("file:") || constraint.starts_with("link:") {
+                    let raw_path = constraint
+                        .strip_prefix("file:")
+                        .or_else(|| constraint.strip_prefix("link:"))
+                        .unwrap_or(constraint)
+                        .trim();
+                    let target_path = member.root_dir.join(raw_path);
+                    if !target_path.exists() {
+                        diagnostics.push(
+                            Diagnostic::builder("NDEP-004", Severity::Warning, LanguageTarget::Node)
+                                .message(format!(
+                                    "Local dependency '{}' path '{}' declared in {} cannot be resolved on disk",
+                                    dep_name,
+                                    raw_path,
+                                    member.manifest_path.file_name().unwrap_or_default().to_string_lossy()
+                                ))
+                                .file(&member.manifest_path)
+                                .explanation(
+                                    "Local file or link dependency references a path that does not exist on disk.",
+                                )
+                                .remediation(format!(
+                                    "Verify the relative path '{}' points to an existing directory or package.",
+                                    raw_path
+                                ))
+                                .build(),
+                        );
+                    }
+                }
+            }
+        }
+
+        // Issue #15: Cross-Workspace Dependency Version Conflicts (NDEP-006)
+        if !node_info.workspace_members.is_empty() {
+            let mut cross_deps: BTreeMap<String, Vec<(&str, &Path, &str, bool)>> = BTreeMap::new();
+
+            if !node_info.dependencies.is_empty() || !node_info.dev_dependencies.is_empty() {
+                let root_name = "root";
+                for (dep, constraint) in &node_info.dependencies {
+                    if !node_info.workspace_packages.contains_key(dep) {
+                        cross_deps.entry(dep.clone()).or_default().push((
+                            root_name,
+                            &node_info.package_json_path,
+                            constraint,
+                            false,
+                        ));
+                    }
+                }
+                for (dep, constraint) in &node_info.dev_dependencies {
+                    if !node_info.workspace_packages.contains_key(dep) {
+                        cross_deps.entry(dep.clone()).or_default().push((
+                            root_name,
+                            &node_info.package_json_path,
+                            constraint,
+                            false,
+                        ));
+                    }
+                }
+            }
+
+            for member in &node_info.workspace_members {
+                for (dep, constraint) in &member.dependencies {
+                    if !node_info.workspace_packages.contains_key(dep) {
+                        cross_deps.entry(dep.clone()).or_default().push((
+                            &member.name,
+                            &member.manifest_path,
+                            constraint,
+                            false,
+                        ));
+                    }
+                }
+                for (dep, constraint) in &member.dev_dependencies {
+                    if !node_info.workspace_packages.contains_key(dep) {
+                        cross_deps.entry(dep.clone()).or_default().push((
+                            &member.name,
+                            &member.manifest_path,
+                            constraint,
+                            false,
+                        ));
+                    }
+                }
+                for (dep, constraint) in &member.optional_dependencies {
+                    if !node_info.workspace_packages.contains_key(dep) {
+                        cross_deps.entry(dep.clone()).or_default().push((
+                            &member.name,
+                            &member.manifest_path,
+                            constraint,
+                            true,
+                        ));
+                    }
+                }
+            }
+
+            for (pkg_name, decls) in cross_deps {
+                let distinct_members: HashSet<&str> = decls.iter().map(|(m, _, _, _)| *m).collect();
+                if distinct_members.len() < 2 {
+                    continue;
+                }
+
+                let member_pairs: Vec<(&str, &str)> =
+                    decls.iter().map(|(m, _, c, _)| (*m, *c)).collect();
+                let compatibility = check_npm_constraints_compatibility(&member_pairs);
+
+                if let ConstraintCompatibility::Incompatible { reason, .. } = compatibility {
+                    let first_manifest = decls[0].1;
+                    let member_summary = decls
+                        .iter()
+                        .map(|(m, _, c, opt)| {
+                            if *opt {
+                                format!("'{}' declares '{}' (optional)", m, c)
+                            } else {
+                                format!("'{}' declares '{}'", m, c)
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+
+                    let breakdown_lines = decls
+                        .iter()
+                        .map(|(m, path, c, opt)| {
+                            let rel = path
+                                .strip_prefix(&ctx.root)
+                                .unwrap_or(path)
+                                .to_string_lossy()
+                                .replace('\\', "/");
+                            let opt_suffix = if *opt { " (optional)" } else { "" };
+                            format!("- {} ({}): {}{}", m, rel, c, opt_suffix)
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n");
+
+                    diagnostics.push(
+                        Diagnostic::builder("NDEP-006", Severity::Warning, LanguageTarget::Node)
+                            .message(format!(
+                                "Conflicting dependency constraints for '{}' across workspace members: {}",
+                                pkg_name, member_summary
+                            ))
+                            .file(first_manifest)
+                            .explanation(format!(
+                                "Workspace members declare mutually incompatible version constraints for '{}'. {}\nAffected workspace members:\n{}",
+                                pkg_name, reason, breakdown_lines
+                            ))
+                            .remediation(format!(
+                                "Align '{}' version constraints across all workspace members or configure overrides.",
+                                pkg_name
+                            ))
+                            .build(),
+                    );
+                }
+            }
         }
 
         Ok(diagnostics)

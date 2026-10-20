@@ -158,6 +158,12 @@ impl ProjectScanner {
                     || file_name == "package-lock.json"
                     || file_name == "pnpm-lock.yaml"
                     || file_name == "yarn.lock"
+                    || file_name == "bun.lock"
+                    || file_name == "bun.lockb"
+                    || file_name == "pnpm-workspace.yaml"
+                    || file_name == "lerna.json"
+                    || file_name == "bunfig.toml"
+                    || file_name == "Cargo.toml"
                 {
                     result.manifest_files.push(path.clone());
                 }
@@ -192,6 +198,7 @@ impl ProjectScanner {
         ctx.source_files = scan.source_files;
         ctx.dockerfiles = scan.dockerfiles;
         ctx.ci_workflows = scan.ci_workflows;
+        ctx.manifest_files = scan.manifest_files;
         Ok(ctx)
     }
 }

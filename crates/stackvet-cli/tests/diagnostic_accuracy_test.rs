@@ -493,3 +493,38 @@ fn test_node_deps_negative_zero_false_positives() {
         ndep_diags
     );
 }
+
+#[test]
+fn test_monorepo_positive_findings_and_severity() {
+    let diags = analyze_fixture("positive/monorepo_violations");
+    let rule_ids: HashSet<String> = diags.iter().map(|d| d.rule_id.0.clone()).collect();
+
+    assert!(
+        rule_ids.contains("NDEP-006"),
+        "Expected NDEP-006 (conflicting dependency versions across workspace members)"
+    );
+    assert!(
+        rule_ids.contains("NDEP-004"),
+        "Expected NDEP-004 (unresolved workspace dependency)"
+    );
+
+    let ndep006 = diags.iter().find(|d| d.rule_id.0 == "NDEP-006").unwrap();
+    assert_eq!(ndep006.severity, Severity::Warning);
+
+    let ndep004 = diags.iter().find(|d| d.rule_id.0 == "NDEP-004").unwrap();
+    assert_eq!(ndep004.severity, Severity::Warning);
+}
+
+#[test]
+fn test_monorepo_negative_zero_false_positives() {
+    let diags = analyze_fixture("negative/clean_monorepo");
+    let ndep_diags: Vec<_> = diags
+        .iter()
+        .filter(|d| d.rule_id.0.starts_with("NDEP"))
+        .collect();
+    assert!(
+        ndep_diags.is_empty(),
+        "Expected 0 NDEP false-positive findings in clean monorepo, found: {:?}",
+        ndep_diags
+    );
+}

@@ -1,8 +1,11 @@
 use crate::normalize_package_name;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
+use stackvet_core::WorkspaceMemberInfo;
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LockfileData {
@@ -221,6 +224,323 @@ pub fn pep_version_satisfies(req_str: &str, locked_version: &str) -> bool {
     true
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConstraintCompatibility {
+    Compatible {
+        suggested_resolution: Option<String>,
+    },
+    Incompatible {
+        conflicting_members: Vec<(String, String)>,
+        reason: String,
+    },
+}
+
+/// Checks whether declared PEP 440 version constraints across workspace members are compatible.
+pub fn check_pep_constraints_compatibility(
+    member_declarations: &[(&str, &str)],
+) -> ConstraintCompatibility {
+    if member_declarations.len() <= 1 {
+        let res = member_declarations.first().map(|(_, c)| c.to_string());
+        return ConstraintCompatibility::Compatible {
+            suggested_resolution: res,
+        };
+    }
+
+    let mut non_wildcards: Vec<(&str, String)> = Vec::new();
+    for &(member, constraint) in member_declarations {
+        let clean = constraint.trim();
+        if clean.is_empty() || clean == "*" {
+            continue;
+        }
+        non_wildcards.push((member, clean.to_string()));
+    }
+
+    if non_wildcards.is_empty() {
+        return ConstraintCompatibility::Compatible {
+            suggested_resolution: Some("*".to_string()),
+        };
+    }
+
+    let first_c = &non_wildcards[0].1;
+    if non_wildcards.iter().all(|(_, c)| c == first_c) {
+        return ConstraintCompatibility::Compatible {
+            suggested_resolution: Some(first_c.clone()),
+        };
+    }
+
+    // Extract candidate versions
+    let mut all_candidates: Vec<String> = Vec::new();
+    for (_, c) in &non_wildcards {
+        for part in c.split(',') {
+            let clean_part = part
+                .trim_start_matches(|ch: char| !ch.is_ascii_digit())
+                .trim();
+            if !clean_part.is_empty() && !all_candidates.contains(&clean_part.to_string()) {
+                all_candidates.push(clean_part.to_string());
+                let nums: Vec<u64> = clean_part
+                    .split('.')
+                    .filter_map(|s| s.parse().ok())
+                    .collect();
+                if nums.len() >= 3 {
+                    all_candidates.push(format!("{}.{}.{}", nums[0], nums[1], nums[2] + 1));
+                    all_candidates.push(format!("{}.{}.0", nums[0], nums[1] + 1));
+                } else if nums.len() == 2 {
+                    all_candidates.push(format!("{}.{}", nums[0], nums[1] + 1));
+                }
+            }
+        }
+    }
+
+    let mut satisfying_version: Option<String> = None;
+    for v in &all_candidates {
+        if non_wildcards
+            .iter()
+            .all(|(_, c)| pep_version_satisfies(c, v))
+        {
+            satisfying_version = Some(v.clone());
+            break;
+        }
+    }
+
+    if let Some(v) = satisfying_version {
+        let best_constraint = non_wildcards
+            .iter()
+            .map(|(_, c)| c.clone())
+            .find(|c| {
+                let nums: Vec<&str> = c.split(',').collect();
+                let base = nums
+                    .first()
+                    .map(|s| s.trim_start_matches(|ch: char| !ch.is_ascii_digit()).trim())
+                    .unwrap_or("");
+                !base.is_empty()
+                    && non_wildcards
+                        .iter()
+                        .all(|(_, other)| pep_version_satisfies(other, base))
+            })
+            .unwrap_or_else(|| format!(">={}", v));
+
+        ConstraintCompatibility::Compatible {
+            suggested_resolution: Some(best_constraint),
+        }
+    } else {
+        let conflicting_members = member_declarations
+            .iter()
+            .map(|&(m, c)| (m.to_string(), c.to_string()))
+            .collect();
+        let summary = member_declarations
+            .iter()
+            .map(|(m, c)| format!("'{}' declares '{}'", m, c))
+            .collect::<Vec<_>>()
+            .join(", ");
+        ConstraintCompatibility::Incompatible {
+            conflicting_members,
+            reason: format!(
+                "No compatible version satisfies all declared constraints ({})",
+                summary
+            ),
+        }
+    }
+}
+
+/// Discovers Python workspace members defined in pyproject.toml ([tool.uv.workspace] or poetry) or subdirectories.
+pub fn discover_python_workspace_members(
+    root: &Path,
+    pyproject: Option<&toml::Value>,
+) -> Vec<WorkspaceMemberInfo> {
+    let mut members = Vec::new();
+    let mut discovered_manifests = std::collections::HashSet::new();
+
+    let mut globs: Vec<String> = Vec::new();
+
+    if let Some(val) = pyproject {
+        // 1. [tool.uv.workspace] members = [...]
+        if let Some(uv_members) = val
+            .get("tool")
+            .and_then(|t| t.get("uv"))
+            .and_then(|u| u.get("workspace"))
+            .and_then(|w| w.get("members"))
+            .and_then(|m| m.as_array())
+        {
+            for m in uv_members {
+                if let Some(s) = m.as_str() {
+                    globs.push(s.to_string());
+                }
+            }
+        }
+
+        // 2. [tool.poetry.dependencies] local paths
+        if let Some(poetry_deps) = val
+            .get("tool")
+            .and_then(|t| t.get("poetry"))
+            .and_then(|p| p.get("dependencies"))
+            .and_then(|d| d.as_table())
+        {
+            for (_, dep_val) in poetry_deps {
+                if let Some(path_str) = dep_val.get("path").and_then(|p| p.as_str()) {
+                    globs.push(path_str.to_string());
+                }
+            }
+        }
+    }
+
+    // Fallback conventions if no explicit workspace config
+    if globs.is_empty() {
+        let conventions = ["packages/*", "services/*", "apps/*", "libs/*", "modules/*"];
+        for conv in conventions {
+            let parent = conv.trim_end_matches("/*");
+            if root.join(parent).is_dir() {
+                globs.push(conv.to_string());
+            }
+        }
+    }
+
+    let root_manifest_path = root.join("pyproject.toml");
+
+    let mut add_member_from_dir = |dir: &Path| {
+        let manifest_path = dir.join("pyproject.toml");
+        if manifest_path.is_file() && manifest_path != root_manifest_path {
+            let canonical = manifest_path
+                .canonicalize()
+                .unwrap_or_else(|_| manifest_path.clone());
+            if !discovered_manifests.insert(canonical) {
+                return;
+            }
+            if let Ok(content) = fs::read_to_string(&manifest_path) {
+                if let Ok(val) = toml::from_str::<toml::Value>(&content) {
+                    let fallback_name = dir
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+                    let name = val
+                        .get("project")
+                        .and_then(|p| p.get("name"))
+                        .and_then(|n| n.as_str())
+                        .or_else(|| {
+                            val.get("tool")
+                                .and_then(|t| t.get("poetry"))
+                                .and_then(|p| p.get("name"))
+                                .and_then(|n| n.as_str())
+                        })
+                        .unwrap_or(&fallback_name);
+                    let norm_name = normalize_package_name(name);
+
+                    let version = val
+                        .get("project")
+                        .and_then(|p| p.get("version"))
+                        .and_then(|v| v.as_str())
+                        .or_else(|| {
+                            val.get("tool")
+                                .and_then(|t| t.get("poetry"))
+                                .and_then(|p| p.get("version"))
+                                .and_then(|v| v.as_str())
+                        })
+                        .map(|s| s.to_string());
+
+                    let mut dependencies = HashMap::new();
+                    if let Some(deps) = val
+                        .get("project")
+                        .and_then(|p| p.get("dependencies"))
+                        .and_then(|d| d.as_array())
+                    {
+                        for dep in deps {
+                            if let Some(s) = dep.as_str() {
+                                if let Some((n, v)) = crate::parse_requirement_spec(s) {
+                                    dependencies.insert(n, v);
+                                }
+                            }
+                        }
+                    } else if let Some(deps) = val
+                        .get("tool")
+                        .and_then(|t| t.get("poetry"))
+                        .and_then(|p| p.get("dependencies"))
+                        .and_then(|d| d.as_table())
+                    {
+                        for (k, v) in deps {
+                            if k != "python" {
+                                let ver_str = match v {
+                                    toml::Value::String(s) => s.clone(),
+                                    toml::Value::Table(t) => t
+                                        .get("version")
+                                        .and_then(|ver| ver.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    _ => String::new(),
+                                };
+                                dependencies.insert(normalize_package_name(k), ver_str);
+                            }
+                        }
+                    }
+
+                    let mut dev_dependencies = HashMap::new();
+                    if let Some(opt) = val
+                        .get("project")
+                        .and_then(|p| p.get("optional-dependencies"))
+                        .and_then(|o| o.as_table())
+                    {
+                        for (_, arr) in opt {
+                            if let Some(arr) = arr.as_array() {
+                                for dep in arr {
+                                    if let Some(s) = dep.as_str() {
+                                        if let Some((n, v)) = crate::parse_requirement_spec(s) {
+                                            dev_dependencies.insert(n, v);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    members.push(WorkspaceMemberInfo {
+                        name: norm_name,
+                        version,
+                        manifest_path,
+                        root_dir: dir.to_path_buf(),
+                        dependencies,
+                        dev_dependencies,
+                        peer_dependencies: HashMap::new(),
+                        optional_dependencies: HashMap::new(),
+                    });
+                }
+            }
+        }
+    };
+
+    for pattern in globs {
+        let pattern_clean = pattern.trim_end_matches('/').replace('\\', "/");
+        if pattern_clean.ends_with("/*") {
+            let parent_dir = &pattern_clean[..pattern_clean.len() - 2];
+            let target_parent = root.join(parent_dir);
+            if let Ok(entries) = fs::read_dir(target_parent) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        let name = path.file_name().unwrap_or_default().to_string_lossy();
+                        if !matches!(
+                            name.as_ref(),
+                            ".venv" | "venv" | "__pycache__" | ".git" | "target" | "dist" | "build"
+                        ) {
+                            add_member_from_dir(&path);
+                        }
+                    }
+                }
+            }
+        } else {
+            let target_dir = root.join(&pattern_clean);
+            if target_dir.is_dir() {
+                add_member_from_dir(&target_dir);
+            }
+        }
+    }
+
+    members.sort_by(|a, b| {
+        a.name
+            .cmp(&b.name)
+            .then_with(|| a.manifest_path.cmp(&b.manifest_path))
+    });
+    members
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -306,5 +626,26 @@ develop = true
 
         assert!(pep_version_satisfies("^1.2.0", "1.3.0"));
         assert!(!pep_version_satisfies("^1.2.0", "2.0.0"));
+    }
+
+    #[test]
+    fn test_check_pep_constraints_compatibility() {
+        // Compatible ranges
+        let decls = [("api", ">=2.0.0,<3.0.0"), ("worker", ">=2.5.0,<3.0.0")];
+        let res = check_pep_constraints_compatibility(&decls);
+        assert!(matches!(res, ConstraintCompatibility::Compatible { .. }));
+
+        // Incompatible ranges
+        let conflict = [("api", ">=2.0.0,<3.0.0"), ("worker", ">=1.10.0,<2.0.0")];
+        let res_conflict = check_pep_constraints_compatibility(&conflict);
+        assert!(matches!(
+            res_conflict,
+            ConstraintCompatibility::Incompatible { .. }
+        ));
+
+        // Compatible with wildcard
+        let with_wc = [("api", "*"), ("worker", ">=1.0.0")];
+        let res_wc = check_pep_constraints_compatibility(&with_wc);
+        assert!(matches!(res_wc, ConstraintCompatibility::Compatible { .. }));
     }
 }
