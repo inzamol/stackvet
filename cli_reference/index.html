@@ -1439,40 +1439,59 @@
 <h1 id="overwrite-existing-toolstackvet-block">Overwrite existing [tool.stackvet] block</h1>
 <p>stackvet init --force
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>&gt; [!NOTE]
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>&gt; When generating CI workflows (`stackvet init --ci github`), QV automatically detects package managers. For `uv` projects (`uv.lock` present), it configures `uvx --from stackvet stackvet scan --ci --github-annotations`, allowing `stackvet` to run in an ephemeral tool environment without requiring `stackvet` to be added as a project dependency. For standard pip projects, it installs `stackvet` and runs `stackvet scan --ci --github-annotations`.
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>&gt; When generating CI workflows (`stackvet init --ci github`), StackVet automatically detects package managers. For `uv` projects (`uv.lock` present), it configures `uvx --from stackvet stackvet scan --ci --github-annotations`, allowing `stackvet` to run in an ephemeral tool environment without requiring `stackvet` to be added as a project dependency. For standard pip projects, it installs `stackvet` and runs `stackvet scan --ci --github-annotations`.
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>---
 <a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
 <a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>## 3. `stackvet doctor`
 <a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>One command that provides a complete, high-level project health scorecard across all 6 core pillars (Dependencies, Security, Packaging, Architecture, Environment, Framework) with progress bars and top priority problems.
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>One command that provides a complete, high-level project health scorecard across all 6 core pillars (Dependencies, Security, Packaging, Architecture, Environment, Framework) with health score, letter grade, root cause clusters, and detailed diagnostic breakdown.
 <a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>
 <a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>```bash
 <a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>stackvet doctor [PATH] [OPTIONS]
 </code></pre></div></p>
 <p>Example:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>QV Project Health
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>────────────────────────────────────────
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>Dependencies      92/100   █████████░
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>Security           84/100   ████████░░
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>Packaging          96/100   ██████████
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>Architecture       78/100   ████████░░
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>Environment        91/100   █████████░
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>Framework          88/100   █████████░
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>=======================================================================
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>                StackVet Universal Project Health Report               
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>=======================================================================
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>  Health Score: 87 / 100
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>  Overall Grade: B (Satisfactory)
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>  Calculation:   Base 100 - 13 deductions (3 unique findings, 0 duplicates ignored)
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>  Critical: 0  |  Errors: 1  |  Warnings: 2
 <a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>Health Score: 87/100
-<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>
-<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>3 high-priority issues
-<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>7 warnings
-<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>42 checks passed
-<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>
-<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>Top problems:
-<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>  1. SQL-014  N+1 query detected
-<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>  2. DEP-002  Missing dependency: httpx
-<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>  3. ENV-003  Python version mismatch
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>--- Health Score Deduction Breakdown ---
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>  • [ERROR] SQL-014: -8 pts (1 finding) - N+1 query detected in user fetch
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>  • [WARN] DEP-002: -2 pts (1 finding) - Missing dependency: httpx
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>  • [WARN] ENV-003: -2 pts (1 finding) - Python version mismatch
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>--- Root Cause Clusters (3) ---
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>1. [ERROR] Rule Violation: SQL-014
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>   Summary: Query loop executing separate queries for related entities without joined load or subquery eager load.
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>   Remediation: Use selectinload() or joinedload() for relationship loading.
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>   Symptoms Count: 1
 <a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>
-<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>Run `stackvet explain SQL-014` for details.
+<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>2. [WARN] Rule Violation: DEP-002
+<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>   Summary: Imported package is used in source code but not declared in pyproject.toml or requirements.txt.
+<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a>   Remediation: Add the missing dependency to pyproject.toml or package.json.
+<a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a>   Symptoms Count: 1
+<a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a>
+<a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a>3. [WARN] Rule Violation: ENV-003
+<a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a>   Summary: Detected Python runtime discrepancy between pyproject.toml and Dockerfile.
+<a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a>   Remediation: Align the python version specification across all configuration files.
+<a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a>   Symptoms Count: 1
+<a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a>
+<a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a>--- Diagnostic Details ---
+<a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a>╭─────────┬──────────┬────────┬─────────────────────────┬──────────────────────────────────╮
+<a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a>│ Rule    ┆ Severity ┆ Target ┆ File Location           ┆ Message                          │
+<a id="__codelineno-4-35" name="__codelineno-4-35" href="#__codelineno-4-35"></a>╞═════════╪══════════╪════════╪═════════════════════════╪══════════════════════════════════╡
+<a id="__codelineno-4-36" name="__codelineno-4-36" href="#__codelineno-4-36"></a>│ SQL-014 ┆ ERROR    ┆ Code   ┆ app/routers/users.py:42 ┆ N+1 query detected in user fetch │
+<a id="__codelineno-4-37" name="__codelineno-4-37" href="#__codelineno-4-37"></a>├╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
+<a id="__codelineno-4-38" name="__codelineno-4-38" href="#__codelineno-4-38"></a>│ DEP-002 ┆ WARN     ┆ Deps   ┆ app/services/client.py  ┆ Missing dependency: httpx        │
+<a id="__codelineno-4-39" name="__codelineno-4-39" href="#__codelineno-4-39"></a>├╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
+<a id="__codelineno-4-40" name="__codelineno-4-40" href="#__codelineno-4-40"></a>│ ENV-003 ┆ WARN     ┆ Env    ┆ Dockerfile:1            ┆ Python version mismatch          │
+<a id="__codelineno-4-41" name="__codelineno-4-41" href="#__codelineno-4-41"></a>╰─────────┴──────────┴────────┴─────────────────────────┴──────────────────────────────────╯
 </code></pre></div>
 <h3 id="31-arguments">3.1 Arguments</h3>
 <table>
@@ -1993,7 +2012,7 @@
 <div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>stackvet<span class="w"> </span>pr<span class="w"> </span><span class="o">[</span>PATH<span class="o">]</span><span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </code></pre></div>
 <p>Example Output:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>QV Pull Request Analysis
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>StackVet Pull Request Analysis
 <a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a>
 <a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a>Changed files: 8
 <a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a>Affected checks: 17

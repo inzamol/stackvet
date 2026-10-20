@@ -1409,26 +1409,31 @@
 </div>
 </div>
 <h3 id="21-live-diagnostic-output">2.1 Live Diagnostic Output</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>🔍 stackvet
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>Project: payment-service
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>Python:  3.12.7
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>Package Manager: uv
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>🔴 1 Errors   🟡 1 Warnings   🟢 48 Checks Passed
-<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>
-<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>┌────────────────── 🔴 DEP-001 Dependency constraint conflict ─────────────────┐
-<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>│ celery 5.4.0 requires kombu&lt;5.4.0,&gt;=5.3.0, but installed is kombu 5.5.2.     │
-<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>│                                                                              │
-<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>│ Evidence:                                                                    │
-<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>│   • celery declared requirement: kombu&lt;5.4.0,&gt;=5.3.0                         │
-<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>│   • Installed kombu version: 5.5.2 in active environment                     │
-<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>│                                                                              │
-<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>│ Suggested fix:                                                               │
-<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a>│   Upgrade celery or pin kombu to &lt;5.4.0,&gt;=5.3.0.                             │
-<a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>│   $ uv add 'kombu&lt;5.4.0,&gt;=5.3.0'                                             │
-<a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a>└──────────────────────────────────────────────────────────────────────────────┘
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>=======================================================================
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>                StackVet Universal Project Health Report               
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>=======================================================================
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>  Health Score: 92 / 100
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>  Overall Grade: A (Healthy)
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>  Calculation:   Base 100 - 8 deductions (1 unique finding, 0 duplicates ignored)
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>  Critical: 0  |  Errors: 1  |  Warnings: 0
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>--- Health Score Deduction Breakdown ---
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>  • [ERROR] DEP-001: -8 pts (1 finding) - Dependency constraint conflict
+<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>
+<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>--- Root Cause Clusters (1) ---
+<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>1. [ERROR] Rule Violation: DEP-001
+<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a>   Summary: celery 5.4.0 requires kombu&lt;5.4.0,&gt;=5.3.0, but installed is kombu 5.5.2.
+<a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>   Remediation: Upgrade celery or pin kombu to &lt;5.4.0,&gt;=5.3.0.
+<a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a>   Symptoms Count: 1
 <a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a>
-<a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a>Health Score: 85/100
+<a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a>--- Diagnostic Details ---
+<a id="__codelineno-9-21" name="__codelineno-9-21" href="#__codelineno-9-21"></a>╭─────────┬──────────┬──────────────┬──────────────────┬────────────────────────────────────────────────────────────────────────╮
+<a id="__codelineno-9-22" name="__codelineno-9-22" href="#__codelineno-9-22"></a>│ Rule    ┆ Severity ┆ Target       ┆ File Location    ┆ Message                                                                │
+<a id="__codelineno-9-23" name="__codelineno-9-23" href="#__codelineno-9-23"></a>╞═════════╪══════════╪══════════════╪══════════════════╪════════════════════════════════════════════════════════════════════════╡
+<a id="__codelineno-9-24" name="__codelineno-9-24" href="#__codelineno-9-24"></a>│ DEP-001 ┆ ERROR    ┆ Dependencies ┆ requirements.txt ┆ celery 5.4.0 requires kombu&lt;5.4.0,&gt;=5.3.0, but installed is kombu 5.5.2 │
+<a id="__codelineno-9-25" name="__codelineno-9-25" href="#__codelineno-9-25"></a>╰─────────┴──────────┴──────────────┴──────────────────┴────────────────────────────────────────────────────────────────────────╯
 </code></pre></div>
 <hr />
 <h2 id="3-core-feature-pillars">3. Core Feature Pillars</h2>

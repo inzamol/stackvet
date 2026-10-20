@@ -1400,17 +1400,22 @@
 </table>
 <hr />
 <h2 id="5-remediation-plan-inspection-dry-run">5. Remediation Plan Inspection (Dry Run)</h2>
-<p>Running <code>stackvet fix --dry-run</code> displays a structured table of planned actions:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Found 2 actionable fix(es) (2 safe):
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>┌────────┬────────────────┬─────────────────────────────────────────────────┬──────────┐
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>│ Rule   │ Target         │ Description                                     │ Type     │
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>├────────┼────────────────┼─────────────────────────────────────────────────┼──────────┤
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>│ DEP-002│ pyproject.toml │ Add 'httpx' to project dependencies             │ modify   │
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>│ DEP-003│ pyproject.toml │ Remove unused requirement 'requests&gt;=2.31.0'    │ modify   │
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>└────────┴────────────────┴─────────────────────────────────────────────────┴──────────┘
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>
-<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>Dry-run mode enabled. No changes written to disk.
+<p>Running <code>stackvet fix --dry-run</code> displays available automated fixes and diff previews:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Found 2 automated fix(es):
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>1. pyproject.toml -&gt; Add 'httpx' to project dependencies
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>2. pyproject.toml -&gt; Remove unused dependency 'requests'
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>--- Proposed Changes (Preview) ---
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>File: pyproject.toml
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>@@ -10,3 +10,4 @@
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a> [project]
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a> dependencies = [
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>+    "httpx",
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>-    "requests",
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a> ]
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>Dry-run complete. No files were modified.
 </code></pre></div>
 <hr />
 <h2 id="6-package-manager-auto-sync">6. Package Manager Auto-Sync</h2>
