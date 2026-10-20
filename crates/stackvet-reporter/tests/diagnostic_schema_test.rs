@@ -306,3 +306,57 @@ fn test_formats_location_agreement() {
     assert_eq!(loc["region"]["startLine"], 42);
     assert_eq!(loc["region"]["startColumn"], 5);
 }
+
+#[test]
+fn test_sarif_relativizes_to_scan_root_and_omits_uribaseid_for_external_path() {
+    use std::path::Path;
+
+    let reporter = Reporter::new();
+    let root = Path::new(if cfg!(windows) {
+        r"C:\project\root"
+    } else {
+        "/project/root"
+    });
+
+    // Diagnostic 1: inside scan root
+    let inside_path = if cfg!(windows) {
+        Path::new(r"C:\project\root\src\lib.rs")
+    } else {
+        Path::new("/project/root/src/lib.rs")
+    };
+    let diag_inside = Diagnostic::builder("DEP-001", Severity::Warning, LanguageTarget::Python)
+        .message("Inside file")
+        .location(DiagnosticLocation::new(inside_path))
+        .build();
+
+    // Diagnostic 2: external path outside scan root
+    let external_path = if cfg!(windows) {
+        Path::new(r"D:\other\system.py")
+    } else {
+        Path::new("/var/other/system.py")
+    };
+    let diag_external = Diagnostic::builder("DEP-002", Severity::Error, LanguageTarget::Python)
+        .message("External file")
+        .location(DiagnosticLocation::new(external_path))
+        .build();
+
+    let sarif_str = reporter
+        .render_sarif_with_root(&[diag_inside, diag_external], Some(root))
+        .expect("render sarif");
+
+    let sarif: serde_json::Value = serde_json::from_str(&sarif_str).expect("parse sarif");
+    let results = &sarif["runs"][0]["results"];
+
+    // First result: relative to root, uriBaseId = %SRCROOT%
+    let loc0 = &results[0]["locations"][0]["physicalLocation"]["artifactLocation"];
+    assert_eq!(loc0["uri"], "src/lib.rs");
+    assert_eq!(loc0["uriBaseId"], "%SRCROOT%");
+
+    // Second result: external, uri starts with file:// and uriBaseId MUST BE OMITTED per SARIF spec
+    let loc1 = &results[1]["locations"][0]["physicalLocation"]["artifactLocation"];
+    assert!(loc1["uri"].as_str().unwrap().starts_with("file://"));
+    assert!(
+        loc1.get("uriBaseId").is_none(),
+        "uriBaseId must NOT be present when artifact location is an absolute file:// URI"
+    );
+}

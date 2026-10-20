@@ -187,3 +187,67 @@ fn test_cli_exit_code_4_on_incomplete_scan() {
 
     let _ = fs::remove_dir_all(&repo);
 }
+
+#[test]
+fn test_pyproject_secret_on_failing_line_is_not_exposed() {
+    let repo = make_temp_repo("secret_failing_line");
+    let pyproject = repo.join("pyproject.toml");
+
+    let secret_token = "ghp_VERY_SECRET_TOKEN_ABCD1234XYZ";
+    // Secret is directly on the line where syntax fails (unclosed string)
+    let bad_toml = format!("[project]\nname = 'test'\napi_key = \"{}\n", secret_token);
+    fs::write(&pyproject, bad_toml).unwrap();
+
+    let (info, diags) = detect_python_project_with_diagnostics(&repo);
+    assert!(info.is_none());
+    assert!(!diags.is_empty());
+
+    let d = &diags[0];
+    assert_eq!(d.rule_id.0, "DISC-004");
+    assert_eq!(d.severity, Severity::Error);
+    // Secret string must not appear in message or explanation
+    assert!(
+        !d.message.contains(secret_token),
+        "Diagnostic message leaked secret token from failing line: {}",
+        d.message
+    );
+    assert!(
+        !d.explanation.contains(secret_token),
+        "Diagnostic explanation leaked secret token from failing line: {}",
+        d.explanation
+    );
+    // Line/column coordinates should be present in message or location
+    assert!(
+        d.message.contains("line") || d.location.span.is_some(),
+        "Diagnostic should include coordinate information"
+    );
+
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn test_oversized_manifest_tracked_in_manifest_files_for_cache() {
+    let repo = make_temp_repo("oversized_manifest_cache");
+
+    // Create a 2 KB package-lock.json
+    let lockfile = repo.join("package-lock.json");
+    let content = "{\n  \"name\": \"test\",\n  \"lockfileVersion\": 3,\n  \"packages\": {}\n}\n";
+    fs::write(&lockfile, content).unwrap();
+
+    // Scanner with a tiny 50-byte max_file_size limit
+    let scanner = ProjectScanner::new(&repo).with_max_file_size(50);
+    let scan_res = scanner.scan();
+    let ctx = scanner.build_context().unwrap();
+
+    // package-lock.json exceeds 50 bytes, so it should be in oversized_files
+    assert_eq!(scan_res.oversized_files.len(), 1);
+    assert_eq!(scan_res.oversized_files[0].0, lockfile);
+
+    // CRITICAL: It MUST still be present in manifest_files so cache validation hashes it
+    assert!(
+        ctx.manifest_files.contains(&lockfile),
+        "Oversized lockfile must still be in ctx.manifest_files for cache validation"
+    );
+
+    let _ = fs::remove_dir_all(&repo);
+}

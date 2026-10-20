@@ -1307,7 +1307,9 @@ async fn main() -> Result<()> {
                     &diagnostics,
                     Some(&explanation),
                 )?,
-                OutputFormat::Sarif => reporter.render_sarif(&diagnostics)?,
+                OutputFormat::Sarif => {
+                    reporter.render_sarif_with_root(&diagnostics, Some(&ctx.root))?
+                }
                 OutputFormat::Html => reporter.render_html(
                     score,
                     grade,
@@ -1584,7 +1586,9 @@ async fn main() -> Result<()> {
                             &diagnostics,
                             Some(&explanation),
                         )?,
-                        OutputFormat::Sarif => reporter.render_sarif(&diagnostics)?,
+                        OutputFormat::Sarif => {
+                            reporter.render_sarif_with_root(&diagnostics, Some(&ctx.root))?
+                        }
                         OutputFormat::Html => reporter.render_html(
                             score,
                             grade,
@@ -1702,7 +1706,9 @@ async fn main() -> Result<()> {
                             &diagnostics,
                             Some(&explanation),
                         )?,
-                        OutputFormat::Sarif => reporter.render_sarif(&diagnostics)?,
+                        OutputFormat::Sarif => {
+                            reporter.render_sarif_with_root(&diagnostics, Some(&ctx.root))?
+                        }
                         OutputFormat::Html => reporter.render_html(
                             score,
                             grade,
@@ -2344,7 +2350,7 @@ async fn main() -> Result<()> {
                 }
             } else if *sarif {
                 let sarif_str = reporter
-                    .render_sarif(&pr_result.new_diagnostics)
+                    .render_sarif_with_root(&pr_result.new_diagnostics, Some(&root))
                     .unwrap_or_else(|_| "{}".to_string());
                 if let Some(out_file) = output {
                     if let Err(e) = fs::write(out_file, &sarif_str) {

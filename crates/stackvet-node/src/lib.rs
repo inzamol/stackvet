@@ -537,6 +537,8 @@ pub fn detect_node_project(root: &Path) -> Option<NodeProjectInfo> {
 }
 
 /// Detects a Node project and returns collected discovery/manifest diagnostics.
+const MAX_MANIFEST_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
+
 pub fn detect_node_project_with_diagnostics(
     root: &Path,
 ) -> (Option<NodeProjectInfo>, Vec<Diagnostic>) {
@@ -545,16 +547,30 @@ pub fn detect_node_project_with_diagnostics(
     let mut pkg_val: Option<serde_json::Value> = None;
 
     let mut info = if pkg_json.is_file() {
-        match fs::read_to_string(&pkg_json) {
-            Ok(content) => {
-                let clean = strip_json_comments(&content);
-                match serde_json::from_str::<serde_json::Value>(&clean) {
-                    Ok(val) => {
-                        pkg_val = Some(val);
-                        match parse_package_json(&content, &pkg_json) {
-                            Ok(inf) => Some(inf),
-                            Err(e) => {
-                                diags.push(
+        let is_oversized = fs::metadata(&pkg_json)
+            .map(|m| m.len() > MAX_MANIFEST_SIZE)
+            .unwrap_or(false);
+        if is_oversized {
+            diags.push(
+                Diagnostic::builder("DISC-005", Severity::Warning, LanguageTarget::Node)
+                    .message("Scan resource limit exceeded: 'package.json' exceeds 10 MB limit, skipping parsing")
+                    .location(DiagnosticLocation::new(pkg_json.clone()))
+                    .explanation("The package.json manifest exceeds the maximum allowable file size (10 MB).")
+                    .remediation("Reduce the manifest size or configure a higher max_file_size limit.")
+                    .build(),
+            );
+            None
+        } else {
+            match fs::read_to_string(&pkg_json) {
+                Ok(content) => {
+                    let clean = strip_json_comments(&content);
+                    match serde_json::from_str::<serde_json::Value>(&clean) {
+                        Ok(val) => {
+                            pkg_val = Some(val);
+                            match parse_package_json(&content, &pkg_json) {
+                                Ok(inf) => Some(inf),
+                                Err(e) => {
+                                    diags.push(
                                     Diagnostic::builder("DISC-004", Severity::Error, LanguageTarget::Node)
                                         .message(format!("Invalid configuration in 'package.json': {}", e))
                                         .location(DiagnosticLocation::new(pkg_json.clone()))
@@ -562,12 +578,12 @@ pub fn detect_node_project_with_diagnostics(
                                         .remediation("Verify the dependencies and structure of package.json.")
                                         .build(),
                                 );
-                                None
+                                    None
+                                }
                             }
                         }
-                    }
-                    Err(e) => {
-                        diags.push(
+                        Err(e) => {
+                            diags.push(
                             Diagnostic::builder("DISC-004", Severity::Error, LanguageTarget::Node)
                                 .message(format!("Malformed manifest 'package.json': {}", e))
                                 .location(DiagnosticLocation::new(pkg_json.clone()))
@@ -575,12 +591,12 @@ pub fn detect_node_project_with_diagnostics(
                                 .remediation("Validate and correct JSON syntax in package.json.")
                                 .build(),
                         );
-                        None
+                            None
+                        }
                     }
                 }
-            }
-            Err(e) => {
-                diags.push(
+                Err(e) => {
+                    diags.push(
                     Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Node)
                         .message(format!("Unreadable manifest 'package.json': {}", e))
                         .location(DiagnosticLocation::new(pkg_json.clone()))
@@ -588,7 +604,8 @@ pub fn detect_node_project_with_diagnostics(
                         .remediation("Check file read permissions and ensure file is valid UTF-8.")
                         .build(),
                 );
-                None
+                    None
+                }
             }
         }
     } else {
@@ -643,89 +660,139 @@ pub fn detect_node_project_with_diagnostics(
     if pnpm_lock.is_file() {
         info.lock_file = Some(pnpm_lock.clone());
         info.package_manager = "pnpm".to_string();
-        match fs::read_to_string(&pnpm_lock) {
-            Ok(lcontent) => match parse_pnpm_lock(&lcontent) {
-                Ok(lock_data) => {
-                    info.locked_packages = lock_data.locked_packages;
-                    info.locked_versions = lock_data.locked_versions;
-                    for (k, v) in lock_data.workspace_packages {
-                        info.workspace_packages.entry(k).or_insert(v);
+        let is_oversized = fs::metadata(&pnpm_lock)
+            .map(|m| m.len() > MAX_MANIFEST_SIZE)
+            .unwrap_or(false);
+        if is_oversized {
+            diags.push(
+                Diagnostic::builder("DISC-005", Severity::Warning, LanguageTarget::Node)
+                    .message("Scan resource limit exceeded: 'pnpm-lock.yaml' exceeds 10 MB limit, skipping parsing")
+                    .location(DiagnosticLocation::new(pnpm_lock))
+                    .explanation("The pnpm-lock.yaml file exceeds the maximum allowable file size (10 MB).")
+                    .remediation("Increase max_file_size or optimize the lockfile.")
+                    .build(),
+            );
+        } else {
+            match fs::read_to_string(&pnpm_lock) {
+                Ok(lcontent) => match parse_pnpm_lock(&lcontent) {
+                    Ok(lock_data) => {
+                        info.locked_packages = lock_data.locked_packages;
+                        info.locked_versions = lock_data.locked_versions;
+                        for (k, v) in lock_data.workspace_packages {
+                            info.workspace_packages.entry(k).or_insert(v);
+                        }
                     }
-                }
-                Err(e) => {
-                    diags.push(
-                        Diagnostic::builder("DISC-004", Severity::Warning, LanguageTarget::Node)
+                    Err(e) => {
+                        diags.push(
+                            Diagnostic::builder(
+                                "DISC-004",
+                                Severity::Warning,
+                                LanguageTarget::Node,
+                            )
                             .message(format!("Malformed lockfile 'pnpm-lock.yaml': {}", e))
                             .location(DiagnosticLocation::new(pnpm_lock))
                             .explanation("The pnpm-lock.yaml file contains invalid YAML syntax.")
                             .remediation("Regenerate pnpm-lock.yaml using 'pnpm install'.")
                             .build(),
+                        );
+                    }
+                },
+                Err(e) => {
+                    diags.push(
+                        Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Node)
+                            .message(format!("Unreadable lockfile 'pnpm-lock.yaml': {}", e))
+                            .location(DiagnosticLocation::new(pnpm_lock))
+                            .explanation("The pnpm-lock.yaml file could not be read.")
+                            .remediation("Check file read permissions.")
+                            .build(),
                     );
                 }
-            },
-            Err(e) => {
-                diags.push(
-                    Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Node)
-                        .message(format!("Unreadable lockfile 'pnpm-lock.yaml': {}", e))
-                        .location(DiagnosticLocation::new(pnpm_lock))
-                        .explanation("The pnpm-lock.yaml file could not be read.")
-                        .remediation("Check file read permissions.")
-                        .build(),
-                );
             }
         }
     } else if yarn_lock.is_file() {
         info.lock_file = Some(yarn_lock.clone());
         info.package_manager = "yarn".to_string();
-        match fs::read_to_string(&yarn_lock) {
-            Ok(lcontent) => {
-                let lock_data = parse_yarn_lock(&lcontent);
-                info.locked_packages = lock_data.locked_packages;
-                info.locked_versions = lock_data.locked_versions;
-            }
-            Err(e) => {
-                diags.push(
-                    Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Node)
-                        .message(format!("Unreadable lockfile 'yarn.lock': {}", e))
-                        .location(DiagnosticLocation::new(yarn_lock))
-                        .explanation("The yarn.lock file could not be read.")
-                        .remediation("Check file read permissions.")
-                        .build(),
-                );
+        let is_oversized = fs::metadata(&yarn_lock)
+            .map(|m| m.len() > MAX_MANIFEST_SIZE)
+            .unwrap_or(false);
+        if is_oversized {
+            diags.push(
+                Diagnostic::builder("DISC-005", Severity::Warning, LanguageTarget::Node)
+                    .message("Scan resource limit exceeded: 'yarn.lock' exceeds 10 MB limit, skipping parsing")
+                    .location(DiagnosticLocation::new(yarn_lock))
+                    .explanation("The yarn.lock file exceeds the maximum allowable file size (10 MB).")
+                    .remediation("Increase max_file_size or optimize the lockfile.")
+                    .build(),
+            );
+        } else {
+            match fs::read_to_string(&yarn_lock) {
+                Ok(lcontent) => {
+                    let lock_data = parse_yarn_lock(&lcontent);
+                    info.locked_packages = lock_data.locked_packages;
+                    info.locked_versions = lock_data.locked_versions;
+                }
+                Err(e) => {
+                    diags.push(
+                        Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Node)
+                            .message(format!("Unreadable lockfile 'yarn.lock': {}", e))
+                            .location(DiagnosticLocation::new(yarn_lock))
+                            .explanation("The yarn.lock file could not be read.")
+                            .remediation("Check file read permissions.")
+                            .build(),
+                    );
+                }
             }
         }
     } else if npm_lock.is_file() {
         info.lock_file = Some(npm_lock.clone());
         info.package_manager = "npm".to_string();
-        match fs::read_to_string(&npm_lock) {
-            Ok(lcontent) => match parse_npm_lock(&lcontent) {
-                Ok(lock_data) => {
-                    info.locked_packages = lock_data.locked_packages;
-                    info.locked_versions = lock_data.locked_versions;
-                    for (k, v) in lock_data.workspace_packages {
-                        info.workspace_packages.entry(k).or_insert(v);
+        let is_oversized = fs::metadata(&npm_lock)
+            .map(|m| m.len() > MAX_MANIFEST_SIZE)
+            .unwrap_or(false);
+        if is_oversized {
+            diags.push(
+                Diagnostic::builder("DISC-005", Severity::Warning, LanguageTarget::Node)
+                    .message("Scan resource limit exceeded: 'package-lock.json' exceeds 10 MB limit, skipping parsing")
+                    .location(DiagnosticLocation::new(npm_lock))
+                    .explanation("The package-lock.json file exceeds the maximum allowable file size (10 MB).")
+                    .remediation("Increase max_file_size or optimize the lockfile.")
+                    .build(),
+            );
+        } else {
+            match fs::read_to_string(&npm_lock) {
+                Ok(lcontent) => match parse_npm_lock(&lcontent) {
+                    Ok(lock_data) => {
+                        info.locked_packages = lock_data.locked_packages;
+                        info.locked_versions = lock_data.locked_versions;
+                        for (k, v) in lock_data.workspace_packages {
+                            info.workspace_packages.entry(k).or_insert(v);
+                        }
                     }
-                }
-                Err(e) => {
-                    diags.push(
-                        Diagnostic::builder("DISC-004", Severity::Warning, LanguageTarget::Node)
+                    Err(e) => {
+                        diags.push(
+                            Diagnostic::builder(
+                                "DISC-004",
+                                Severity::Warning,
+                                LanguageTarget::Node,
+                            )
                             .message(format!("Malformed lockfile 'package-lock.json': {}", e))
                             .location(DiagnosticLocation::new(npm_lock))
                             .explanation("The package-lock.json file contains invalid JSON syntax.")
                             .remediation("Regenerate package-lock.json using 'npm install'.")
                             .build(),
+                        );
+                    }
+                },
+                Err(e) => {
+                    diags.push(
+                        Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Node)
+                            .message(format!("Unreadable lockfile 'package-lock.json': {}", e))
+                            .location(DiagnosticLocation::new(npm_lock))
+                            .explanation("The package-lock.json file could not be read.")
+                            .remediation("Check file read permissions.")
+                            .build(),
                     );
                 }
-            },
-            Err(e) => {
-                diags.push(
-                    Diagnostic::builder("DISC-001", Severity::Warning, LanguageTarget::Node)
-                        .message(format!("Unreadable lockfile 'package-lock.json': {}", e))
-                        .location(DiagnosticLocation::new(npm_lock))
-                        .explanation("The package-lock.json file could not be read.")
-                        .remediation("Check file read permissions.")
-                        .build(),
-                );
             }
         }
     } else if bun_text_lock.is_file() {

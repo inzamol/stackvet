@@ -216,21 +216,39 @@ impl ProjectScanner {
                 continue;
             }
 
-            // Check file size limits to prevent out-of-memory on huge files
-            if let Ok(metadata) = entry.metadata() {
-                if metadata.len() > self.max_file_size {
-                    result
-                        .oversized_files
-                        .push((path.to_path_buf(), metadata.len()));
-                    continue;
-                }
-            }
-
             let path_buf = path.to_path_buf();
             let file_name = path_buf
                 .file_name()
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_default();
+
+            // Manifests & Lockfiles (classified before size check so cache validation tracks and hashes them)
+            let is_manifest = file_name == "pyproject.toml"
+                || file_name == "package.json"
+                || file_name == "requirements.txt"
+                || file_name == "uv.lock"
+                || file_name == "poetry.lock"
+                || file_name == "package-lock.json"
+                || file_name == "pnpm-lock.yaml"
+                || file_name == "yarn.lock"
+                || file_name == "bun.lock"
+                || file_name == "bun.lockb"
+                || file_name == "pnpm-workspace.yaml"
+                || file_name == "lerna.json"
+                || file_name == "bunfig.toml"
+                || file_name == "Cargo.toml";
+
+            if is_manifest {
+                result.manifest_files.push(path_buf.clone());
+            }
+
+            // Check file size limits to prevent out-of-memory on huge files
+            if let Ok(metadata) = entry.metadata() {
+                if metadata.len() > self.max_file_size {
+                    result.oversized_files.push((path_buf, metadata.len()));
+                    continue;
+                }
+            }
 
             // Check Dockerfiles
             if file_name == "Dockerfile"
@@ -249,25 +267,6 @@ impl ProjectScanner {
                 && (file_name.ends_with(".yml") || file_name.ends_with(".yaml"))
             {
                 result.ci_workflows.push(path_buf.clone());
-            }
-
-            // Manifests & Lockfiles
-            if file_name == "pyproject.toml"
-                || file_name == "package.json"
-                || file_name == "requirements.txt"
-                || file_name == "uv.lock"
-                || file_name == "poetry.lock"
-                || file_name == "package-lock.json"
-                || file_name == "pnpm-lock.yaml"
-                || file_name == "yarn.lock"
-                || file_name == "bun.lock"
-                || file_name == "bun.lockb"
-                || file_name == "pnpm-workspace.yaml"
-                || file_name == "lerna.json"
-                || file_name == "bunfig.toml"
-                || file_name == "Cargo.toml"
-            {
-                result.manifest_files.push(path_buf.clone());
             }
 
             // Source files

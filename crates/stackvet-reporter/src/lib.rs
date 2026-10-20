@@ -369,6 +369,15 @@ impl Reporter {
 
     /// Renders OASIS SARIF v2.1.0 JSON format for GitHub Code Scanning
     pub fn render_sarif(&self, diagnostics: &[Diagnostic]) -> Result<String> {
+        self.render_sarif_with_root(diagnostics, None)
+    }
+
+    /// Renders OASIS SARIF v2.1.0 JSON format relativizing paths against the provided scan root
+    pub fn render_sarif_with_root(
+        &self,
+        diagnostics: &[Diagnostic],
+        scan_root: Option<&std::path::Path>,
+    ) -> Result<String> {
         let mut rules_map = std::collections::BTreeMap::new();
         for d in diagnostics {
             let r_id = d.rule_id.as_str();
@@ -419,7 +428,9 @@ impl Reporter {
                 });
 
                 // Locations: only emit if physical location exists (explicit, not fabricated)
-                if let Some(uri) = relativize_sarif_uri(&d.location.file_path) {
+                if let Some((uri, is_relative)) =
+                    relativize_sarif_uri(&d.location.file_path, scan_root)
+                {
                     let mut region_obj = serde_json::Map::new();
                     if let Some(span) = &d.location.span {
                         region_obj
@@ -436,11 +447,15 @@ impl Reporter {
                         );
                     }
 
+                    let mut artifact_loc = serde_json::json!({
+                        "uri": uri,
+                    });
+                    if is_relative {
+                        artifact_loc["uriBaseId"] = serde_json::json!("%SRCROOT%");
+                    }
+
                     let mut phys_loc = serde_json::json!({
-                        "artifactLocation": {
-                            "uri": uri,
-                            "uriBaseId": "%SRCROOT%"
-                        }
+                        "artifactLocation": artifact_loc
                     });
                     if !region_obj.is_empty() {
                         phys_loc["region"] = serde_json::Value::Object(region_obj);
@@ -460,12 +475,16 @@ impl Reporter {
                         .iter()
                         .enumerate()
                         .filter_map(|(idx, rel)| {
-                            let uri = relativize_sarif_uri(&rel.file_path)?;
+                            let (uri, is_relative) =
+                                relativize_sarif_uri(&rel.file_path, scan_root)?;
+                            let mut artifact_loc = serde_json::json!({
+                                "uri": uri,
+                            });
+                            if is_relative {
+                                artifact_loc["uriBaseId"] = serde_json::json!("%SRCROOT%");
+                            }
                             let mut phys = serde_json::json!({
-                                "artifactLocation": {
-                                    "uri": uri,
-                                    "uriBaseId": "%SRCROOT%"
-                                }
+                                "artifactLocation": artifact_loc
                             });
                             if let Some(span) = &rel.span {
                                 phys["region"] = serde_json::json!({
@@ -493,19 +512,26 @@ impl Reporter {
                 // Suggested fixes: emit only when fix contains a specific code span
                 if let Some(fix) = &d.fix {
                     if let Some(span) = &fix.span {
-                        let fix_uri = relativize_sarif_uri(&fix.file_path).unwrap_or_else(|| {
-                            fix.file_path
-                                .to_string_lossy()
-                                .replace(r"\\?\", "")
-                                .replace('\\', "/")
+                        let (fix_uri, is_relative) =
+                            relativize_sarif_uri(&fix.file_path, scan_root).unwrap_or_else(|| {
+                                (
+                                    fix.file_path
+                                        .to_string_lossy()
+                                        .replace(r"\\?\", "")
+                                        .replace('\\', "/"),
+                                    true,
+                                )
+                            });
+                        let mut artifact_loc = serde_json::json!({
+                            "uri": fix_uri,
                         });
+                        if is_relative {
+                            artifact_loc["uriBaseId"] = serde_json::json!("%SRCROOT%");
+                        }
                         result_obj["fixes"] = serde_json::json!([{
                             "description": { "text": fix.description },
                             "fileChanges": [{
-                                "artifactLocation": {
-                                    "uri": fix_uri,
-                                    "uriBaseId": "%SRCROOT%"
-                                },
+                                "artifactLocation": artifact_loc,
                                 "replacements": [{
                                     "deletedRegion": {
                                         "startLine": span.start_line,
@@ -638,35 +664,67 @@ impl Reporter {
     }
 }
 
-fn relativize_sarif_uri(file_path: &std::path::Path) -> Option<String> {
+fn relativize_sarif_uri(
+    file_path: &std::path::Path,
+    scan_root: Option<&std::path::Path>,
+) -> Option<(String, bool)> {
     let raw = file_path.to_string_lossy();
-    if raw.is_empty() || raw == "<unknown>" {
+    if raw.is_empty() || raw == "<unknown>" || raw == "-" {
         return None;
     }
     let p_clean = raw.replace(r"\\?\", "").replace('\\', "/");
     let p = std::path::Path::new(&p_clean);
-    let rel = if p.is_absolute() {
-        if let Ok(current_dir) = std::env::current_dir() {
-            let canonical_root = current_dir.canonicalize().unwrap_or(current_dir);
-            if let Ok(canonical_p) = file_path.canonicalize() {
-                canonical_p
-                    .strip_prefix(&canonical_root)
-                    .map(|s| s.to_path_buf())
-                    .unwrap_or_else(|_| p.to_path_buf())
-            } else if let Ok(stripped) = p.strip_prefix(&canonical_root) {
-                stripped.to_path_buf()
-            } else {
-                p.to_path_buf()
-            }
+
+    if !p.is_absolute() {
+        // Already relative to scan root
+        return Some((p_clean, true));
+    }
+
+    let root_buf = scan_root
+        .map(|r| r.canonicalize().unwrap_or_else(|_| r.to_path_buf()))
+        .or_else(|| std::env::current_dir().ok().map(|c| c.canonicalize().unwrap_or(c)));
+
+    if let Some(root_path) = root_buf {
+        let root_raw = root_path.to_string_lossy();
+        let root_clean = root_raw.replace(r"\\?\", "").replace('\\', "/");
+        let root_trimmed = root_clean.trim_end_matches('/');
+
+        let matches_prefix = if cfg!(windows) {
+            let p_lower = p_clean.to_lowercase();
+            let root_lower = root_trimmed.to_lowercase();
+            p_lower.starts_with(&format!("{}/", root_lower)) || p_lower == root_lower
         } else {
-            p.to_path_buf()
+            p_clean.starts_with(&format!("{}/", root_trimmed)) || p_clean == root_trimmed
+        };
+
+        if matches_prefix {
+            let rel = if p_clean.len() > root_trimmed.len() {
+                p_clean[root_trimmed.len()..].trim_start_matches('/')
+            } else {
+                ""
+            };
+            return Some((rel.to_string(), true));
         }
+
+        // Try canonicalized paths as fallback if paths exist on filesystem
+        if let Ok(canonical_p) = file_path.canonicalize() {
+            if let Ok(canonical_root) = root_path.canonicalize() {
+                if let Ok(stripped) = canonical_p.strip_prefix(&canonical_root) {
+                    let rel_str = stripped
+                        .to_string_lossy()
+                        .replace(r"\\?\", "")
+                        .replace('\\', "/");
+                    return Some((rel_str, true));
+                }
+            }
+        }
+    }
+
+    // Could not relativize to root: emit absolute file:// URI and omit uriBaseId
+    let abs_str = if p_clean.starts_with('/') {
+        format!("file://{}", p_clean)
     } else {
-        p.to_path_buf()
+        format!("file:///{}", p_clean)
     };
-    Some(
-        rel.to_string_lossy()
-            .replace(r"\\?\", "")
-            .replace('\\', "/"),
-    )
+    Some((abs_str, false))
 }
