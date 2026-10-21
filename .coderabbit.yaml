@@ -4,3 +4,4 @@ reviews:
   path_filters:
     - "!**/fixtures/**"
     - "!tests/fixtures/**"
+    - "!docs/rules/**"
