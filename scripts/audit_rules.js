@@ -25,9 +25,11 @@ function parseRulesCatalog() {
     throw new Error(`Rules catalog not found at ${CATALOG_PATH}`);
   }
   const content = fs.readFileSync(CATALOG_PATH, 'utf8');
+  const allRulesIdx = content.indexOf('ALL_RULES');
+  const catalogSlice = allRulesIdx !== -1 ? content.slice(allRulesIdx) : content;
   const rules = [];
-  // Split by RuleMeta entry boundaries to avoid complex cross-struct regexes and brace-matching pitfalls
-  const chunks = content.split(/\bRuleMeta\s*\{/);
+  // Split by RuleMeta entry boundaries within ALL_RULES array
+  const chunks = catalogSlice.split(/\bRuleMeta\s*\{/);
 
   for (let i = 1; i < chunks.length; i++) {
     const chunk = chunks[i];
@@ -39,22 +41,24 @@ function parseRulesCatalog() {
     };
 
     const id = extract('id');
+    if (!id) {
+      throw new Error(`RuleMeta entry at chunk #${i} in ALL_RULES is missing required 'id' attribute in ${CATALOG_PATH}`);
+    }
+
     const category = extract('category');
     const title = extract('title');
     const severity = extract('severity');
     const description = extract('description');
     const remediation = extract('remediation');
 
-    if (id && category && title && severity && description && remediation) {
-      rules.push({
-        id,
-        category,
-        title,
-        severity,
-        description,
-        remediation,
-      });
-    }
+    rules.push({
+      id,
+      category,
+      title,
+      severity,
+      description,
+      remediation,
+    });
   }
 
   return rules;
@@ -162,24 +166,29 @@ function generateMissingDocs() {
 
   let generated = 0;
   for (const rule of rules) {
+    if (!rule.id || !rule.title) {
+      console.warn(`[WARN] Skipping doc generation for incomplete rule: ${rule.id || 'unknown ID'}`);
+      continue;
+    }
     const docPath = path.join(DOCS_RULES_DIR, `${rule.id}.md`);
     if (!fs.existsSync(docPath)) {
+      const titleLower = rule.title ? rule.title.toLowerCase() : 'this issue';
       const content = `# ${rule.id}: ${rule.title}
 
 | Attribute | Value |
 |-----------|-------|
 | **Rule ID** | \`${rule.id}\` |
-| **Category** | \`${rule.category}\` |
-| **Default Severity** | \`${rule.severity}\` |
+| **Category** | \`${rule.category || 'general'}\` |
+| **Default Severity** | \`${rule.severity || 'WARNING'}\` |
 
 ## Description
-${rule.description}
+${rule.description || 'No description provided.'}
 
 ## Why This Matters
-Detecting and addressing ${rule.title.toLowerCase()} prevents runtime failures, dependency conflicts, or configuration drift in production environments.
+Detecting and addressing ${titleLower} prevents runtime failures, dependency conflicts, or configuration drift in production environments.
 
 ## Remediation
-${rule.remediation}
+${rule.remediation || 'Follow recommended remediation practices.'}
 
 ## Configuration & Suppression
 To suppress this rule for a specific file or line, add an inline comment:
