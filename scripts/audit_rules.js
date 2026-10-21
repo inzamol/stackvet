@@ -26,8 +26,12 @@ function parseRulesCatalog() {
   }
   const content = fs.readFileSync(CATALOG_PATH, 'utf8');
 
-  // Regex to extract RuleMeta entries
-  const ruleRegex = /RuleMeta\s*\{[\s\S]*?id:\s*"([^"]+)",[\s\S]*?category:\s*"([^"]+)",[\s\S]*?title:\s*"([^"]+)",[\s\S]*?severity:\s*"([^"]+)",[\s\S]*?description:\s*"([^"]+)",[\s\S]*?remediation:\s*"([^"]+)"[\s\S]*?\}/g;
+  // Regex to extract RuleMeta entries with support for escaped quotes
+  const S = '"((?:[^"\\\\]|\\\\.)*)"';
+  const ruleRegex = new RegExp(
+    `RuleMeta\\s*\\{[\\s\\S]*?id:\\s*${S},[\\s\\S]*?category:\\s*${S},[\\s\\S]*?title:\\s*${S},[\\s\\S]*?severity:\\s*${S},[\\s\\S]*?description:\\s*${S},[\\s\\S]*?remediation:\\s*${S}[\\s\\S]*?\\}`,
+    'g'
+  );
 
   const rules = [];
   let match;
