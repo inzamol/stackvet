@@ -44,6 +44,10 @@ pub fn run_all_analyzers_with_options(
             Ok(mut results) => diagnostics.append(&mut results),
             Err(err) => {
                 tracing::error!("Analyzer '{}' failed: {err}", analyzer.name());
+                eprintln!(
+                    "Warning: Analyzer '{}' failed and was skipped: {err}",
+                    analyzer.name()
+                );
             }
         }
     }
