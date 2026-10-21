@@ -212,3 +212,57 @@ fn test_refresh_cache_when_cache_missing_populates_and_saves() {
         "Cache should be populated with entries"
     );
 }
+
+#[test]
+fn test_corrupt_cache_is_treated_as_missing_and_emits_sec001() {
+    let dir = temp_test_dir("corrupt_cache_offline");
+    let ctx = create_dummy_python_context(&dir, &[("requests", "2.25.0")]);
+
+    let cache_path = dir.join("vulnerabilities.json");
+    // Write invalid/corrupt JSON content
+    fs::write(&cache_path, "{ invalid_json: true, unterminated...").unwrap();
+
+    let analyzer = SecurityAnalyzer::with_cache_path(true, false, cache_path);
+    // Should NOT return Err, but succeed and emit SEC-001
+    let diags = analyzer
+        .analyze(&ctx)
+        .expect("analyze must not fail on corrupt cache");
+    assert_eq!(diags.len(), 1);
+    assert_eq!(diags[0].rule_id.0, "SEC-001");
+    assert!(
+        diags[0].message.contains("corrupted or invalid"),
+        "Message should indicate corrupt cache: {}",
+        diags[0].message
+    );
+}
+
+#[test]
+fn test_corrupt_cache_is_repaired_on_refresh() {
+    let dir = temp_test_dir("corrupt_cache_refresh");
+    let ctx = create_dummy_python_context(&dir, &[("jinja2", "2.4.1")]);
+
+    let cache_path = dir.join("vulnerabilities.json");
+    fs::write(&cache_path, "MALFORMED_NON_JSON_DATA").unwrap();
+
+    let analyzer = SecurityAnalyzer::with_cache_path(false, true, cache_path.clone());
+    let diags = analyzer
+        .analyze(&ctx)
+        .expect("analyze must succeed when refreshing corrupt cache");
+
+    // SEC-001 should not be emitted because cache was refreshed
+    let has_sec001 = diags.iter().any(|d| d.rule_id.0 == "SEC-001");
+    assert!(
+        !has_sec001,
+        "SEC-001 should not be emitted after successful refresh"
+    );
+
+    let mgr = VulnCacheManager::with_custom_path(cache_path);
+    let loaded = mgr
+        .load_cache()
+        .expect("load")
+        .expect("repaired cache exists");
+    assert!(
+        !loaded.entries.is_empty(),
+        "Repaired cache has fresh OSV entries"
+    );
+}

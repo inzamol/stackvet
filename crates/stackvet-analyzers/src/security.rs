@@ -114,7 +114,18 @@ impl Analyzer for SecurityAnalyzer {
         }
 
         let mgr = self.get_cache_manager(&ctx.root);
-        let mut cache_opt = mgr.load_cache()?;
+        let mut cache_corrupted = false;
+        let mut cache_opt = match mgr.load_cache() {
+            Ok(opt) => opt,
+            Err(err) => {
+                tracing::warn!(
+                    "Vulnerability database cache at {:?} is corrupted or unreadable: {err}. Treating cache as missing.",
+                    mgr.cache_path()
+                );
+                cache_corrupted = true;
+                None
+            }
+        };
 
         // Handle refresh_cache flag: if requested and not offline, fetch fresh advisories from OSV
         if self.refresh_cache && !self.offline {
@@ -156,22 +167,35 @@ impl Analyzer for SecurityAnalyzer {
         match status {
             VulnCacheStatus::Missing => {
                 let primary_manifest = packages_to_audit[0].3.clone();
-                let msg = if self.offline {
-                    "Vulnerability checks skipped: offline mode is active and no local vulnerability cache was found at .stackvet/cache/vulnerabilities.json"
+                let msg = if cache_corrupted {
+                    format!(
+                        "Vulnerability checks skipped: local vulnerability cache at {:?} is corrupted or invalid",
+                        mgr.cache_path()
+                    )
+                } else if self.offline {
+                    "Vulnerability checks skipped: offline mode is active and no local vulnerability cache was found at .stackvet/cache/vulnerabilities.json".to_string()
                 } else {
-                    "The vulnerability advisory database (OSV.dev) is unavailable and no local cache was found"
+                    "The vulnerability advisory database (OSV.dev) is unavailable and no local cache was found".to_string()
+                };
+
+                let explanation = if cache_corrupted {
+                    "The vulnerability database cache file contains invalid JSON or an incompatible schema. Vulnerability scanning cannot be performed with corrupted advisory data."
+                } else {
+                    "StackVet requires a vulnerability database to detect known CVEs in project dependencies. Without a connection or local cache, vulnerability scanning cannot be performed."
+                };
+
+                let remediation = if cache_corrupted {
+                    "Run 'stackvet scan --refresh-vuln-cache' to overwrite and repair the local advisory database cache, or delete the corrupted cache file."
+                } else {
+                    "Connect to the internet and run 'stackvet scan --refresh-vuln-cache' to populate the local vulnerability database."
                 };
 
                 diagnostics.push(
                     Diagnostic::builder("SEC-001", Severity::Warning, LanguageTarget::General)
                         .message(msg)
                         .file(&primary_manifest)
-                        .explanation(
-                            "StackVet requires a vulnerability database to detect known CVEs in project dependencies. Without a connection or local cache, vulnerability scanning cannot be performed.",
-                        )
-                        .remediation(
-                            "Connect to the internet and run 'stackvet scan --refresh-vuln-cache' to populate the local vulnerability database.",
-                        )
+                        .explanation(explanation)
+                        .remediation(remediation)
                         .confidence(Confidence::High)
                         .build(),
                 );

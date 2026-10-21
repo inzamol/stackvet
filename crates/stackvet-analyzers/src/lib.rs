@@ -40,8 +40,12 @@ pub fn run_all_analyzers_with_options(
     ];
 
     for analyzer in analyzers {
-        let mut results = analyzer.analyze(ctx)?;
-        diagnostics.append(&mut results);
+        match analyzer.analyze(ctx) {
+            Ok(mut results) => diagnostics.append(&mut results),
+            Err(err) => {
+                tracing::error!("Analyzer '{}' failed: {err}", analyzer.name());
+            }
+        }
     }
 
     Ok(diagnostics)
