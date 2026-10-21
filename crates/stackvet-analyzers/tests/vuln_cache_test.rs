@@ -237,6 +237,7 @@ fn test_corrupt_cache_is_treated_as_missing_and_emits_sec001() {
 }
 
 #[test]
+#[ignore = "requires network access to api.osv.dev"]
 fn test_corrupt_cache_is_repaired_on_refresh() {
     let dir = temp_test_dir("corrupt_cache_refresh");
     let ctx = create_dummy_python_context(&dir, &[("jinja2", "2.4.1")]);
