@@ -66,28 +66,27 @@ pub fn check_runtime_version(cmd: &str, args: &[&str]) -> Option<String> {
     }
 }
 
-pub fn sanitize_path(path_str: &str) -> String {
-    let mut sanitized = path_str.replace('\\', "/");
+pub fn mask_user_env(text: &str) -> String {
+    let mut masked = text.to_string();
 
-    // Mask Windows home directories: C:/Users/<username>/... -> ~/...
     if let Ok(user) = std::env::var("USERNAME") {
         if !user.is_empty() {
-            let win_user_pattern = format!("Users/{}", user);
-            sanitized = sanitized.replace(&win_user_pattern, "Users/<USER>");
-            sanitized = sanitized.replace(&user, "<USER>");
+            masked = masked.replace(&user, "<USER>");
         }
     }
 
-    // Mask Unix home directories: /home/<username>/... -> ~/...
     if let Ok(user) = std::env::var("USER") {
         if !user.is_empty() {
-            let unix_user_pattern = format!("home/{}", user);
-            sanitized = sanitized.replace(&unix_user_pattern, "home/<USER>");
-            sanitized = sanitized.replace(&user, "<USER>");
+            masked = masked.replace(&user, "<USER>");
         }
     }
 
-    sanitized
+    masked
+}
+
+pub fn sanitize_path(path_str: &str) -> String {
+    let sanitized = path_str.replace('\\', "/");
+    mask_user_env(&sanitized)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -205,7 +204,7 @@ impl SanitizedConfig {
     pub fn from_config(config: &StackvetConfig) -> Self {
         let project = if config.project != stackvet_core::config::ProjectConfig::default() {
             Some(SanitizedProjectConfig {
-                name: config.project.name.as_ref().map(|n| sanitize_path(n)),
+                name: config.project.name.clone(),
                 min_score: config.project.min_score,
                 strict: config.project.strict,
             })
@@ -335,7 +334,7 @@ impl SanitizedConfig {
 pub fn sanitize_config(config: &StackvetConfig) -> String {
     let sanitized = SanitizedConfig::from_config(config);
     let s = toml::to_string_pretty(&sanitized).unwrap_or_default();
-    sanitize_path(s.trim())
+    mask_user_env(s.trim())
 }
 
 pub fn sanitize_config_str(content: &str) -> String {
@@ -379,7 +378,7 @@ pub fn sanitize_config_str(content: &str) -> String {
             }
         }
         if let Ok(s) = toml::to_string_pretty(&safe_table) {
-            return sanitize_path(s.trim());
+            return mask_user_env(s.trim());
         }
     }
 
@@ -578,5 +577,46 @@ pub fn print_bug_report_summary(report: &BugReportData) {
             println!("  • {reason}");
         }
         println!();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mask_user_env_preserves_backslashes() {
+        let input = r#"path = "C:\Users\SecretUser\Project\file.txt""#;
+        // Even if SecretUser isn't USERNAME/USER, backslashes must be preserved
+        let output = mask_user_env(input);
+        assert!(output.contains(r#"C:\Users\"#));
+        assert!(!output.contains(r#"C:/Users/"#));
+    }
+
+    #[test]
+    fn test_mask_user_env_replaces_active_user() {
+        if let Ok(user) = std::env::var("USERNAME").or_else(|_| std::env::var("USER")) {
+            if !user.is_empty() {
+                let input = format!(r#"user_path = "C:\Users\{user}\data""#);
+                let output = mask_user_env(&input);
+                assert!(output.contains(r#"C:\Users\<USER>\data"#));
+                assert!(!output.contains(&user));
+            }
+        }
+    }
+
+    #[test]
+    fn test_sanitize_config_str_preserves_backslashes() {
+        let toml_content = r#"
+[project]
+name = "app\\with\\escapes"
+min_score = 80
+"#;
+        let sanitized = sanitize_config_str(toml_content);
+        assert!(
+            sanitized.contains(r#"app\\with\\escapes"#)
+                || sanitized.contains(r#"app\with\escapes"#)
+        );
+        assert!(!sanitized.contains("app//with//escapes"));
     }
 }
