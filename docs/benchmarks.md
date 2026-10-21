@@ -10,8 +10,8 @@ This document describes the automated, reproducible performance benchmark suite,
 
 The benchmark suite is implemented in [`crates/stackvet-cli/benches/scan_bench.rs`](file:///crates/stackvet-cli/benches/scan_bench.rs) using [Criterion.rs](https://bheisler.github.io/criterion.rs/book/). It isolates and profiles critical paths:
 
-1. **`scanner_build_context_synthetic`**:
-   - Creates a synthetic multi-language project repository with nested directories, `.gitignore` exclusions, Python files, TypeScript components, configuration files (`package.json`, `pyproject.toml`), and Dockerfiles.
+1. **`scanner_directory_traversal_50_files`**:
+   - Creates a synthetic multi-language project repository with nested directories, `.gitignore` exclusions, Python files, TypeScript components, and configuration files (`package.json`, `pyproject.toml`).
    - Measures end-to-end multi-threaded directory traversal, exclusion filter evaluation, and context generation.
 
 2. **`python_ast_parse_ruff`**:
@@ -22,8 +22,8 @@ The benchmark suite is implemented in [`crates/stackvet-cli/benches/scan_bench.r
    - Parses complex TypeScript/React code with JSX, hooks (`useState`, `useEffect`, `useCallback`), and TypeScript interfaces.
    - Benchmarks AST parsing speed using the high-performance `oxc_parser`.
 
-4. **`health_score_and_correlation`**:
-   - Simulates 100 heterogeneous diagnostics across Python, Node.js, and Docker analyzers.
+4. **`health_scoring_and_correlation_100_diags`**:
+   - Simulates 100 heterogeneous diagnostics across Python, Node.js, and framework analyzers.
    - Measures root-cause correlation clustering (`CorrelationEngine`), graph grouping, deduplication, and health score explanation calculation.
 
 ---
@@ -65,8 +65,8 @@ The following baseline metrics were captured on a reference development machine:
 | :--- | :--- | :--- | :--- |
 | **`python_ast_parse_ruff`** | Modern Python file (~80 lines) | ~12 - 18 µs | > 50,000 files/sec |
 | **`typescript_ast_parse_oxc`** | TSX React Component (~75 lines) | ~15 - 25 µs | > 40,000 files/sec |
-| **`scanner_build_context_synthetic`** | 12 files + nested dirs + ignores | ~400 - 650 µs | > 1,500 projects/sec |
-| **`health_score_and_correlation`** | 100 diagnostics + 5 root causes | ~45 - 80 µs | > 12,000 batches/sec |
+| **`scanner_directory_traversal_50_files`** | 50 files + nested dirs + ignores | ~400 - 650 µs | > 1,500 projects/sec |
+| **`health_scoring_and_correlation_100_diags`** | 100 diagnostics + root causes | ~50 - 90 µs | > 11,000 batches/sec |
 
 ---
 

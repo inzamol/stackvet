@@ -2,7 +2,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use stackvet_core::{
     Confidence, Diagnostic, DiagnosticLocation, LanguageTarget, Severity, TextSpan,
 };
-use stackvet_correlation::calculate_health_score_explained;
+use stackvet_correlation::{calculate_health_score_explained, CorrelationEngine};
 use stackvet_scanner::ProjectScanner;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -198,10 +198,15 @@ fn bench_health_scoring_and_correlation(c: &mut Criterion) {
         );
     }
 
-    c.bench_function("health_scoring_and_deduplication_100_diags", |b| {
+    let correlator = CorrelationEngine::new();
+
+    c.bench_function("health_scoring_and_correlation_100_diags", |b| {
         b.iter(|| {
             let exp = calculate_health_score_explained(black_box(&diags));
             assert!(exp.final_score <= 100);
+
+            let root_causes = correlator.correlate(black_box(diags.clone()));
+            assert!(!root_causes.is_empty());
         })
     });
 }
