@@ -5,13 +5,16 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 pub mod rules_catalog;
-pub use rules_catalog::{get_rule_meta, RuleMeta, ALL_RULES};
+pub use rules_catalog::{get_rule_meta, validate_rule, RuleMeta, RuleValidationError, ALL_RULES};
 
 pub mod baseline;
 pub use baseline::{BaselineData, BaselineDiff, BaselineIssueEntry};
 
 pub mod config;
-pub use config::{CacheConfig, ConfigError, ScannerConfig, StackvetConfig};
+pub use config::{
+    evaluate_custom_rules, CacheConfig, ConfigError, CustomRuleDefinition, ScannerConfig,
+    StackvetConfig,
+};
 
 pub mod exit_codes;
 pub use exit_codes::ExitCode;
@@ -684,6 +687,43 @@ impl ProjectContext {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum CauseRelationship {
+    Verified,
+    #[default]
+    Inferred,
+}
+
+impl fmt::Display for CauseRelationship {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Verified => write!(f, "Verified"),
+            Self::Inferred => write!(f, "Inferred"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RootCauseEvidence {
+    pub file_path: PathBuf,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub span: Option<TextSpan>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemediationStep {
+    pub order: usize,
+    pub action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_file: Option<PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RootCause {
     pub id: String,
@@ -693,10 +733,38 @@ pub struct RootCause {
     pub primary_remediation: String,
     pub automated_fix: Option<FixAction>,
     pub symptoms: Vec<Diagnostic>,
+    #[serde(default)]
+    pub relationship: CauseRelationship,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub supporting_evidence: Vec<RootCauseEvidence>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remediation_plan: Vec<RemediationStep>,
 }
 
 pub trait Analyzer: Send + Sync {
     fn name(&self) -> &'static str;
     fn language(&self) -> LanguageTarget;
     fn analyze(&self, ctx: &ProjectContext) -> Result<Vec<Diagnostic>>;
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CancellationToken {
+    cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl CancellationToken {
+    pub fn new() -> Self {
+        Self {
+            cancelled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
+
+    pub fn cancel(&self) {
+        self.cancelled
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(std::sync::atomic::Ordering::SeqCst)
+    }
 }

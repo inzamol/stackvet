@@ -37,6 +37,8 @@ pub struct StackvetConfig {
     pub cache: CacheConfig,
     #[serde(default)]
     pub scanner: ScannerConfig,
+    #[serde(default)]
+    pub custom_rules: Vec<CustomRuleDefinition>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -381,6 +383,121 @@ impl StackvetConfig {
         }
         self.ci.baseline.clone()
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CustomRuleDefinition {
+    pub id: String,
+    pub name: String,
+    #[serde(default = "default_custom_severity")]
+    pub severity: Severity,
+    #[serde(default = "default_custom_category")]
+    pub category: String,
+    pub pattern: String,
+    #[serde(default)]
+    pub files: Vec<String>,
+    pub message: String,
+    #[serde(default)]
+    pub remediation: String,
+}
+
+fn default_custom_severity() -> Severity {
+    Severity::Warning
+}
+
+fn default_custom_category() -> String {
+    "custom".to_string()
+}
+
+pub fn evaluate_custom_rules(
+    root: &Path,
+    source_files: &[PathBuf],
+    custom_rules: &[CustomRuleDefinition],
+) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    if custom_rules.is_empty() || source_files.is_empty() {
+        return diagnostics;
+    }
+
+    for rule in custom_rules {
+        let compiled_regex = match regex::RegexBuilder::new(&rule.pattern)
+            .size_limit(500 * 1024)
+            .build()
+        {
+            Ok(r) => r,
+            Err(_) => {
+                continue;
+            }
+        };
+
+        let has_file_filters = !rule.files.is_empty();
+        let file_filter = if has_file_filters {
+            let mut ov_builder = ignore::overrides::OverrideBuilder::new(root);
+            for f in &rule.files {
+                let _ = ov_builder.add(f);
+            }
+            ov_builder.build().ok()
+        } else {
+            None
+        };
+
+        for file_path in source_files {
+            let abs_path = if file_path.is_absolute() {
+                file_path.clone()
+            } else {
+                root.join(file_path)
+            };
+
+            if let Some(ref ov) = file_filter {
+                match ov.matched(&abs_path, false) {
+                    ignore::Match::Whitelist(_) => {}
+                    _ => continue,
+                }
+            }
+
+            let content = match fs::read_to_string(&abs_path) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+
+            for (line_idx, line_text) in content.lines().enumerate() {
+                if let Some(mat) = compiled_regex.find(line_text) {
+                    let line_num = line_idx + 1;
+                    let start_col = mat.start() + 1;
+                    let end_col = mat.end() + 1;
+                    let snippet = line_text.trim().to_string();
+
+                    diagnostics.push(
+                        Diagnostic::builder(
+                            &rule.id,
+                            rule.severity,
+                            crate::LanguageTarget::General,
+                        )
+                        .message(&rule.message)
+                        .location(
+                            crate::DiagnosticLocation::new(file_path.clone())
+                                .with_span(crate::TextSpan::single_line(
+                                    line_num, start_col, end_col,
+                                ))
+                                .with_snippet(snippet),
+                        )
+                        .explanation(format!(
+                            "Custom rule '{}' ({}) matched pattern '{}'",
+                            rule.name, rule.id, rule.pattern
+                        ))
+                        .remediation(if !rule.remediation.is_empty() {
+                            rule.remediation.clone()
+                        } else {
+                            format!("Address finding matched by custom rule '{}'.", rule.name)
+                        })
+                        .build(),
+                    );
+                }
+            }
+        }
+    }
+
+    diagnostics
 }
 
 #[cfg(test)]

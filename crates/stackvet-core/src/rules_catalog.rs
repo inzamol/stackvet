@@ -861,6 +861,15 @@ pub static ALL_RULES: &[RuleMeta] = &[
         remediation: "Check your internet connection or run with --offline to skip security checks.",
     },
     RuleMeta {
+        id: "SEC-002",
+        category: "security",
+        title: "Stale vulnerability advisory database cache",
+        severity: "WARNING",
+        description: "Vulnerability analysis was performed using a local cache that has exceeded its configured time-to-live (TTL).",
+        remediation: "Run with '--refresh-vuln-cache' or verify internet access to update the local advisory database.",
+    },
+
+    RuleMeta {
         id: "SQL-001",
         category: "framework",
         title: "Potential N+1 database query in loop",
@@ -1106,4 +1115,64 @@ pub fn get_rule_meta(rule_id: &str) -> Option<&'static RuleMeta> {
     ALL_RULES
         .iter()
         .find(|r| r.id.eq_ignore_ascii_case(rule_id))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RuleValidationError {
+    InvalidIdFormat(String),
+    EmptyCategory,
+    EmptyTitle,
+    EmptyDescription,
+    EmptyRemediation,
+    InvalidSeverity(String),
+}
+
+impl std::fmt::Display for RuleValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidIdFormat(id) => write!(f, "Invalid rule ID taxonomy format: '{}'", id),
+            Self::EmptyCategory => write!(f, "Rule category must not be empty"),
+            Self::EmptyTitle => write!(f, "Rule title must not be empty"),
+            Self::EmptyDescription => write!(f, "Rule description must not be empty"),
+            Self::EmptyRemediation => write!(f, "Rule remediation must not be empty"),
+            Self::InvalidSeverity(s) => write!(f, "Invalid rule severity: '{}'", s),
+        }
+    }
+}
+
+impl std::error::Error for RuleValidationError {}
+
+pub fn validate_rule(rule: &RuleMeta) -> Result<(), RuleValidationError> {
+    let parts: Vec<&str> = rule.id.split('-').collect();
+    if parts.len() != 2 {
+        return Err(RuleValidationError::InvalidIdFormat(rule.id.to_string()));
+    }
+    let prefix = parts[0];
+    let number = parts[1];
+    if prefix.len() < 2
+        || prefix.len() > 5
+        || !prefix.chars().all(|c| c.is_ascii_uppercase())
+        || number.len() != 3
+        || !number.chars().all(|c| c.is_ascii_digit())
+    {
+        return Err(RuleValidationError::InvalidIdFormat(rule.id.to_string()));
+    }
+
+    if rule.category.trim().is_empty() {
+        return Err(RuleValidationError::EmptyCategory);
+    }
+    if rule.title.trim().is_empty() {
+        return Err(RuleValidationError::EmptyTitle);
+    }
+    if rule.description.trim().is_empty() {
+        return Err(RuleValidationError::EmptyDescription);
+    }
+    if rule.remediation.trim().is_empty() {
+        return Err(RuleValidationError::EmptyRemediation);
+    }
+
+    match rule.severity.to_ascii_uppercase().as_str() {
+        "HINT" | "INFO" | "WARNING" | "WARN" | "ERROR" | "CRITICAL" => Ok(()),
+        other => Err(RuleValidationError::InvalidSeverity(other.to_string())),
+    }
 }
