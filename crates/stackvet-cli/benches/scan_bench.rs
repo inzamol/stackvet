@@ -5,11 +5,42 @@ use stackvet_core::{
 use stackvet_correlation::calculate_health_score_explained;
 use stackvet_scanner::ProjectScanner;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-fn create_synthetic_project(num_files: usize) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("stackvet_bench_{}", num_files));
-    let _ = fs::remove_dir_all(&dir);
+struct UniqueBenchDir {
+    path: PathBuf,
+}
+
+impl UniqueBenchDir {
+    fn new(prefix: &str) -> Self {
+        let unique_name = format!(
+            "{}_{}_{}",
+            prefix,
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let path = std::env::temp_dir().join(unique_name);
+        fs::create_dir_all(&path).expect("Failed to create unique benchmark directory");
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for UniqueBenchDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+fn create_synthetic_project(num_files: usize) -> UniqueBenchDir {
+    let bench_dir = UniqueBenchDir::new(&format!("stackvet_bench_{}", num_files));
+    let dir = bench_dir.path();
     fs::create_dir_all(dir.join("src").join("components")).unwrap();
     fs::create_dir_all(dir.join("tests")).unwrap();
 
@@ -39,7 +70,7 @@ fn create_synthetic_project(num_files: usize) -> PathBuf {
         fs::write(dir.join(format!("src/components/Comp_{}.tsx", i)), ts_code).unwrap();
     }
 
-    dir
+    bench_dir
 }
 
 fn bench_project_scanner(c: &mut Criterion) {
@@ -47,13 +78,11 @@ fn bench_project_scanner(c: &mut Criterion) {
 
     c.bench_function("scanner_directory_traversal_50_files", |b| {
         b.iter(|| {
-            let scanner = ProjectScanner::new(black_box(&project_dir));
+            let scanner = ProjectScanner::new(black_box(project_dir.path()));
             let res = scanner.scan();
             assert!(!res.source_files.is_empty());
         })
     });
-
-    let _ = fs::remove_dir_all(&project_dir);
 }
 
 fn bench_python_ast_parsing(c: &mut Criterion) {
