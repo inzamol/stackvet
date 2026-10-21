@@ -173,3 +173,40 @@ files = ["src/**/*.py"]
 
     let _ = fs::remove_dir_all(&repo);
 }
+
+#[test]
+fn test_bug_report_discovery_diagnostics_generic_reasons() {
+    let repo = make_temp_repo("discovery_diag_test");
+    // Create malformed manifest that triggers DISC-004 in discovery_diagnostics
+    fs::write(repo.join("package.json"), "invalid { json\n").unwrap();
+
+    let exe = env!("CARGO_BIN_EXE_stackvet");
+    let output = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("bug-report")
+        .arg("--json")
+        .output()
+        .expect("bug report execution");
+
+    assert_eq!(output.status.code(), Some(ExitCode::Success.as_i32()));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+
+    let reasons = parsed["incomplete_reasons"].as_array().unwrap();
+    assert!(!reasons.is_empty(), "Expected discovery reasons");
+    for reason in reasons {
+        let r = reason.as_str().unwrap();
+        assert!(r.starts_with("DISC-"), "Expected DISC-* rule ID");
+        assert!(
+            r.ends_with(": discovery condition encountered"),
+            "Expected fixed generic reason suffix, got: {}",
+            r
+        );
+        // Ensure no raw file paths or parser snippets leaked
+        assert!(!r.contains("package.json"));
+        assert!(!r.contains("invalid"));
+    }
+
+    let _ = fs::remove_dir_all(&repo);
+}

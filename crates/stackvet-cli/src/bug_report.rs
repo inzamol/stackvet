@@ -474,7 +474,7 @@ pub fn generate_bug_report(
     }
     for d in &ctx.discovery_diagnostics {
         if d.rule_id.0.starts_with("DISC-") {
-            incomplete_reasons.push(sanitize_path(&d.message));
+            incomplete_reasons.push(format!("{}: discovery condition encountered", d.rule_id.0));
         }
     }
 
