@@ -25,26 +25,38 @@ function parseRulesCatalog() {
     throw new Error(`Rules catalog not found at ${CATALOG_PATH}`);
   }
   const content = fs.readFileSync(CATALOG_PATH, 'utf8');
-
-  // Regex to extract RuleMeta entries with support for escaped quotes
-  const S = '"((?:[^"\\\\]|\\\\.)*)"';
-  const ruleRegex = new RegExp(
-    `RuleMeta\\s*\\{[\\s\\S]*?id:\\s*${S},[\\s\\S]*?category:\\s*${S},[\\s\\S]*?title:\\s*${S},[\\s\\S]*?severity:\\s*${S},[\\s\\S]*?description:\\s*${S},[\\s\\S]*?remediation:\\s*${S}[\\s\\S]*?\\}`,
-    'g'
-  );
-
   const rules = [];
-  let match;
-  while ((match = ruleRegex.exec(content)) !== null) {
-    rules.push({
-      id: match[1],
-      category: match[2],
-      title: match[3],
-      severity: match[4],
-      description: match[5],
-      remediation: match[6],
-    });
+  // Split by RuleMeta entry boundaries to avoid complex cross-struct regexes and brace-matching pitfalls
+  const chunks = content.split(/\bRuleMeta\s*\{/);
+
+  for (let i = 1; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const extract = (field) => {
+      // Matches field: "..." accounting for escaped quotes and backslashes
+      const fieldRegex = new RegExp(`${field}:\\s*"((?:[^"\\\\]|\\\\.)*)"`);
+      const m = fieldRegex.exec(chunk);
+      return m ? m[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\') : null;
+    };
+
+    const id = extract('id');
+    const category = extract('category');
+    const title = extract('title');
+    const severity = extract('severity');
+    const description = extract('description');
+    const remediation = extract('remediation');
+
+    if (id && category && title && severity && description && remediation) {
+      rules.push({
+        id,
+        category,
+        title,
+        severity,
+        description,
+        remediation,
+      });
+    }
   }
+
   return rules;
 }
 
