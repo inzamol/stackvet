@@ -90,30 +90,306 @@ pub fn sanitize_path(path_str: &str) -> String {
     sanitized
 }
 
-pub fn sanitize_config_str(content: &str) -> String {
-    let mut output = Vec::new();
-    for line in content.lines() {
-        let lower = line.to_ascii_lowercase();
-        if lower.contains("token")
-            || lower.contains("secret")
-            || lower.contains("key")
-            || lower.contains("password")
-            || lower.contains("auth")
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SanitizedConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<SanitizedProjectConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thresholds: Option<SanitizedThresholdsConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ci: Option<SanitizedCiConfig>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub rules: BTreeMap<String, SanitizedRuleSetting>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ignore: Option<SanitizedIgnoreConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub suppressions: Vec<SanitizedSuppressionEntry>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache: Option<SanitizedCacheConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanner: Option<SanitizedScannerConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub custom_rules: Vec<SanitizedCustomRule>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SanitizedProjectConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_score: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strict: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SanitizedThresholdsConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fail_on: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_score: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SanitizedCiConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub baseline: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fail_on: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strict: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SanitizedRuleSetting {
+    Simple(String),
+    Detailed {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        severity: Option<String>,
+        enabled: bool,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SanitizedIgnoreConfig {
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub patterns: Vec<String>,
+    pub use_defaults: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SanitizedScannerConfig {
+    pub max_file_size: u64,
+    pub max_depth: usize,
+    pub max_files: usize,
+    pub follow_symlinks: bool,
+    pub fail_on_incomplete: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SanitizedCacheConfig {
+    pub enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SanitizedSuppressionEntry {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rule: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub rules: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub until: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SanitizedCustomRule {
+    pub id: String,
+    pub name: String,
+    pub severity: String,
+    pub message: String,
+    pub pattern: String,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub files: Vec<String>,
+}
+
+impl SanitizedConfig {
+    pub fn from_config(config: &StackvetConfig) -> Self {
+        let project = if config.project != stackvet_core::config::ProjectConfig::default() {
+            Some(SanitizedProjectConfig {
+                name: config.project.name.as_ref().map(|n| sanitize_path(n)),
+                min_score: config.project.min_score,
+                strict: config.project.strict,
+            })
+        } else {
+            None
+        };
+
+        let thresholds = if config.thresholds != stackvet_core::config::ThresholdsConfig::default()
         {
-            if let Some((k, _)) = line.split_once('=') {
-                output.push(format!("{}= \"[REDACTED]\"", k.trim()));
-                continue;
+            Some(SanitizedThresholdsConfig {
+                fail_on: config.thresholds.fail_on.clone(),
+                min_score: config.thresholds.min_score,
+            })
+        } else {
+            None
+        };
+
+        let ci = if config.ci != stackvet_core::config::CiConfig::default() {
+            Some(SanitizedCiConfig {
+                baseline: config
+                    .ci
+                    .baseline
+                    .as_ref()
+                    .map(|p| sanitize_path(&p.to_string_lossy())),
+                fail_on: config.ci.fail_on.clone(),
+                strict: config.ci.strict,
+            })
+        } else {
+            None
+        };
+
+        let mut rules = BTreeMap::new();
+        for (k, v) in &config.rules {
+            let sanitized_rule = match v {
+                stackvet_core::config::RuleSetting::Simple(s) => {
+                    SanitizedRuleSetting::Simple(s.clone())
+                }
+                stackvet_core::config::RuleSetting::Detailed { severity, enabled } => {
+                    SanitizedRuleSetting::Detailed {
+                        severity: severity.clone(),
+                        enabled: *enabled,
+                    }
+                }
+            };
+            rules.insert(k.clone(), sanitized_rule);
+        }
+
+        let ignore = if config.ignore != stackvet_core::config::IgnoreConfig::default() {
+            Some(SanitizedIgnoreConfig {
+                patterns: config
+                    .ignore
+                    .patterns()
+                    .iter()
+                    .map(|p| sanitize_path(p))
+                    .collect(),
+                use_defaults: config.ignore.use_defaults(),
+            })
+        } else {
+            None
+        };
+
+        let suppressions = config
+            .suppressions
+            .iter()
+            .map(|s| SanitizedSuppressionEntry {
+                rule: s.rule.clone(),
+                rules: s.rules.clone(),
+                path: s.path.as_ref().map(|p| sanitize_path(p)),
+                line: s.line,
+                reason: s.reason.as_ref().map(|_| "[REDACTED]".to_string()),
+                until: s.until.clone(),
+            })
+            .collect();
+
+        let cache = if config.cache != stackvet_core::config::CacheConfig::default() {
+            Some(SanitizedCacheConfig {
+                enabled: config.cache.enabled,
+                dir: config
+                    .cache
+                    .dir
+                    .as_ref()
+                    .map(|d| sanitize_path(&d.to_string_lossy())),
+            })
+        } else {
+            None
+        };
+
+        let scanner = if config.scanner != stackvet_core::config::ScannerConfig::default() {
+            Some(SanitizedScannerConfig {
+                max_file_size: config.scanner.max_file_size,
+                max_depth: config.scanner.max_depth,
+                max_files: config.scanner.max_files,
+                follow_symlinks: config.scanner.follow_symlinks,
+                fail_on_incomplete: config.scanner.fail_on_incomplete,
+            })
+        } else {
+            None
+        };
+
+        let custom_rules = config
+            .custom_rules
+            .iter()
+            .map(|r| SanitizedCustomRule {
+                id: r.id.clone(),
+                name: r.name.clone(),
+                severity: r.severity.to_string(),
+                message: "[REDACTED]".to_string(),
+                pattern: "[REDACTED]".to_string(),
+                files: r.files.iter().map(|f| sanitize_path(f)).collect(),
+            })
+            .collect();
+
+        Self {
+            project,
+            thresholds,
+            ci,
+            rules,
+            ignore,
+            suppressions,
+            cache,
+            scanner,
+            custom_rules,
+        }
+    }
+}
+
+pub fn sanitize_config(config: &StackvetConfig) -> String {
+    let sanitized = SanitizedConfig::from_config(config);
+    let s = toml::to_string_pretty(&sanitized).unwrap_or_default();
+    sanitize_path(s.trim())
+}
+
+pub fn sanitize_config_str(content: &str) -> String {
+    if let Ok(config) = toml::from_str::<StackvetConfig>(content) {
+        return sanitize_config(&config);
+    }
+
+    if let Ok(toml::Value::Table(table)) = toml::from_str::<toml::Value>(content) {
+        let mut safe_table = toml::map::Map::new();
+        for (k, v) in table {
+            match k.as_str() {
+                "project" | "thresholds" | "ci" | "rules" | "scanner" | "cache" | "ignore" => {
+                    safe_table.insert(k, v);
+                }
+                "custom_rules" => {
+                    if let toml::Value::Array(arr) = v {
+                        let redacted_arr = arr
+                            .into_iter()
+                            .map(|rule_val| {
+                                if let toml::Value::Table(mut r_tab) = rule_val {
+                                    r_tab.insert(
+                                        "pattern".to_string(),
+                                        toml::Value::String("[REDACTED]".to_string()),
+                                    );
+                                    r_tab.insert(
+                                        "message".to_string(),
+                                        toml::Value::String("[REDACTED]".to_string()),
+                                    );
+                                    toml::Value::Table(r_tab)
+                                } else {
+                                    rule_val
+                                }
+                            })
+                            .collect();
+                        safe_table.insert(k, toml::Value::Array(redacted_arr));
+                    }
+                }
+                _ => {
+                    // All unallowlisted tables and fields (e.g. tokens, secrets, auth) are discarded
+                }
             }
         }
-        output.push(sanitize_path(line));
+        if let Ok(s) = toml::to_string_pretty(&safe_table) {
+            return sanitize_path(s.trim());
+        }
     }
-    output.join("\n")
+
+    "# Configuration omitted (unparseable)".to_string()
 }
 
 pub fn generate_bug_report(
     root: &Path,
     ctx: &ProjectContext,
-    _config: &StackvetConfig,
+    config: &StackvetConfig,
     diagnostics: &[Diagnostic],
     config_path: Option<&Path>,
 ) -> Result<BugReportData> {
@@ -183,6 +459,8 @@ pub fn generate_bug_report(
             fs::read_to_string(&default_cfg)
                 .ok()
                 .map(|s| sanitize_config_str(&s))
+        } else if *config != StackvetConfig::default() {
+            Some(sanitize_config(config))
         } else {
             None
         }
