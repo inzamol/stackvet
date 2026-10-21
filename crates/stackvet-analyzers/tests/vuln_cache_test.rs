@@ -179,3 +179,36 @@ fn test_refresh_cache_updates_timestamp() {
     let updated_cache = mgr.load_cache().expect("load").expect("exists");
     assert!(updated_cache.last_updated > past_time);
 }
+
+#[test]
+fn test_refresh_cache_when_cache_missing_populates_and_saves() {
+    let dir = temp_test_dir("missing_refresh");
+    let ctx = create_dummy_python_context(&dir, &[("jinja2", "2.4.1")]);
+
+    let cache_path = dir.join("vulnerabilities.json");
+    let mgr = VulnCacheManager::with_custom_path(cache_path.clone());
+
+    // Cache does not exist initially
+    assert!(!cache_path.exists());
+
+    // Run with refresh_cache = true and offline = false
+    let analyzer = SecurityAnalyzer::with_cache_path(false, true, cache_path.clone());
+    let diags = analyzer.analyze(&ctx).expect("analyze");
+
+    // Cache should now exist on disk
+    assert!(cache_path.exists(), "Cache file must be created on refresh");
+
+    // SEC-001 (missing cache warning) must NOT be emitted
+    let has_sec001 = diags.iter().any(|d| d.rule_id.0 == "SEC-001");
+    assert!(
+        !has_sec001,
+        "SEC-001 should not be emitted when cache is refreshed"
+    );
+
+    // Loaded cache must have entries
+    let loaded = mgr.load_cache().expect("load").expect("cache exists");
+    assert!(
+        !loaded.entries.is_empty(),
+        "Cache should be populated with entries"
+    );
+}

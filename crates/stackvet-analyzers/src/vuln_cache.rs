@@ -31,15 +31,21 @@ pub struct VulnDatabaseCache {
     pub entries: Vec<VulnCacheEntry>,
 }
 
-impl Default for VulnDatabaseCache {
-    fn default() -> Self {
+impl VulnDatabaseCache {
+    pub fn new(ttl_seconds: u64) -> Self {
         Self {
             schema_version: "1.0.0".to_string(),
             source: "osv.dev".to_string(),
             last_updated: current_timestamp(),
-            ttl_seconds: DEFAULT_CACHE_TTL_SECS,
+            ttl_seconds,
             entries: Vec::new(),
         }
+    }
+}
+
+impl Default for VulnDatabaseCache {
+    fn default() -> Self {
+        Self::new(DEFAULT_CACHE_TTL_SECS)
     }
 }
 
@@ -77,6 +83,10 @@ impl VulnCacheManager {
 
     pub fn cache_path(&self) -> &Path {
         &self.cache_path
+    }
+
+    pub fn ttl_seconds(&self) -> u64 {
+        DEFAULT_CACHE_TTL_SECS
     }
 
     pub fn load_cache(&self) -> Result<Option<VulnDatabaseCache>> {

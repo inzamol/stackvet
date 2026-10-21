@@ -3,7 +3,7 @@ use stackvet_core::{Analyzer, Confidence, Diagnostic, LanguageTarget, ProjectCon
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use crate::vuln_cache::{VulnCacheManager, VulnCacheStatus, VulnDatabaseCache};
+use crate::vuln_cache::{VulnCacheEntry, VulnCacheManager, VulnCacheStatus, VulnDatabaseCache};
 
 pub struct SecurityAnalyzer {
     pub offline: bool,
@@ -116,11 +116,38 @@ impl Analyzer for SecurityAnalyzer {
         let mgr = self.get_cache_manager(&ctx.root);
         let mut cache_opt = mgr.load_cache()?;
 
-        // Handle refresh_cache flag: if requested and not offline, refresh timestamp
+        // Handle refresh_cache flag: if requested and not offline, fetch fresh advisories from OSV
         if self.refresh_cache && !self.offline {
-            if let Some(ref mut cache) = cache_opt {
-                cache.last_updated = crate::vuln_cache::current_timestamp();
-                let _ = mgr.save_cache(cache);
+            match fetch_advisories_from_osv(&packages_to_audit) {
+                Ok(new_entries) => {
+                    let mut cache =
+                        cache_opt.unwrap_or_else(|| VulnDatabaseCache::new(mgr.ttl_seconds()));
+                    for entry in new_entries {
+                        let norm_pkg =
+                            crate::vuln_cache::normalize_pkg_name(&entry.package, &entry.ecosystem);
+                        let norm_eco = entry.ecosystem.to_ascii_lowercase();
+                        cache.entries.retain(|e| {
+                            !(e.ecosystem.to_ascii_lowercase() == norm_eco
+                                && crate::vuln_cache::normalize_pkg_name(&e.package, &e.ecosystem)
+                                    == norm_pkg
+                                && e.version == entry.version)
+                        });
+                        cache.entries.push(entry);
+                    }
+                    cache.last_updated = crate::vuln_cache::current_timestamp();
+                    if let Err(e) = mgr.save_cache(&cache) {
+                        tracing::error!(
+                            "Failed to save vulnerability cache to {:?}: {e}",
+                            mgr.cache_path()
+                        );
+                        eprintln!("Warning: Failed to save vulnerability cache: {e}");
+                    }
+                    cache_opt = Some(cache);
+                }
+                Err(err) => {
+                    tracing::warn!("Failed to refresh vulnerability cache from OSV.dev: {err}");
+                    // Do NOT bump last_updated if network fetch failed
+                }
             }
         }
 
@@ -241,4 +268,154 @@ impl SecurityAnalyzer {
             }
         }
     }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct OsvQueryResponse {
+    #[serde(default)]
+    vulns: Vec<OsvVulnDetail>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct OsvVulnDetail {
+    id: String,
+    summary: Option<String>,
+    details: Option<String>,
+    #[serde(default)]
+    database_specific: Option<OsvDbSpecific>,
+    #[serde(default)]
+    affected: Vec<OsvAffectedPkg>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct OsvDbSpecific {
+    severity: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct OsvAffectedPkg {
+    #[serde(default)]
+    ranges: Vec<OsvRangeEvent>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct OsvRangeEvent {
+    #[serde(default)]
+    events: Vec<OsvEventDetail>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct OsvEventDetail {
+    fixed: Option<String>,
+}
+
+fn run_async_future<F, T>(future: F) -> Result<T>
+where
+    F: std::future::Future<Output = Result<T>>,
+{
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) => tokio::task::block_in_place(|| handle.block_on(future)),
+        Err(_) => {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?;
+            rt.block_on(future)
+        }
+    }
+}
+
+async fn fetch_advisories_from_osv_async(
+    packages: &[(String, String, String, PathBuf)],
+) -> Result<Vec<VulnCacheEntry>> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent("StackVet-CLI")
+        .build()?;
+
+    let mut entries = Vec::new();
+    let mut any_network_error = false;
+    let mut any_success = false;
+
+    for (pkg, eco, ver, _) in packages {
+        let payload = serde_json::json!({
+            "package": {
+                "name": pkg,
+                "ecosystem": eco,
+            },
+            "version": ver,
+        });
+
+        let resp = match client
+            .post("https://api.osv.dev/v1/query")
+            .json(&payload)
+            .send()
+            .await
+        {
+            Ok(r) => {
+                any_success = true;
+                r
+            }
+            Err(e) => {
+                tracing::warn!("Failed to query OSV for {pkg}@{ver}: {e}");
+                any_network_error = true;
+                continue;
+            }
+        };
+
+        if !resp.status().is_success() {
+            continue;
+        }
+
+        let data: OsvQueryResponse = match resp.json().await {
+            Ok(d) => d,
+            Err(e) => {
+                tracing::warn!("Failed to parse OSV response for {pkg}@{ver}: {e}");
+                continue;
+            }
+        };
+
+        let mut vulns = Vec::new();
+        for v in data.vulns {
+            let summary = v
+                .summary
+                .or(v.details)
+                .unwrap_or_else(|| "Security advisory".to_string());
+            let severity = v
+                .database_specific
+                .and_then(|d| d.severity)
+                .unwrap_or_else(|| "HIGH".to_string());
+            let fixed_in = v
+                .affected
+                .iter()
+                .flat_map(|a| &a.ranges)
+                .flat_map(|r| &r.events)
+                .find_map(|e| e.fixed.clone());
+
+            vulns.push(crate::vuln_cache::CachedVulnerability {
+                id: v.id,
+                summary,
+                severity,
+                fixed_in,
+            });
+        }
+
+        entries.push(VulnCacheEntry {
+            package: pkg.clone(),
+            ecosystem: eco.clone(),
+            version: ver.clone(),
+            vulnerabilities: vulns,
+        });
+    }
+
+    if any_network_error && !any_success {
+        anyhow::bail!("Network error: could not connect to OSV.dev advisory database");
+    }
+
+    Ok(entries)
+}
+
+fn fetch_advisories_from_osv(
+    packages: &[(String, String, String, PathBuf)],
+) -> Result<Vec<VulnCacheEntry>> {
+    run_async_future(fetch_advisories_from_osv_async(packages))
 }

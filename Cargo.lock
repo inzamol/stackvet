@@ -2122,6 +2122,7 @@ dependencies = [
  "stackvet-graph",
  "stackvet-node",
  "stackvet-python",
+ "tokio",
  "tracing",
 ]
 
