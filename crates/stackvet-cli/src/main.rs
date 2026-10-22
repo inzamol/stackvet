@@ -4,7 +4,6 @@ use colored::Colorize;
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
 use comfy_table::{Cell, Color, Row, Table};
-use stackvet_analyzers::run_all_analyzers;
 use stackvet_core::{
     apply_suppressions, config::parse_severity, get_rule_meta, BaselineData, ConfigError, ExitCode,
     HealthScoreExplanation, ProjectContext, Severity, StackvetConfig, ALL_RULES,
@@ -26,6 +25,8 @@ use stackvet_scanner::{
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+mod bug_report;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -52,6 +53,18 @@ pub struct Cli {
 
     #[arg(long, help = "Run offline without querying vulnerability databases")]
     pub offline: bool,
+
+    #[arg(
+        long = "refresh-vuln-cache",
+        help = "Force refresh of local vulnerability advisory database cache"
+    )]
+    pub refresh_vuln_cache: bool,
+
+    #[arg(
+        long,
+        help = "Maximum duration in seconds before halting scan with a timeout"
+    )]
+    pub timeout: Option<u64>,
 
     #[arg(
         long = "ignore",
@@ -324,6 +337,21 @@ pub enum Commands {
         #[arg(short = 'o', long, help = "Writes report directly to a file")]
         output: Option<PathBuf>,
     },
+
+    #[command(
+        about = "Generate a reproducible, sanitized environment and diagnostic report for bug reporting",
+        aliases = ["report-bug", "sysinfo"]
+    )]
+    BugReport {
+        #[arg(help = "Target project directory [default: .]")]
+        path: Option<PathBuf>,
+
+        #[arg(short = 'o', long, help = "Output report to file instead of stdout")]
+        output: Option<PathBuf>,
+
+        #[arg(long, help = "Output report as JSON")]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -391,8 +419,9 @@ fn build_full_context(
     config: &StackvetConfig,
     cli_ignores: &[String],
     verbose: bool,
+    cancellation_token: Option<stackvet_core::CancellationToken>,
 ) -> Result<ProjectContext> {
-    let scanner = ProjectScanner::new(root)
+    let mut scanner = ProjectScanner::new(root)
         .with_default_exclusions(config.ignore.use_defaults())
         .with_ignores(config.ignore.patterns().iter().cloned())
         .with_ignores(cli_ignores.iter().cloned())
@@ -401,6 +430,9 @@ fn build_full_context(
         .with_max_files(config.scanner.max_files)
         .with_follow_symlinks(config.scanner.follow_symlinks)
         .with_verbose(verbose);
+    if let Some(token) = cancellation_token {
+        scanner = scanner.with_cancellation_token(token);
+    }
     let mut ctx = scanner.build_context()?;
     let (py_proj, py_diags) = detect_python_project_with_diagnostics(root);
     ctx.python = py_proj;
@@ -429,11 +461,22 @@ fn sort_diagnostics_deterministic(diagnostics: &mut [stackvet_core::Diagnostic])
 
 fn collect_all_diagnostics(
     ctx: &ProjectContext,
+    config: &StackvetConfig,
     offline: bool,
+    refresh_vuln_cache: bool,
 ) -> Result<(Vec<stackvet_core::Diagnostic>, usize)> {
-    let mut diagnostics = run_all_analyzers(ctx, offline)?;
+    let mut diagnostics =
+        stackvet_analyzers::run_all_analyzers_with_options(ctx, offline, refresh_vuln_cache)?;
     let mut fw_diags = run_all_framework_analyzers(ctx)?;
     diagnostics.append(&mut fw_diags);
+
+    // Custom user rules evaluation (Issue #27)
+    let custom_diags = stackvet_core::config::evaluate_custom_rules(
+        &ctx.root,
+        &ctx.source_files,
+        &config.custom_rules,
+    );
+    diagnostics.extend(custom_diags);
 
     // Deduplicate diagnostics to prevent duplicate findings from distorting scores or reports
     let (mut deduped, duplicates_count) = deduplicate_diagnostics(&diagnostics);
@@ -442,12 +485,14 @@ fn collect_all_diagnostics(
     Ok((deduped, duplicates_count))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn collect_diagnostics_incremental(
     root: &Path,
     ctx: &ProjectContext,
     config: &StackvetConfig,
     cli_ignores: &[String],
     offline: bool,
+    refresh_vuln_cache: bool,
     verbose: bool,
     custom_cache_dir: Option<&Path>,
 ) -> Result<(Vec<stackvet_core::Diagnostic>, usize, bool)> {
@@ -547,7 +592,17 @@ fn collect_diagnostics_incremental(
 
             // 3. Project-wide analyzers receive the full ctx.source_files so rules inspecting
             // full sets (unused deps, lockfile drift, import graph cycles) remain sound.
-            let project_wide_diags = run_all_analyzers(ctx, offline)?;
+            let mut project_wide_diags = stackvet_analyzers::run_all_analyzers_with_options(
+                ctx,
+                offline,
+                refresh_vuln_cache,
+            )?;
+            let custom_diags = stackvet_core::config::evaluate_custom_rules(
+                &ctx.root,
+                &ctx.source_files,
+                &config.custom_rules,
+            );
+            project_wide_diags.extend(custom_diags);
 
             // 4. Per-file framework analyzers only inspect reanalyzed files
             let mut sub_ctx = ctx.clone();
@@ -629,7 +684,8 @@ fn collect_diagnostics_incremental(
                 );
             }
 
-            let (all_diags, duplicates_count) = collect_all_diagnostics(ctx, offline)?;
+            let (all_diags, duplicates_count) =
+                collect_all_diagnostics(ctx, config, offline, refresh_vuln_cache)?;
 
             let mut new_cache = ScanCacheData::new(config_hash);
             for m in &ctx.manifest_files {
@@ -988,8 +1044,8 @@ fn scan_and_collect_diagnostics(
     offline: bool,
     config: &StackvetConfig,
 ) -> Result<Vec<stackvet_core::Diagnostic>> {
-    let ctx = build_full_context(root, config, cli_ignore, false)?;
-    let (raw, _) = collect_all_diagnostics(&ctx, offline)?;
+    let ctx = build_full_context(root, config, cli_ignore, false, None)?;
+    let (raw, _) = collect_all_diagnostics(&ctx, config, offline, false)?;
     let after_rules = config.apply_rule_overrides(raw)?;
     let outcome = apply_suppressions(root, &config.suppressions, after_rules, None);
     Ok(outcome.active_diagnostics)
@@ -1086,6 +1142,7 @@ async fn main() -> Result<()> {
         Some(Commands::Graph { path, .. }) => path.clone(),
         Some(Commands::Init { path, .. }) => path.clone(),
         Some(Commands::Pr { path, .. }) => path.clone(),
+        Some(Commands::BugReport { path, .. }) => path.clone(),
         Some(Commands::Baseline { action }) => match action {
             BaselineAction::Record { path, .. } => path.clone(),
             BaselineAction::Verify { path, .. } => path.clone(),
@@ -1166,8 +1223,34 @@ async fn main() -> Result<()> {
         _ => {}
     }
 
+    let cancellation_token = stackvet_core::CancellationToken::new();
+
+    if let Some(timeout_secs) = cli.timeout {
+        let token = cancellation_token.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_secs(timeout_secs)).await;
+            token.cancel();
+        });
+    }
+
+    {
+        let token = cancellation_token.clone();
+        tokio::spawn(async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                eprintln!("\n{}", "Scan interrupted by user (SIGINT)".yellow().bold());
+                token.cancel();
+            }
+        });
+    }
+
     // Build context with ignore filtering (CLI --ignore > config.ignore > .stackvetignore > default exclusions)
-    let ctx = match build_full_context(&root, &config, &all_cli_ignores, cli.verbose) {
+    let ctx = match build_full_context(
+        &root,
+        &config,
+        &all_cli_ignores,
+        cli.verbose,
+        Some(cancellation_token.clone()),
+    ) {
         Ok(c) => c,
         Err(e) => {
             eprintln!(
@@ -1179,6 +1262,17 @@ async fn main() -> Result<()> {
             ExitCode::ExecutionError.exit();
         }
     };
+
+    if cancellation_token.is_cancelled() {
+        eprintln!(
+            "{}",
+            "Scan cancelled due to timeout or user interruption."
+                .red()
+                .bold()
+        );
+        ExitCode::Cancelled.exit();
+    }
+
     let use_incremental = (cli.incremental || config.cache.enabled) && !cli.no_cache;
     let (raw_diagnostics, duplicates_ignored) = if use_incremental {
         match collect_diagnostics_incremental(
@@ -1187,6 +1281,7 @@ async fn main() -> Result<()> {
             &config,
             &all_cli_ignores,
             cli.offline,
+            cli.refresh_vuln_cache,
             cli.verbose,
             cli.cache_dir.as_deref(),
         ) {
@@ -1195,7 +1290,7 @@ async fn main() -> Result<()> {
                 if cli.verbose {
                     eprintln!("{}", format!("Incremental scan fallback: {e}").yellow());
                 }
-                match collect_all_diagnostics(&ctx, cli.offline) {
+                match collect_all_diagnostics(&ctx, &config, cli.offline, cli.refresh_vuln_cache) {
                     Ok(d) => d,
                     Err(e) => {
                         eprintln!(
@@ -1208,7 +1303,7 @@ async fn main() -> Result<()> {
             }
         }
     } else {
-        match collect_all_diagnostics(&ctx, cli.offline) {
+        match collect_all_diagnostics(&ctx, &config, cli.offline, cli.refresh_vuln_cache) {
             Ok(d) => d,
             Err(e) => {
                 eprintln!(
@@ -2387,6 +2482,32 @@ async fn main() -> Result<()> {
             } else {
                 ExitCode::FindingsViolation.exit();
             }
+        }
+        Some(Commands::BugReport { output, json, .. }) => {
+            let report = bug_report::generate_bug_report(
+                &root,
+                &ctx,
+                &config,
+                &diagnostics,
+                cli.config.as_deref(),
+            )?;
+            if *json {
+                let json_str = serde_json::to_string_pretty(&report)?;
+                if let Some(out_path) = output {
+                    fs::write(out_path, &json_str)?;
+                    println!("Bug report written to {}", out_path.display());
+                } else {
+                    println!("{}", json_str);
+                }
+            } else {
+                bug_report::print_bug_report_summary(&report);
+                if let Some(out_path) = output {
+                    let json_str = serde_json::to_string_pretty(&report)?;
+                    fs::write(out_path, &json_str)?;
+                    println!("Detailed bug report JSON written to {}", out_path.display());
+                }
+            }
+            ExitCode::Success.exit();
         }
         Some(Commands::Explain { .. })
         | Some(Commands::Rules { .. })

@@ -427,3 +427,128 @@ fn test_sarif_uri_handling_with_root_and_external_paths() {
     let phys_snippet = &results[3]["locations"][0]["physicalLocation"];
     assert!(phys_snippet.get("region").is_none());
 }
+
+#[test]
+fn test_sarif_edge_cases_unicode_and_special_paths() {
+    let scan_root = std::path::PathBuf::from("/workspace/test");
+    let reporter = Reporter::with_root(&scan_root);
+
+    // Unicode path and message with symbols and emojis
+    let unicode_diag = Diagnostic::builder("DEP-001", Severity::Error, LanguageTarget::Python)
+        .message("Found syntax conflict in 🚀 module: 'utf8_üñîçødé' & \"symbols\"")
+        .location(
+            DiagnosticLocation::new("/workspace/test/src/üñîçødé_тест/ファイル.py")
+                .with_span(TextSpan::new(10, 25, 4, 18))
+                .with_snippet("import 測試"),
+        )
+        .related_location(
+            DiagnosticLocation::new("/workspace/test/docs/notes (draft)/#section 1.md")
+                .with_span(TextSpan::single_line(42, 1, 30))
+                .with_message("Referenced here 💡"),
+        )
+        .fix(
+            FixAction::new(
+                "Update import line",
+                "/workspace/test/src/üñîçødé_тест/ファイル.py",
+                "import standard_lib",
+            )
+            .with_span(TextSpan::new(10, 10, 4, 15)),
+        )
+        .build();
+
+    let sarif_str = reporter
+        .render_sarif(&[unicode_diag])
+        .expect("render sarif unicode");
+
+    let sarif: serde_json::Value = serde_json::from_str(&sarif_str).expect("parse sarif unicode");
+
+    assert_eq!(sarif["version"], "2.1.0");
+    let result = &sarif["runs"][0]["results"][0];
+
+    // Message preserved with Unicode & emojis
+    assert!(result["message"]["text"]
+        .as_str()
+        .unwrap()
+        .contains("Found syntax conflict in 🚀 module"));
+
+    // Physical location URI encoding
+    let loc = &result["locations"][0]["physicalLocation"];
+    let loc_uri = loc["artifactLocation"]["uri"].as_str().unwrap();
+    assert!(loc_uri.starts_with("src/"));
+    assert_eq!(loc["region"]["startLine"], 10);
+    assert_eq!(loc["region"]["endLine"], 25);
+    assert_eq!(loc["region"]["startColumn"], 4);
+    assert_eq!(loc["region"]["endColumn"], 18);
+    assert_eq!(loc["region"]["snippet"]["text"], "import 測試");
+
+    // Related location path with spaces and hash encoded
+    let rel_loc = &result["relatedLocations"][0]["physicalLocation"];
+    let rel_uri = rel_loc["artifactLocation"]["uri"].as_str().unwrap();
+    assert_eq!(rel_uri, "docs/notes%20(draft)/%23section%201.md");
+    assert_eq!(
+        result["relatedLocations"][0]["message"]["text"],
+        "Referenced here 💡"
+    );
+
+    // Fix replacement deletedRegion
+    let fix = &result["fixes"][0];
+    assert_eq!(fix["description"]["text"], "Update import line");
+    let rep = &fix["fileChanges"][0]["replacements"][0];
+    assert_eq!(rep["deletedRegion"]["startLine"], 10);
+    assert_eq!(rep["deletedRegion"]["endLine"], 10);
+    assert_eq!(rep["insertedContent"]["text"], "import standard_lib");
+}
+
+#[test]
+fn test_sarif_multiline_spans_and_severities() {
+    let reporter = Reporter::new();
+
+    let diags = vec![
+        Diagnostic::builder("SEC-001", Severity::Critical, LanguageTarget::General)
+            .message("Critical vulnerability")
+            .location(
+                DiagnosticLocation::new("security.json").with_span(TextSpan::new(1, 50, 1, 80)),
+            )
+            .build(),
+        Diagnostic::builder("ENV-001", Severity::Warning, LanguageTarget::General)
+            .message("Warning drift")
+            .location(DiagnosticLocation::new("env.txt").with_span(TextSpan::single_line(5, 2, 10)))
+            .build(),
+        Diagnostic::builder("DOC-001", Severity::Info, LanguageTarget::General)
+            .message("Info documentation")
+            .location(
+                DiagnosticLocation::new("README.md").with_span(TextSpan::single_line(1, 1, 1)),
+            )
+            .build(),
+        Diagnostic::builder("HINT-001", Severity::Hint, LanguageTarget::General)
+            .message("Hint optimization")
+            .location(DiagnosticLocation::new("opt.py").with_span(TextSpan::single_line(12, 4, 8)))
+            .build(),
+    ];
+
+    let sarif_str = reporter.render_sarif(&diags).expect("render sarif levels");
+    let sarif: serde_json::Value = serde_json::from_str(&sarif_str).expect("parse sarif levels");
+
+    let results = sarif["runs"][0]["results"].as_array().unwrap();
+    assert_eq!(results.len(), 4);
+
+    // Critical maps to error
+    assert_eq!(results[0]["level"], "error");
+    assert_eq!(
+        results[0]["locations"][0]["physicalLocation"]["region"]["startLine"],
+        1
+    );
+    assert_eq!(
+        results[0]["locations"][0]["physicalLocation"]["region"]["endLine"],
+        50
+    );
+
+    // Warning maps to warning
+    assert_eq!(results[1]["level"], "warning");
+
+    // Info maps to note
+    assert_eq!(results[2]["level"], "note");
+
+    // Hint maps to note
+    assert_eq!(results[3]["level"], "note");
+}

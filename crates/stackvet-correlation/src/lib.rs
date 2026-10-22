@@ -1,7 +1,8 @@
 use stackvet_core::{
-    Diagnostic, DiagnosticContribution, HealthScoreExplanation, RootCause, RuleScoreContribution,
-    Severity,
+    CauseRelationship, Diagnostic, DiagnosticContribution, HealthScoreExplanation, RemediationStep,
+    RootCause, RootCauseEvidence, RuleScoreContribution, Severity,
 };
+
 use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 
@@ -185,6 +186,37 @@ impl CorrelationEngine {
 
         if !circular_diags.is_empty() {
             Self::sort_diagnostics(&mut circular_diags);
+            let evidence: Vec<RootCauseEvidence> = circular_diags
+                .iter()
+                .map(|d| RootCauseEvidence {
+                    file_path: d.location.file_path.clone(),
+                    span: d.location.span,
+                    token: None,
+                    description: d.message.clone(),
+                })
+                .collect();
+
+            let plan = vec![
+                RemediationStep {
+                    order: 1,
+                    action: "Identify the shared models, functions, or type declarations causing cyclic imports.".to_string(),
+                    target_file: circular_diags.first().map(|d| d.location.file_path.clone()),
+                    command: None,
+                },
+                RemediationStep {
+                    order: 2,
+                    action: "Extract the shared components into a dedicated module or interface file.".to_string(),
+                    target_file: None,
+                    command: None,
+                },
+                RemediationStep {
+                    order: 3,
+                    action: "Update import statements across cycle participants to reference the extracted module.".to_string(),
+                    target_file: None,
+                    command: None,
+                },
+            ];
+
             root_causes.push(RootCause {
                 id: "RC-CIRCULAR-IMPORTS".to_string(),
                 title: "Architectural Dependency Cycles Detected".to_string(),
@@ -197,6 +229,9 @@ impl CorrelationEngine {
                     "Extract shared models/interfaces into a common module to break import cycles.".to_string(),
                 automated_fix: None,
                 symptoms: circular_diags,
+                relationship: CauseRelationship::Verified,
+                supporting_evidence: evidence,
+                remediation_plan: plan,
             });
         }
 
@@ -221,6 +256,36 @@ impl CorrelationEngine {
         for (pkg, mut syms) in missing_deps_map {
             Self::sort_diagnostics(&mut syms);
             let auto_fix = syms.iter().find_map(|s| s.fix.clone());
+            let evidence: Vec<RootCauseEvidence> = syms
+                .iter()
+                .map(|d| RootCauseEvidence {
+                    file_path: d.location.file_path.clone(),
+                    span: d.location.span,
+                    token: Some(pkg.clone()),
+                    description: format!(
+                        "Undeclared package '{}' imported in {}",
+                        pkg,
+                        d.location.file_path.display()
+                    ),
+                })
+                .collect();
+
+            let target_manifest = syms.first().map(|d| d.location.file_path.clone());
+            let plan = vec![
+                RemediationStep {
+                    order: 1,
+                    action: format!("Add '{}' to project manifest dependencies.", pkg),
+                    target_file: target_manifest,
+                    command: Some("stackvet fix --rule DEP-002".to_string()),
+                },
+                RemediationStep {
+                    order: 2,
+                    action: "Synchronize package manager lockfile.".to_string(),
+                    target_file: None,
+                    command: None,
+                },
+            ];
+
             root_causes.push(RootCause {
                 id: format!("RC-MISSING-DEP-{}", pkg.to_uppercase()),
                 title: format!("Missing Project Dependency: '{}'", pkg),
@@ -233,6 +298,9 @@ impl CorrelationEngine {
                 primary_remediation: format!("Add '{}' to project manifest dependencies.", pkg),
                 automated_fix: auto_fix,
                 symptoms: syms,
+                relationship: CauseRelationship::Verified,
+                supporting_evidence: evidence,
+                remediation_plan: plan,
             });
         }
 
@@ -252,6 +320,31 @@ impl CorrelationEngine {
                 .map(|d| d.severity)
                 .max()
                 .unwrap_or(Severity::Warning);
+            let evidence: Vec<RootCauseEvidence> = env_diags
+                .iter()
+                .map(|d| RootCauseEvidence {
+                    file_path: d.location.file_path.clone(),
+                    span: d.location.span,
+                    token: None,
+                    description: d.message.clone(),
+                })
+                .collect();
+
+            let plan = vec![
+                RemediationStep {
+                    order: 1,
+                    action: "Synchronize dependency declarations and lockfile versions.".to_string(),
+                    target_file: env_diags.first().map(|d| d.location.file_path.clone()),
+                    command: None,
+                },
+                RemediationStep {
+                    order: 2,
+                    action: "Align target runtime specifications across Dockerfiles, CI matrices, and project manifests.".to_string(),
+                    target_file: None,
+                    command: None,
+                },
+            ];
+
             root_causes.push(RootCause {
                 id: "RC-ENVIRONMENT-DRIFT".to_string(),
                 title: "Environment, Lockfile & Runtime Drift".to_string(),
@@ -264,6 +357,9 @@ impl CorrelationEngine {
                     "Align runtime version declarations across pyproject, package.json, Dockerfile, and CI workflows.".to_string(),
                 automated_fix: None,
                 symptoms: env_diags,
+                relationship: CauseRelationship::Verified,
+                supporting_evidence: evidence,
+                remediation_plan: plan,
             });
         }
 
@@ -288,6 +384,37 @@ impl CorrelationEngine {
                 .map(|d| d.severity)
                 .max()
                 .unwrap_or(Severity::Warning);
+            let evidence: Vec<RootCauseEvidence> = syms
+                .iter()
+                .map(|d| RootCauseEvidence {
+                    file_path: d.location.file_path.clone(),
+                    span: d.location.span,
+                    token: None,
+                    description: d.message.clone(),
+                })
+                .collect();
+
+            let plan = vec![
+                RemediationStep {
+                    order: 1,
+                    action: format!(
+                        "Inspect {} handler and component implementations flagged above.",
+                        fw_name
+                    ),
+                    target_file: syms.first().map(|d| d.location.file_path.clone()),
+                    command: None,
+                },
+                RemediationStep {
+                    order: 2,
+                    action: format!(
+                        "Refactor handlers or components according to {} recommended patterns.",
+                        fw_name
+                    ),
+                    target_file: None,
+                    command: None,
+                },
+            ];
+
             root_causes.push(RootCause {
                 id: format!("RC-FRAMEWORK-{}", fw_name.to_uppercase().replace([' ', '/'], "-")),
                 title: format!("{} Anti-Patterns & Concurrency Hazards", fw_name),
@@ -299,6 +426,9 @@ impl CorrelationEngine {
                 primary_remediation: format!("Review and update {} handlers and components according to recommended practices.", fw_name),
                 automated_fix: None,
                 symptoms: syms,
+                relationship: CauseRelationship::Inferred,
+                supporting_evidence: evidence,
+                remediation_plan: plan,
             });
         }
 
@@ -319,6 +449,33 @@ impl CorrelationEngine {
             let first_remediation = syms[0].suggested_remediation.clone();
             let first_fix = syms.iter().find_map(|s| s.fix.clone());
 
+            let evidence: Vec<RootCauseEvidence> = syms
+                .iter()
+                .map(|d| RootCauseEvidence {
+                    file_path: d.location.file_path.clone(),
+                    span: d.location.span,
+                    token: None,
+                    description: d.message.clone(),
+                })
+                .collect();
+
+            let rel = if rule_id.starts_with("DEP-")
+                || rule_id.starts_with("IMP-")
+                || rule_id.starts_with("NDEP-")
+                || rule_id.starts_with("SEC-")
+            {
+                CauseRelationship::Verified
+            } else {
+                CauseRelationship::Inferred
+            };
+
+            let plan = vec![RemediationStep {
+                order: 1,
+                action: first_remediation.clone(),
+                target_file: syms.first().map(|d| d.location.file_path.clone()),
+                command: None,
+            }];
+
             root_causes.push(RootCause {
                 id: format!("RC-{}", rule_id),
                 title: format!("Rule Violation: {}", rule_id),
@@ -327,6 +484,9 @@ impl CorrelationEngine {
                 primary_remediation: first_remediation,
                 automated_fix: first_fix,
                 symptoms: syms,
+                relationship: rel,
+                supporting_evidence: evidence,
+                remediation_plan: plan,
             });
         }
 
@@ -617,5 +777,69 @@ mod tests {
         assert_eq!(contrib.penalty_per_finding, 20); // max penalty
         assert_eq!(contrib.count, 2);
         assert_eq!(contrib.total_penalty, 22); // accumulated sum: 2 + 20 = 22
+    }
+
+    #[test]
+    fn test_root_cause_relationships_evidence_and_plan() {
+        let engine = CorrelationEngine::new();
+
+        // 1. Missing dependency -> Verified relationship
+        let diag_dep = Diagnostic {
+            rule_id: RuleId::new("DEP-002"),
+            message: "Package 'fastapi' is imported but not declared".to_string(),
+            severity: Severity::Error,
+            location: DiagnosticLocation::new(PathBuf::from("app/main.py")),
+            explanation: "Missing dependency".to_string(),
+            suggested_remediation: "Add fastapi to pyproject.toml".to_string(),
+            fix: None,
+            language: LanguageTarget::Python,
+            ..Default::default()
+        };
+
+        // 2. Framework issue -> Inferred relationship
+        let diag_fw = Diagnostic {
+            rule_id: RuleId::new("FAP-001"),
+            message: "Blocking time.sleep() in async handler".to_string(),
+            severity: Severity::Warning,
+            location: DiagnosticLocation::new(PathBuf::from("app/api.py")),
+            explanation: "Blocks event loop".to_string(),
+            suggested_remediation: "Use await asyncio.sleep()".to_string(),
+            fix: None,
+            language: LanguageTarget::Python,
+            ..Default::default()
+        };
+
+        let root_causes = engine.correlate(vec![diag_dep, diag_fw]);
+        assert_eq!(root_causes.len(), 2);
+
+        let dep_rc = root_causes
+            .iter()
+            .find(|rc| rc.id == "RC-MISSING-DEP-FASTAPI")
+            .expect("missing dep root cause");
+        assert_eq!(dep_rc.relationship, CauseRelationship::Verified);
+        assert!(!dep_rc.supporting_evidence.is_empty());
+        assert_eq!(
+            dep_rc.supporting_evidence[0].file_path,
+            PathBuf::from("app/main.py")
+        );
+        assert_eq!(
+            dep_rc.supporting_evidence[0].token.as_deref(),
+            Some("fastapi")
+        );
+        assert!(!dep_rc.remediation_plan.is_empty());
+        assert_eq!(dep_rc.remediation_plan[0].order, 1);
+
+        let fw_rc = root_causes
+            .iter()
+            .find(|rc| rc.id == "RC-FRAMEWORK-FASTAPI")
+            .expect("framework root cause");
+        assert_eq!(fw_rc.relationship, CauseRelationship::Inferred);
+        assert!(!fw_rc.supporting_evidence.is_empty());
+        assert_eq!(
+            fw_rc.supporting_evidence[0].file_path,
+            PathBuf::from("app/api.py")
+        );
+        assert!(!fw_rc.remediation_plan.is_empty());
+        assert_eq!(fw_rc.remediation_plan[0].order, 1);
     }
 }

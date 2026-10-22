@@ -51,6 +51,12 @@
 - **Description:** The advisory database (OSV.dev) could not be reached to perform vulnerability checks.
 - **Remediation:** Check your internet connection or run with --offline to skip security checks.
 
+### 2.2 SEC-002: Stale Vulnerability Advisory Database Cache
+- **Default Severity:** `WARNING`
+- **Description:** Vulnerability analysis was performed using a local cache that has exceeded its configured time-to-live (TTL).
+- **Remediation:** Run with '--refresh-vuln-cache' or verify internet access to update the local advisory database.
+
+
 ---
 
 ## 3. Environment & Drift Rules (`ENV-xxx`)
@@ -563,6 +569,22 @@
 - **Description:** A Python source file contains invalid syntax and could not be parsed into an AST.
 - **Remediation:** Fix the syntax error in the source file.
 
+### 10.3 DISC-003: JavaScript or TypeScript Syntax Error in Source File
+- **Default Severity:** `WARNING`
+- **Description:** A JavaScript or TypeScript source file contains invalid syntax and could not be parsed into an AST.
+- **Remediation:** Fix the syntax error in the source file.
+
+### 10.4 DISC-004: Malformed Project Manifest or Configuration File
+- **Default Severity:** `ERROR`
+- **Description:** A project manifest or configuration file contains invalid syntax, corrupted structure, or unreadable content.
+- **Remediation:** Validate and correct the syntax of the manifest file (e.g. pyproject.toml, package.json, or tsconfig.json).
+
+### 10.5 DISC-005: Scan Resource Limit or Repository Boundary Exceeded
+- **Default Severity:** `WARNING`
+- **Description:** A file, symlink, or directory structure exceeded the configured scanner limits (such as max file size, max depth, or boundary escaping).
+- **Remediation:** Increase scanner limits in stackvet.toml or exclude the problematic path using .stackvetignore.
+
+
 ---
 
 ## 11. CI/CD Workflow Rules (`CI-xxx`)
@@ -654,4 +676,82 @@
 - **Default Severity:** `WARNING`
 - **Description:** Async Celery task invokes `time.sleep()`, blocking the async event loop.
 - **Remediation:** Use `await asyncio.sleep()` instead of `time.sleep()`.
+
+---
+
+## 14. Node.js & JavaScript Dependency Rules (`NDEP-xxx`)
+
+### 14.1 NDEP-001: Missing Node Package
+- **Default Severity:** `ERROR`
+- **Description:** Imported package in `.ts`, `.tsx`, or `.js` is missing from `package.json` dependencies.
+- **Remediation:** Run `pnpm add <pkg>` or `npm install <pkg>`.
+
+### 14.2 NDEP-002: Unused Node Package
+- **Default Severity:** `WARNING`
+- **Description:** Production dependency in `package.json` is never imported in any source files.
+- **Remediation:** Remove unused package from dependencies or move to devDependencies.
+
+### 14.3 NDEP-003: Unmet Peer Dependency
+- **Default Severity:** `ERROR`
+- **Description:** Declared package version conflicts with required peer dependency constraints.
+- **Remediation:** Align installed package versions with peer dependency requirements.
+
+### 14.4 NDEP-004: Lockfile Out of Sync
+- **Default Severity:** `WARNING`
+- **Description:** Package lockfile (`pnpm-lock.yaml` / `package-lock.json`) is missing or out of sync.
+- **Remediation:** Run `pnpm install` or `npm install` to generate and sync the lockfile.
+
+### 14.5 NDEP-005: DevDependency in Production
+- **Default Severity:** `ERROR`
+- **Description:** Package from `devDependencies` is imported inside production source files.
+- **Remediation:** Move package from `devDependencies` to `dependencies` in `package.json`.
+
+### 14.6 NDEP-006: Inconsistent Dependency Version
+- **Default Severity:** `WARNING`
+- **Description:** Dependency versions across packages, workspace members, or lockfile resolutions are inconsistent or conflicting.
+- **Remediation:** Align dependency version constraints across packages and synchronize the lockfile.
+
+---
+
+## 15. React Framework Rules (`RCT-xxx`)
+
+### 15.1 RCT-001: Missing Hook Dependencies
+- **Default Severity:** `WARNING`
+- **Description:** `useEffect` or `useCallback` missing referenced closure variables in dependency array.
+- **Remediation:** Include all referenced variables in the dependency array or wrap in `useCallback`.
+
+### 15.2 RCT-002: Conditional Hook Call
+- **Default Severity:** `ERROR`
+- **Description:** React hook invoked conditionally inside if-statement or loop.
+- **Remediation:** Move hook calls to the top level of the component function.
+
+### 15.3 RCT-003: Direct State Mutation
+- **Default Severity:** `ERROR`
+- **Description:** Mutating state directly (`state.val = 1`) rather than using state dispatcher.
+- **Remediation:** Use `setState` dispatcher or produce an immutable copy.
+
+### 15.4 RCT-004: Missing Key in List
+- **Default Severity:** `WARNING`
+- **Description:** JSX element inside `.map()` loop is missing a unique `key` prop.
+- **Remediation:** Provide a stable unique identifier as the key prop: `<Item key={item.id} />`.
+
+### 15.5 RCT-005: Barrel Import Bloat
+- **Default Severity:** `WARNING`
+- **Description:** Importing from root barrel file causing excessive bundle size.
+- **Remediation:** Import from specific subpaths (e.g. `'@mui/material/Button'`).
+
+---
+
+## 16. Next.js Framework Rules (`NXT-xxx`)
+
+### 16.1 NXT-001: Server Component Client API
+- **Default Severity:** `ERROR`
+- **Description:** Client hooks or browser globals used in Server Component without `'use client'`.
+- **Remediation:** Add `'use client'` directive to the top of the file or extract client logic into a separate component.
+
+### 16.2 NXT-002: Client Component Private Secret
+- **Default Severity:** `CRITICAL`
+- **Description:** Client component references server-only environment variable.
+- **Remediation:** Prefix variable with `NEXT_PUBLIC_` if intended for browser, or access only on server.
+
 

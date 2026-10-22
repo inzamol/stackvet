@@ -47,6 +47,7 @@ pub struct ProjectScanner {
     max_depth: usize,
     max_files: usize,
     follow_symlinks: bool,
+    cancellation_token: Option<stackvet_core::CancellationToken>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -61,6 +62,7 @@ pub struct ScanResult {
     pub oversized_files: Vec<(PathBuf, u64)>,
     pub skipped_symlinks: Vec<(PathBuf, String)>,
     pub is_truncated: bool,
+    pub was_cancelled: bool,
 }
 
 impl ProjectScanner {
@@ -74,7 +76,14 @@ impl ProjectScanner {
             max_depth: 40,
             max_files: 50_000,
             follow_symlinks: false,
+            cancellation_token: None,
         }
+    }
+
+    /// Configures an optional cooperative cancellation token.
+    pub fn with_cancellation_token(mut self, token: stackvet_core::CancellationToken) -> Self {
+        self.cancellation_token = Some(token);
+        self
     }
 
     /// Adds custom ignore patterns (e.g. from `stackvet.toml [ignore]` or CLI `--ignore`).
@@ -179,6 +188,14 @@ impl ProjectScanner {
         let walker = builder.build();
 
         for entry_res in walker {
+            if let Some(ref token) = self.cancellation_token {
+                if token.is_cancelled() {
+                    result.was_cancelled = true;
+                    result.is_truncated = true;
+                    break;
+                }
+            }
+
             let entry = match entry_res {
                 Ok(e) => e,
                 Err(err) => {
@@ -368,7 +385,20 @@ impl ProjectScanner {
             );
         }
 
-        if scan.is_truncated {
+        if scan.was_cancelled {
+            ctx.discovery_diagnostics.push(
+                stackvet_core::Diagnostic::builder(
+                    "DISC-005",
+                    stackvet_core::Severity::Warning,
+                    stackvet_core::LanguageTarget::General,
+                )
+                .message("Scan operation was cancelled before completion (interrupted by user or timeout exceeded)")
+                .location(stackvet_core::DiagnosticLocation::new(self.root.clone()))
+                .explanation("The scan did not complete full traversal due to a cancellation signal (SIGINT) or configured timeout.")
+                .remediation("Increase the timeout with '--timeout <seconds>' or re-run without interruption.")
+                .build(),
+            );
+        } else if scan.is_truncated {
             ctx.discovery_diagnostics.push(
                 stackvet_core::Diagnostic::builder(
                     "DISC-005",
@@ -549,6 +579,31 @@ mod tests {
 
         assert!(res.source_files.contains(&temp_dir.join("shallow.py")));
         assert!(!res.source_files.contains(&deep_dir.join("deep.py")));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_scanner_cancellation_token() {
+        let temp_dir = make_temp_dir("cancellation");
+        for i in 0..10 {
+            fs::write(temp_dir.join(format!("file_{}.py", i)), "pass\n").unwrap();
+        }
+
+        let token = stackvet_core::CancellationToken::new();
+        token.cancel(); // immediately pre-cancelled
+
+        let scanner = ProjectScanner::new(&temp_dir).with_cancellation_token(token);
+        let res = scanner.scan();
+
+        assert!(res.was_cancelled);
+        assert!(res.is_truncated);
+
+        let ctx = scanner.build_context().unwrap();
+        assert!(ctx
+            .discovery_diagnostics
+            .iter()
+            .any(|d| d.rule_id.0 == "DISC-005" && d.message.contains("cancelled")));
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

@@ -289,12 +289,29 @@ impl Reporter {
                     Severity::Warning => "[WARN]".yellow(),
                     _ => "[INFO]".cyan(),
                 };
-                out.push_str(&format!("{}. {} {}\n", idx + 1, sev_badge, rc.title.bold()));
+                let rel_str = format!("[{}]", rc.relationship);
+                let rel_colored = match rc.relationship {
+                    stackvet_core::CauseRelationship::Verified => rel_str.green(),
+                    stackvet_core::CauseRelationship::Inferred => rel_str.magenta(),
+                };
+                out.push_str(&format!(
+                    "{}. {} {} {}\n",
+                    idx + 1,
+                    sev_badge,
+                    rc.title.bold(),
+                    rel_colored
+                ));
                 out.push_str(&format!("   Summary: {}\n", rc.summary));
                 out.push_str(&format!(
                     "   Remediation: {}\n",
                     rc.primary_remediation.cyan()
                 ));
+                if !rc.remediation_plan.is_empty() {
+                    out.push_str("   Action Plan:\n");
+                    for step in &rc.remediation_plan {
+                        out.push_str(&format!("     {}. {}\n", step.order, step.action));
+                    }
+                }
                 out.push_str(&format!("   Symptoms Count: {}\n\n", rc.symptoms.len()));
             }
         }

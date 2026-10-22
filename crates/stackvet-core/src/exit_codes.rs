@@ -12,6 +12,8 @@ pub enum ExitCode {
     ExecutionError = 3,
     /// Incomplete analysis due to malformed files, unreadable files, or resource limit exhaustion.
     IncompleteAnalysis = 4,
+    /// Execution interrupted by cancellation signal (SIGINT / Ctrl+C).
+    Cancelled = 130,
 }
 
 impl ExitCode {
