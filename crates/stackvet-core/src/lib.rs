@@ -12,8 +12,8 @@ pub use baseline::{BaselineData, BaselineDiff, BaselineIssueEntry};
 
 pub mod config;
 pub use config::{
-    evaluate_custom_rules, CacheConfig, ConfigError, CustomRuleDefinition, ScannerConfig,
-    StackvetConfig,
+    evaluate_custom_rules, ArchitectureConfig, CacheConfig, ConfigError, CustomRuleDefinition,
+    ForbiddenDependencyRule, ScannerConfig, StackvetConfig,
 };
 
 pub mod exit_codes;
@@ -636,6 +636,10 @@ pub struct PythonProjectInfo {
     pub workspace_packages: HashMap<String, String>, // workspace package name -> version
     #[serde(default)]
     pub workspace_members: Vec<WorkspaceMemberInfo>,
+    #[serde(default)]
+    pub entry_points: Vec<String>,
+    #[serde(default)]
+    pub pythonpath: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -656,6 +660,10 @@ pub struct NodeProjectInfo {
     pub workspace_members: Vec<WorkspaceMemberInfo>,
     #[serde(default)]
     pub scripts: HashMap<String, String>,
+    #[serde(default)]
+    pub entry_points: Vec<String>,
+    #[serde(default)]
+    pub package_imports: HashMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -670,6 +678,8 @@ pub struct ProjectContext {
     pub manifest_files: Vec<PathBuf>,
     #[serde(default)]
     pub discovery_diagnostics: Vec<Diagnostic>,
+    #[serde(default)]
+    pub architecture: Option<ArchitectureConfig>,
 }
 
 impl ProjectContext {
@@ -683,6 +693,7 @@ impl ProjectContext {
             ci_workflows: Vec::new(),
             manifest_files: Vec::new(),
             discovery_diagnostics: Vec::new(),
+            architecture: None,
         }
     }
 }

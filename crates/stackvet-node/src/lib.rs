@@ -208,6 +208,10 @@ pub fn extract_package_name(specifier: &str) -> Option<String> {
         || specifier.starts_with('/')
         || specifier.starts_with("@/")
         || specifier.starts_with("~/")
+        || specifier.starts_with('#')
+        || specifier.starts_with("node:")
+        || specifier.starts_with("bun:")
+        || specifier.starts_with("deno:")
     {
         return None;
     }
@@ -432,6 +436,73 @@ pub fn resolve_aliased_import(
     None
 }
 
+/// Checks whether an import specifier is a Node.js package subpath import (#dep, #internal/*)
+pub fn is_package_subpath_import(specifier: &str) -> bool {
+    specifier.starts_with('#')
+}
+
+/// Resolves a package subpath import (#dep, #internal/foo) to a concrete file on disk
+pub fn resolve_package_subpath_import(
+    root: &Path,
+    package_imports: &std::collections::HashMap<String, Vec<String>>,
+    specifier: &str,
+) -> Option<std::path::PathBuf> {
+    if !specifier.starts_with('#') {
+        return None;
+    }
+    let extensions = ["ts", "tsx", "js", "jsx", "mjs", "cjs", "json"];
+
+    // 1. Exact match
+    if let Some(targets) = package_imports.get(specifier) {
+        for target in targets {
+            let target_trimmed = target.trim_start_matches("./");
+            let candidate = root.join(target_trimmed);
+            if let Some(resolved) = resolve_candidate_path(&candidate, &extensions) {
+                return Some(resolved);
+            }
+        }
+        return None;
+    }
+
+    // 2. Wildcard pattern match
+    let mut best_match: Option<(&str, usize, &[String])> = None;
+    for (pattern, targets) in package_imports {
+        if let Some(star_idx) = pattern.find('*') {
+            let prefix = &pattern[..star_idx];
+            let suffix = &pattern[star_idx + 1..];
+            if specifier.starts_with(prefix)
+                && specifier.ends_with(suffix)
+                && specifier.len() >= prefix.len() + suffix.len()
+            {
+                let prefix_len = prefix.len();
+                if best_match
+                    .as_ref()
+                    .is_none_or(|(_, len, _)| prefix_len > *len)
+                {
+                    best_match = Some((pattern.as_str(), prefix_len, targets.as_slice()));
+                }
+            }
+        }
+    }
+
+    if let Some((pattern, _, targets)) = best_match {
+        let star_idx = pattern.find('*').unwrap();
+        let prefix = &pattern[..star_idx];
+        let suffix = &pattern[star_idx + 1..];
+        let remainder = &specifier[prefix.len()..specifier.len() - suffix.len()];
+        for target in targets {
+            let clean_target = target.replace('*', remainder);
+            let target_trimmed = clean_target.trim_start_matches("./");
+            let candidate = root.join(target_trimmed);
+            if let Some(resolved) = resolve_candidate_path(&candidate, &extensions) {
+                return Some(resolved);
+            }
+        }
+    }
+
+    None
+}
+
 fn resolve_candidate_path(candidate: &Path, extensions: &[&str]) -> Option<std::path::PathBuf> {
     if candidate.is_file() {
         return Some(candidate.to_path_buf());
@@ -528,7 +599,96 @@ pub fn parse_package_json(content: &str, path: &Path) -> Result<NodeProjectInfo>
         }
     }
 
+    // Extract package subpath imports: "imports": { "#internal/*": "./src/internal/*.ts", ... }
+    if let Some(imports_obj) = val.get("imports").and_then(|v| v.as_object()) {
+        for (k, v) in imports_obj {
+            if k.starts_with('#') {
+                let mut targets = Vec::new();
+                collect_import_targets(v, &mut targets);
+                if !targets.is_empty() {
+                    info.package_imports.insert(k.clone(), targets);
+                }
+            }
+        }
+    }
+
+    // Extract declared entry points from package.json: main, module, browser, bin, exports, types
+    collect_package_json_entry_points(&val, &mut info.entry_points);
+    info.entry_points.sort();
+    info.entry_points.dedup();
+
     Ok(info)
+}
+
+fn collect_import_targets(val: &serde_json::Value, out: &mut Vec<String>) {
+    if let Some(s) = val.as_str() {
+        out.push(s.to_string());
+    } else if let Some(arr) = val.as_array() {
+        for elem in arr {
+            collect_import_targets(elem, out);
+        }
+    } else if let Some(obj) = val.as_object() {
+        for v in obj.values() {
+            collect_import_targets(v, out);
+        }
+    }
+}
+
+fn collect_package_json_entry_points(val: &serde_json::Value, out: &mut Vec<String>) {
+    if let Some(main) = val.get("main").and_then(|v| v.as_str()) {
+        out.push(main.to_string());
+    }
+    if let Some(module) = val.get("module").and_then(|v| v.as_str()) {
+        out.push(module.to_string());
+    }
+    if let Some(browser) = val.get("browser") {
+        if let Some(s) = browser.as_str() {
+            out.push(s.to_string());
+        } else if let Some(obj) = browser.as_object() {
+            for v in obj.values() {
+                if let Some(s) = v.as_str() {
+                    out.push(s.to_string());
+                }
+            }
+        }
+    }
+    if let Some(bin) = val.get("bin") {
+        if let Some(s) = bin.as_str() {
+            out.push(s.to_string());
+        } else if let Some(obj) = bin.as_object() {
+            for v in obj.values() {
+                if let Some(s) = v.as_str() {
+                    out.push(s.to_string());
+                }
+            }
+        }
+    }
+    if let Some(types) = val.get("types").and_then(|v| v.as_str()) {
+        out.push(types.to_string());
+    }
+    if let Some(typings) = val.get("typings").and_then(|v| v.as_str()) {
+        out.push(typings.to_string());
+    }
+    if let Some(exports) = val.get("exports") {
+        extract_json_leaf_strings(exports, out);
+    }
+}
+
+fn extract_json_leaf_strings(val: &serde_json::Value, out: &mut Vec<String>) {
+    match val {
+        serde_json::Value::String(s) => out.push(s.clone()),
+        serde_json::Value::Array(arr) => {
+            for item in arr {
+                extract_json_leaf_strings(item, out);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for v in map.values() {
+                extract_json_leaf_strings(v, out);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Detects a Node project and loads its manifest, workspace packages, and lockfile versions.
@@ -892,6 +1052,10 @@ mod tests {
         );
         assert_eq!(extract_package_name("./components/Button"), None);
         assert_eq!(extract_package_name("../utils"), None);
+        assert_eq!(extract_package_name("node:test"), None);
+        assert_eq!(extract_package_name("node:fs/promises"), None);
+        assert_eq!(extract_package_name("bun:test"), None);
+        assert_eq!(extract_package_name("deno:path"), None);
     }
 
     #[test]
@@ -1012,5 +1176,60 @@ async function load() {
         assert!(is_tsconfig_alias("@config", &paths));
         assert!(!is_tsconfig_alias("react", &paths));
         assert!(!is_tsconfig_alias("@mui/material", &paths));
+    }
+
+    #[test]
+    fn test_package_subpath_imports() {
+        let pkg_json = r##"{
+            "name": "my-pkg",
+            "imports": {
+                "#dep": "./src/dep.ts",
+                "#internal/*": "./src/internal/*.ts",
+                "#nested/*": {
+                    "import": "./src/nested/*.js",
+                    "default": "./src/nested/*.ts"
+                }
+            }
+        }"##;
+
+        let info = parse_package_json(pkg_json, Path::new("package.json")).unwrap();
+        assert!(info.package_imports.contains_key("#dep"));
+        assert!(info.package_imports.contains_key("#internal/*"));
+        assert!(info.package_imports.contains_key("#nested/*"));
+
+        assert_eq!(extract_package_name("#dep"), None);
+        assert_eq!(extract_package_name("#internal/utils"), None);
+        assert!(is_package_subpath_import("#dep"));
+        assert!(is_package_subpath_import("#internal/utils"));
+        assert!(!is_package_subpath_import("./utils"));
+        assert!(!is_package_subpath_import("lodash"));
+
+        let temp_dir = std::env::temp_dir().join(format!(
+            "stackvet_node_subpath_test_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let src_dir = temp_dir.join("src");
+        let internal_dir = src_dir.join("internal");
+        fs::create_dir_all(&internal_dir).unwrap();
+        fs::write(src_dir.join("dep.ts"), "export const dep = 1;\n").unwrap();
+        fs::write(internal_dir.join("logger.ts"), "export const logger = 2;\n").unwrap();
+
+        let resolved_dep = resolve_package_subpath_import(&temp_dir, &info.package_imports, "#dep");
+        assert!(resolved_dep.is_some());
+        assert_eq!(resolved_dep.unwrap(), src_dir.join("dep.ts"));
+
+        let resolved_logger =
+            resolve_package_subpath_import(&temp_dir, &info.package_imports, "#internal/logger");
+        assert!(resolved_logger.is_some());
+        assert_eq!(resolved_logger.unwrap(), internal_dir.join("logger.ts"));
+
+        let resolved_missing =
+            resolve_package_subpath_import(&temp_dir, &info.package_imports, "#internal/missing");
+        assert!(resolved_missing.is_none());
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

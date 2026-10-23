@@ -47,6 +47,7 @@ pub struct ProjectScanner {
     max_depth: usize,
     max_files: usize,
     follow_symlinks: bool,
+    parents: bool,
     cancellation_token: Option<stackvet_core::CancellationToken>,
 }
 
@@ -76,6 +77,7 @@ impl ProjectScanner {
             max_depth: 40,
             max_files: 50_000,
             follow_symlinks: false,
+            parents: true,
             cancellation_token: None,
         }
     }
@@ -83,6 +85,12 @@ impl ProjectScanner {
     /// Configures an optional cooperative cancellation token.
     pub fn with_cancellation_token(mut self, token: stackvet_core::CancellationToken) -> Self {
         self.cancellation_token = Some(token);
+        self
+    }
+
+    /// Configures whether parent directories are traversed for ignore files.
+    pub fn with_parents(mut self, parents: bool) -> Self {
+        self.parents = parents;
         self
     }
 
@@ -138,7 +146,7 @@ impl ProjectScanner {
 
         let mut builder = WalkBuilder::new(&self.root);
         builder.hidden(false);
-        builder.parents(false);
+        builder.parents(self.parents);
         builder.git_ignore(true);
         builder.max_depth(Some(self.max_depth));
         builder.follow_links(self.follow_symlinks);
@@ -347,6 +355,7 @@ impl ProjectScanner {
         for (oversized_path, size_bytes) in &scan.oversized_files {
             let size_mb = size_bytes / (1024 * 1024);
             let limit_mb = self.max_file_size / (1024 * 1024);
+            let clean_path = oversized_path.to_string_lossy().replace(r"\\?\", "");
             ctx.discovery_diagnostics.push(
                 stackvet_core::Diagnostic::builder(
                     "DISC-005",
@@ -355,7 +364,7 @@ impl ProjectScanner {
                 )
                 .message(format!(
                     "File '{}' ({} MB) exceeds maximum scanner size limit ({} MB)",
-                    oversized_path.display(),
+                    clean_path,
                     size_mb,
                     limit_mb
                 ))
@@ -367,6 +376,7 @@ impl ProjectScanner {
         }
 
         for (symlink_path, reason) in &scan.skipped_symlinks {
+            let clean_symlink = symlink_path.to_string_lossy().replace(r"\\?\", "");
             ctx.discovery_diagnostics.push(
                 stackvet_core::Diagnostic::builder(
                     "DISC-005",
@@ -375,7 +385,7 @@ impl ProjectScanner {
                 )
                 .message(format!(
                     "Symlink '{}' was skipped: {}",
-                    symlink_path.display(),
+                    clean_symlink,
                     reason
                 ))
                 .location(stackvet_core::DiagnosticLocation::new(symlink_path.clone()))

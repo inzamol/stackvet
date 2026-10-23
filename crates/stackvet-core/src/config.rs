@@ -39,6 +39,24 @@ pub struct StackvetConfig {
     pub scanner: ScannerConfig,
     #[serde(default)]
     pub custom_rules: Vec<CustomRuleDefinition>,
+    #[serde(default)]
+    pub architecture: ArchitectureConfig,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ArchitectureConfig {
+    #[serde(default)]
+    pub layers: Vec<String>,
+    #[serde(default)]
+    pub forbidden: Vec<ForbiddenDependencyRule>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ForbiddenDependencyRule {
+    pub from: String,
+    pub cannot_import: String,
+    #[serde(default)]
+    pub message: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

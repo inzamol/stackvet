@@ -1,0 +1,7 @@
+editors/vscode/bin/**
+editors/vscode/out/**
+tests/fixtures/**
+**/fixtures/**
+dist/**
+target/**
+.cargo-target/**

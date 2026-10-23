@@ -64,6 +64,8 @@ packages/npm/bin/stackvet
 packages/npm/README.md
 packages/npm/LICENSE
 packages/npm/*.tgz
+editors/vscode/bin/
+editors/vscode/*.vsix
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -116,6 +118,8 @@ desktop.ini
 
 # --- Test Outputs, Logs & Baselines ---
 *.log
+**/.stackvet/
+.stackvet/
 **/.stackvet-baseline.json
 tests/fixtures/**/*.log
 tests/fixtures/**/.stackvet.toml

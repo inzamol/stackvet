@@ -71,6 +71,9 @@ impl Analyzer for NodeDependencyAnalyzer {
                     if is_node_builtin(&imp.specifier) {
                         continue;
                     }
+                    if imp.specifier.starts_with('#') {
+                        continue;
+                    }
                     if is_tsconfig_alias(&imp.specifier, &node_info.tsconfig_paths) {
                         continue;
                     }

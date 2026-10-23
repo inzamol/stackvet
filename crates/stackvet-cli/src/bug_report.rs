@@ -2,7 +2,9 @@ use anyhow::Result;
 use colored::Colorize;
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
-use comfy_table::{Cell, Color, Row, Table};
+use comfy_table::{
+    Attribute, Cell, Color, ColumnConstraint, ContentArrangement, Row, Table, Width,
+};
 use serde::{Deserialize, Serialize};
 use stackvet_core::{Diagnostic, ProjectContext, StackvetConfig};
 use std::collections::BTreeMap;
@@ -512,18 +514,33 @@ pub fn generate_bug_report(
 pub fn print_bug_report_summary(report: &BugReportData) {
     println!(
         "\n{}",
-        "=== StackVet Reproducible Bug Report Summary ==="
+        "─── StackVet Reproducible Bug Report Summary ──────────────────────────"
             .cyan()
             .bold()
     );
 
+    let term_width = crossterm::terminal::size()
+        .map(|(w, _)| w.saturating_sub(2))
+        .unwrap_or(100)
+        .clamp(80, 130);
+
     let mut table = Table::new();
     table.load_preset(UTF8_FULL);
     table.apply_modifier(UTF8_ROUND_CORNERS);
+    table.set_content_arrangement(ContentArrangement::Dynamic);
+    table.set_width(term_width);
     table.set_header(vec![
-        Cell::new("Attribute").fg(Color::Cyan),
-        Cell::new("Value").fg(Color::Cyan),
+        Cell::new("Attribute")
+            .fg(Color::Cyan)
+            .add_attribute(Attribute::Bold),
+        Cell::new("Value")
+            .fg(Color::Cyan)
+            .add_attribute(Attribute::Bold),
     ]);
+
+    if let Some(col) = table.column_mut(0) {
+        col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(24)));
+    }
 
     table.add_row(Row::from(vec![
         Cell::new("StackVet Version"),

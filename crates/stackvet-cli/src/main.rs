@@ -3,7 +3,9 @@ use clap::{Parser, Subcommand, ValueEnum};
 use colored::Colorize;
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
-use comfy_table::{Cell, Color, Row, Table};
+use comfy_table::{
+    Attribute, Cell, Color, ColumnConstraint, ContentArrangement, Row, Table, Width,
+};
 use stackvet_core::{
     apply_suppressions, config::parse_severity, get_rule_meta, BaselineData, ConfigError, ExitCode,
     HealthScoreExplanation, ProjectContext, Severity, StackvetConfig, ALL_RULES,
@@ -44,24 +46,36 @@ pub struct Cli {
         long,
         value_enum,
         default_value_t = OutputFormat::Text,
+        global = true,
         help = "Output report format"
     )]
     pub format: OutputFormat,
 
-    #[arg(short, long, help = "Path to custom configuration file (.toml)")]
+    #[arg(
+        short,
+        long,
+        global = true,
+        help = "Path to custom configuration file (.toml)"
+    )]
     pub config: Option<PathBuf>,
 
-    #[arg(long, help = "Run offline without querying vulnerability databases")]
+    #[arg(
+        long,
+        global = true,
+        help = "Run offline without querying vulnerability databases"
+    )]
     pub offline: bool,
 
     #[arg(
         long = "refresh-vuln-cache",
+        global = true,
         help = "Force refresh of local vulnerability advisory database cache"
     )]
     pub refresh_vuln_cache: bool,
 
     #[arg(
         long,
+        global = true,
         help = "Maximum duration in seconds before halting scan with a timeout"
     )]
     pub timeout: Option<u64>,
@@ -73,19 +87,29 @@ pub struct Cli {
     )]
     pub ignore: Vec<String>,
 
-    #[arg(short, long, help = "Show verbose diagnostic and scan details")]
+    #[arg(
+        short,
+        long,
+        global = true,
+        help = "Show verbose diagnostic and scan details"
+    )]
     pub verbose: bool,
 
     #[arg(
         long,
+        global = true,
         help = "Enable incremental scanning reusing cached file diagnostics"
     )]
     pub incremental: bool,
 
-    #[arg(long, help = "Disable scan caching (force full scan)")]
+    #[arg(long, global = true, help = "Disable scan caching (force full scan)")]
     pub no_cache: bool,
 
-    #[arg(long, help = "Custom directory for incremental scan cache")]
+    #[arg(
+        long,
+        global = true,
+        help = "Custom directory for incremental scan cache"
+    )]
     pub cache_dir: Option<PathBuf>,
 
     #[arg(
@@ -414,6 +438,27 @@ pub enum GraphFormat {
     Dot,
 }
 
+fn find_enclosing_project_root(path: &Path) -> PathBuf {
+    let start = if path.is_file() {
+        path.parent().unwrap_or(path)
+    } else {
+        path
+    };
+    let mut curr = Some(start);
+    while let Some(dir) = curr {
+        if dir.join("package.json").is_file()
+            || dir.join("pyproject.toml").is_file()
+            || dir.join("requirements.txt").is_file()
+            || dir.join("Cargo.toml").is_file()
+            || dir.join(".git").exists()
+        {
+            return dir.to_path_buf();
+        }
+        curr = dir.parent();
+    }
+    start.to_path_buf()
+}
+
 fn build_full_context(
     root: &Path,
     config: &StackvetConfig,
@@ -421,6 +466,12 @@ fn build_full_context(
     verbose: bool,
     cancellation_token: Option<stackvet_core::CancellationToken>,
 ) -> Result<ProjectContext> {
+    let project_root = if root.is_file() {
+        find_enclosing_project_root(root)
+    } else {
+        root.to_path_buf()
+    };
+
     let mut scanner = ProjectScanner::new(root)
         .with_default_exclusions(config.ignore.use_defaults())
         .with_ignores(config.ignore.patterns().iter().cloned())
@@ -434,13 +485,17 @@ fn build_full_context(
         scanner = scanner.with_cancellation_token(token);
     }
     let mut ctx = scanner.build_context()?;
-    let (py_proj, py_diags) = detect_python_project_with_diagnostics(root);
+    if root.is_file() {
+        ctx.root = project_root.clone();
+    }
+    let (py_proj, py_diags) = detect_python_project_with_diagnostics(&project_root);
     ctx.python = py_proj;
     ctx.discovery_diagnostics.extend(py_diags);
 
-    let (node_proj, node_diags) = detect_node_project_with_diagnostics(root);
+    let (node_proj, node_diags) = detect_node_project_with_diagnostics(&project_root);
     ctx.node = node_proj;
     ctx.discovery_diagnostics.extend(node_diags);
+    ctx.architecture = Some(config.architecture.clone());
     Ok(ctx)
 }
 
@@ -749,17 +804,47 @@ fn collect_diagnostics_incremental(
 }
 
 fn print_rules_catalog(filter_term: Option<&str>) {
+    let term_width = crossterm::terminal::size()
+        .map(|(w, _)| w.saturating_sub(2))
+        .unwrap_or(100)
+        .clamp(80, 130);
+
     let mut table = Table::new();
     table
         .load_preset(UTF8_FULL)
         .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_width(term_width)
         .set_header(vec![
-            Cell::new("Rule ID").fg(Color::Cyan),
-            Cell::new("Category"),
-            Cell::new("Severity"),
-            Cell::new("Title"),
-            Cell::new("Description"),
+            Cell::new("Rule ID")
+                .fg(Color::Cyan)
+                .add_attribute(Attribute::Bold),
+            Cell::new("Category")
+                .fg(Color::Cyan)
+                .add_attribute(Attribute::Bold),
+            Cell::new("Severity")
+                .fg(Color::Cyan)
+                .add_attribute(Attribute::Bold),
+            Cell::new("Title")
+                .fg(Color::Cyan)
+                .add_attribute(Attribute::Bold),
+            Cell::new("Description")
+                .fg(Color::Cyan)
+                .add_attribute(Attribute::Bold),
         ]);
+
+    if let Some(col) = table.column_mut(0) {
+        col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(10)));
+    }
+    if let Some(col) = table.column_mut(1) {
+        col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(14)));
+    }
+    if let Some(col) = table.column_mut(2) {
+        col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(10)));
+    }
+    if let Some(col) = table.column_mut(3) {
+        col.set_constraint(ColumnConstraint::UpperBoundary(Width::Fixed(32)));
+    }
 
     let mut count = 0;
     for rule in ALL_RULES {
@@ -775,20 +860,35 @@ fn print_rules_catalog(filter_term: Option<&str>) {
         }
 
         let sev_cell = match rule.severity {
-            "CRITICAL" => Cell::new(rule.severity).fg(Color::DarkRed),
+            "CRITICAL" => Cell::new(rule.severity)
+                .fg(Color::DarkRed)
+                .add_attribute(Attribute::Bold),
             "ERROR" => Cell::new(rule.severity).fg(Color::Red),
             "WARN" | "WARNING" => Cell::new(rule.severity).fg(Color::Yellow),
             _ => Cell::new(rule.severity).fg(Color::Blue),
         };
 
         table.add_row(Row::from(vec![
-            Cell::new(rule.id),
+            Cell::new(rule.id).fg(Color::Cyan),
             Cell::new(rule.category),
             sev_cell,
             Cell::new(rule.title),
             Cell::new(rule.description),
         ]));
         count += 1;
+    }
+
+    if count == 0 {
+        if let Some(term) = filter_term {
+            println!(
+                "\n{} No diagnostic rules matched '{}'. Run 'stackvet rules' to browse all rules.\n",
+                "Notice:".yellow().bold(),
+                term
+            );
+        } else {
+            println!("\nNo diagnostic rules available.\n");
+        }
+        return;
     }
 
     println!(
@@ -798,23 +898,23 @@ fn print_rules_catalog(filter_term: Option<&str>) {
         ALL_RULES.len()
     );
     println!("{}\n", table);
+    println!(
+        "  {} Run {} to inspect rationale and remediation guidance.\n",
+        "Tip:".green().bold(),
+        "stackvet explain <RULE_ID>".cyan().bold()
+    );
 }
 
 fn print_rule_explanation(rule_id: &str) {
     if let Some(rule) = get_rule_meta(rule_id) {
+        println!();
         println!(
-            "\n{}",
-            "=======================================================================".cyan()
+            "{}",
+            format!("─── Diagnostic Rule Details: {} ───", rule.id)
+                .cyan()
+                .bold()
         );
-        println!(
-            "  Rule Details: {} - {}",
-            rule.id.bold().cyan(),
-            rule.title.bold()
-        );
-        println!(
-            "{}\n",
-            "=======================================================================".cyan()
-        );
+        println!("  Title:       {}\n", rule.title.bold());
 
         let sev_badge = match rule.severity {
             "CRITICAL" => "[CRITICAL]".red().bold(),
@@ -961,54 +1061,92 @@ jobs:
 }
 
 fn print_score_explanation_details(explanation: &HealthScoreExplanation) {
-    println!(
-        "\n{}",
-        "=======================================================================".cyan()
+    let title = "Health Score Explanation & Diagnostic Attribution Details";
+    let banner = format!(
+        "╭─────────────────────────────────────────────────────────────────────╮\n\
+         │     {}     │\n\
+         ╰─────────────────────────────────────────────────────────────────────╯\n",
+        title
     );
-    println!(
-        "{}",
-        "  Health Score Explanation & Diagnostic Attribution Details"
-            .cyan()
-            .bold()
-    );
-    println!(
-        "{}\n",
-        "=======================================================================".cyan()
-    );
+    println!("\n{}", banner.cyan().bold());
 
-    println!("  Base Score:          {}", explanation.base_score);
+    let grade_badge = match explanation.grade.chars().next().unwrap_or('F') {
+        'A' => format!("[ Grade: {} ]", explanation.grade).green().bold(),
+        'B' => format!("[ Grade: {} ]", explanation.grade).yellow().bold(),
+        'C' => format!("[ Grade: {} ]", explanation.grade)
+            .truecolor(255, 140, 0)
+            .bold(),
+        _ => format!("[ Grade: {} ]", explanation.grade).red().bold(),
+    };
+
+    println!("  Base Score:          {} pts", explanation.base_score);
     println!(
         "  Total Deductions:   -{} pts",
         explanation.total_deductions
     );
-    println!("  Final Score:         {} / 100", explanation.final_score);
-    println!("  Letter Grade:        {}", explanation.grade.bold());
     println!(
-        "  Unique Findings:     {}",
-        explanation.unique_findings_count
+        "  Final Score:         {} / 100   {}",
+        explanation.final_score, grade_badge
     );
     println!(
-        "  Duplicates Ignored:  {}\n",
-        explanation.duplicate_findings_ignored
+        "  Findings Breakdown:  {} unique finding(s), {} duplicate(s) ignored\n",
+        explanation.unique_findings_count, explanation.duplicate_findings_ignored
     );
 
     if !explanation.diagnostic_details.is_empty() {
-        println!("{}", "Contributing Diagnostics Breakdown:".bold());
+        println!(
+            "{}",
+            "─── Contributing Diagnostics Breakdown ────────────────────────────────"
+                .cyan()
+                .bold()
+        );
+        let term_width = crossterm::terminal::size()
+            .map(|(w, _)| w.saturating_sub(2))
+            .unwrap_or(100)
+            .clamp(80, 130);
+
         let mut table = Table::new();
         table
             .load_preset(UTF8_FULL)
             .apply_modifier(UTF8_ROUND_CORNERS)
+            .set_content_arrangement(ContentArrangement::Dynamic)
+            .set_width(term_width)
             .set_header(vec![
-                Cell::new("Rule").fg(Color::Cyan),
-                Cell::new("Severity"),
-                Cell::new("Penalty"),
-                Cell::new("Location"),
-                Cell::new("Message"),
+                Cell::new("Rule")
+                    .fg(Color::Cyan)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("Severity")
+                    .fg(Color::Cyan)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("Penalty")
+                    .fg(Color::Cyan)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("Location")
+                    .fg(Color::Cyan)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("Message")
+                    .fg(Color::Cyan)
+                    .add_attribute(Attribute::Bold),
             ]);
+
+        if let Some(col) = table.column_mut(0) {
+            col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(9)));
+        }
+        if let Some(col) = table.column_mut(1) {
+            col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(9)));
+        }
+        if let Some(col) = table.column_mut(2) {
+            col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(9)));
+        }
+        if let Some(col) = table.column_mut(3) {
+            col.set_constraint(ColumnConstraint::UpperBoundary(Width::Fixed(35)));
+        }
 
         for item in &explanation.diagnostic_details {
             let sev_cell = match item.severity {
-                Severity::Critical => Cell::new("CRITICAL").fg(Color::DarkRed),
+                Severity::Critical => Cell::new("CRITICAL")
+                    .fg(Color::DarkRed)
+                    .add_attribute(Attribute::Bold),
                 Severity::Error => Cell::new("ERROR").fg(Color::Red),
                 Severity::Warning => Cell::new("WARN").fg(Color::Yellow),
                 _ => Cell::new("INFO").fg(Color::Blue),
@@ -1021,7 +1159,7 @@ fn print_score_explanation_details(explanation: &HealthScoreExplanation) {
             };
 
             table.add_row(Row::from(vec![
-                Cell::new(&item.rule_id),
+                Cell::new(&item.rule_id).fg(Color::Cyan),
                 sev_cell,
                 Cell::new(format!("-{} pts", item.penalty)),
                 Cell::new(loc_str),
@@ -1052,20 +1190,46 @@ fn scan_and_collect_diagnostics(
 }
 
 fn print_verification_summary(result: &stackvet_remediation::FixVerificationResult) {
+    let term_width = crossterm::terminal::size()
+        .map(|(w, _)| w.saturating_sub(2))
+        .unwrap_or(100)
+        .clamp(80, 130);
+
     let mut table = Table::new();
-    table.load_preset(UTF8_FULL);
-    table.apply_modifier(UTF8_ROUND_CORNERS);
-    table.set_header(Row::from(vec![
-        Cell::new("Status").fg(Color::Cyan),
-        Cell::new("Rule").fg(Color::Cyan),
-        Cell::new("File").fg(Color::Cyan),
-        Cell::new("Details").fg(Color::Cyan),
-    ]));
+    table
+        .load_preset(UTF8_FULL)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_width(term_width)
+        .set_header(Row::from(vec![
+            Cell::new("Status")
+                .fg(Color::Cyan)
+                .add_attribute(Attribute::Bold),
+            Cell::new("Rule")
+                .fg(Color::Cyan)
+                .add_attribute(Attribute::Bold),
+            Cell::new("File")
+                .fg(Color::Cyan)
+                .add_attribute(Attribute::Bold),
+            Cell::new("Details")
+                .fg(Color::Cyan)
+                .add_attribute(Attribute::Bold),
+        ]));
+
+    if let Some(col) = table.column_mut(0) {
+        col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(12)));
+    }
+    if let Some(col) = table.column_mut(1) {
+        col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(9)));
+    }
+    if let Some(col) = table.column_mut(2) {
+        col.set_constraint(ColumnConstraint::UpperBoundary(Width::Fixed(35)));
+    }
 
     for d in &result.resolved_diagnostics {
         table.add_row(Row::from(vec![
             Cell::new("RESOLVED").fg(Color::Green),
-            Cell::new(&d.rule_id.0),
+            Cell::new(&d.rule_id.0).fg(Color::Cyan),
             Cell::new(d.location.file_path.display().to_string()),
             Cell::new(&d.message),
         ]));
@@ -1074,7 +1238,7 @@ fn print_verification_summary(result: &stackvet_remediation::FixVerificationResu
     for d in &result.unresolved_diagnostics {
         table.add_row(Row::from(vec![
             Cell::new("UNRESOLVED").fg(Color::Yellow),
-            Cell::new(&d.rule_id.0),
+            Cell::new(&d.rule_id.0).fg(Color::Cyan),
             Cell::new(d.location.file_path.display().to_string()),
             Cell::new(&d.message),
         ]));
@@ -1083,7 +1247,7 @@ fn print_verification_summary(result: &stackvet_remediation::FixVerificationResu
     for d in &result.new_regressions {
         table.add_row(Row::from(vec![
             Cell::new("REGRESSION").fg(Color::Red),
-            Cell::new(&d.rule_id.0),
+            Cell::new(&d.rule_id.0).fg(Color::Cyan),
             Cell::new(d.location.file_path.display().to_string()),
             Cell::new(&d.message),
         ]));
@@ -1835,23 +1999,37 @@ async fn main() -> Result<()> {
                 diagnostics
             };
 
-            println!("\n{}", "--- Detailed Deep Inspection ---".cyan().bold());
+            println!(
+                "\n{}",
+                "─── Detailed Deep Inspection ──────────────────────────────────────────"
+                    .cyan()
+                    .bold()
+            );
             for d in &filtered {
+                let sev_badge = match d.severity {
+                    Severity::Critical => "[CRITICAL]".red().bold(),
+                    Severity::Error => "[ERROR]".red(),
+                    Severity::Warning => "[WARN]".yellow(),
+                    Severity::Info => "[INFO]".cyan(),
+                    Severity::Hint => "[HINT]".dimmed(),
+                };
                 println!(
-                    "\n[{}] {} ({})",
-                    d.severity.as_str().red().bold(),
+                    "\n{} {} ({})",
+                    sev_badge,
                     d.rule_id.0.cyan().bold(),
-                    d.language.as_str()
+                    d.language.as_str().dimmed()
                 );
-                println!("  Location: {}", d.location.file_path.display());
-                if let Some(span) = &d.location.span {
-                    println!("  Line: {}", span.start_line);
+                println!("  Location:    {}", d.location.display_location().bold());
+                println!("  Message:     {}", d.message);
+                if !d.explanation.is_empty() {
+                    println!("  Explanation: {}", d.explanation);
                 }
-                println!("  Message: {}", d.message.bold());
-                println!("  Explanation: {}", d.explanation);
                 println!("  Remediation: {}", d.suggested_remediation.green());
+                if let Some(snippet) = &d.location.snippet {
+                    println!("  Snippet:\n    {}", snippet.dimmed());
+                }
                 if let Some(fix) = &d.fix {
-                    println!("  Safe Fix Available: {}", fix.description.yellow());
+                    println!("  Safe Fix:    {}", fix.description.yellow());
                 }
             }
             println!();
