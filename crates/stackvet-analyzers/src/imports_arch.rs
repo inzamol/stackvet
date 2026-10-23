@@ -465,31 +465,41 @@ impl Analyzer for ImportsArchAnalyzer {
                                             imp.is_type_only,
                                         ));
                                     } else {
-                                        let loc = make_import_location(
-                                            file,
-                                            imp.span.as_ref(),
-                                            imp.line,
-                                            &content,
-                                        );
-                                        file_diags.push(
-                                            Diagnostic::builder(
-                                                "IMP-002",
-                                                Severity::Error,
-                                                LanguageTarget::Node,
+                                        let resolves_to_package = ctx.node.as_ref().is_some_and(|ni| {
+                                            stackvet_node::resolve_package_subpath_package(
+                                                &ni.package_imports,
+                                                &imp.specifier,
                                             )
-                                            .message(format!(
-                                                "Unresolved package subpath import '{}' in '{}'",
-                                                imp.specifier, rel_path
-                                            ))
-                                            .location(loc)
-                                            .explanation(
-                                                "Subpath import specifier matching '#*' could not be resolved to any file on disk via package.json 'imports'.",
-                                            )
-                                            .remediation(
-                                                "Verify package.json 'imports' mapping and ensure the destination file exists.",
-                                            )
-                                            .build(),
-                                        );
+                                            .is_some()
+                                        });
+
+                                        if !resolves_to_package {
+                                            let loc = make_import_location(
+                                                file,
+                                                imp.span.as_ref(),
+                                                imp.line,
+                                                &content,
+                                            );
+                                            file_diags.push(
+                                                Diagnostic::builder(
+                                                    "IMP-002",
+                                                    Severity::Error,
+                                                    LanguageTarget::Node,
+                                                )
+                                                .message(format!(
+                                                    "Unresolved package subpath import '{}' in '{}'",
+                                                    imp.specifier, rel_path
+                                                ))
+                                                .location(loc)
+                                                .explanation(
+                                                    "Subpath import specifier matching '#*' could not be resolved to any file on disk via package.json 'imports'.",
+                                                )
+                                                .remediation(
+                                                    "Verify package.json 'imports' mapping and ensure the destination file exists.",
+                                                )
+                                                .build(),
+                                            );
+                                        }
                                     }
                                 } else if let Some(node_info) = &ctx.node {
                                     if stackvet_node::is_tsconfig_alias(

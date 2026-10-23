@@ -437,6 +437,26 @@ pub fn resolve_aliased_import(
 }
 
 /// Checks whether an import specifier is a Node.js package subpath import (#dep, #internal/*)
+fn is_safe_relative_path(rel: &Path) -> bool {
+    let mut depth: usize = 0;
+    for c in rel.components() {
+        match c {
+            std::path::Component::ParentDir => {
+                if depth == 0 {
+                    return false;
+                }
+                depth -= 1;
+            }
+            std::path::Component::Normal(_) => {
+                depth += 1;
+            }
+            std::path::Component::CurDir => {}
+            _ => return false,
+        }
+    }
+    true
+}
+
 pub fn is_package_subpath_import(specifier: &str) -> bool {
     specifier.starts_with('#')
 }
@@ -455,7 +475,14 @@ pub fn resolve_package_subpath_import(
     // 1. Exact match
     if let Some(targets) = package_imports.get(specifier) {
         for target in targets {
+            if !target.starts_with("./") {
+                continue;
+            }
             let target_trimmed = target.trim_start_matches("./");
+            let rel_path = Path::new(target_trimmed);
+            if !is_safe_relative_path(rel_path) {
+                continue;
+            }
             let candidate = root.join(target_trimmed);
             if let Some(resolved) = resolve_candidate_path(&candidate, &extensions) {
                 return Some(resolved);
@@ -492,10 +519,73 @@ pub fn resolve_package_subpath_import(
         let remainder = &specifier[prefix.len()..specifier.len() - suffix.len()];
         for target in targets {
             let clean_target = target.replace('*', remainder);
+            if !clean_target.starts_with("./") {
+                continue;
+            }
             let target_trimmed = clean_target.trim_start_matches("./");
+            let rel_path = Path::new(target_trimmed);
+            if !is_safe_relative_path(rel_path) {
+                continue;
+            }
             let candidate = root.join(target_trimmed);
             if let Some(resolved) = resolve_candidate_path(&candidate, &extensions) {
                 return Some(resolved);
+            }
+        }
+    }
+
+    None
+}
+
+/// Resolves a package subpath import (#dep, #feature) that maps to a bare npm package
+pub fn resolve_package_subpath_package(
+    package_imports: &std::collections::HashMap<String, Vec<String>>,
+    specifier: &str,
+) -> Option<String> {
+    if !specifier.starts_with('#') {
+        return None;
+    }
+
+    // 1. Exact match
+    if let Some(targets) = package_imports.get(specifier) {
+        for target in targets {
+            if !target.starts_with("./") && !target.starts_with('/') {
+                return Some(target.clone());
+            }
+        }
+        return None;
+    }
+
+    // 2. Wildcard pattern match
+    let mut best_match: Option<(&str, usize, &[String])> = None;
+    for (pattern, targets) in package_imports {
+        if let Some(star_idx) = pattern.find('*') {
+            let prefix = &pattern[..star_idx];
+            let suffix = &pattern[star_idx + 1..];
+            if specifier.starts_with(prefix)
+                && specifier.ends_with(suffix)
+                && specifier.len() >= prefix.len() + suffix.len()
+            {
+                let prefix_len = prefix.len();
+                if best_match
+                    .as_ref()
+                    .is_none_or(|(_, len, _)| prefix_len > *len)
+                {
+                    best_match = Some((pattern.as_str(), prefix_len, targets.as_slice()));
+                }
+            }
+        }
+    }
+
+    if let Some((pattern, _, targets)) = best_match {
+        let star_idx = pattern.find('*').unwrap();
+        let prefix = &pattern[..star_idx];
+        let suffix = &pattern[star_idx + 1..];
+        let remainder = &specifier[prefix.len()..specifier.len() - suffix.len()];
+        for target in targets {
+            let clean_target = target.replace('*', remainder);
+            if !clean_target.starts_with("./") && !clean_target.starts_with('/') {
+                return Some(clean_target);
             }
         }
     }

@@ -446,7 +446,9 @@ fn find_enclosing_project_root(path: &Path) -> PathBuf {
     };
     let mut curr = Some(start);
     while let Some(dir) = curr {
-        if dir.join("package.json").is_file()
+        if dir.join("stackvet.toml").is_file()
+            || dir.join(".stackvet.toml").is_file()
+            || dir.join("package.json").is_file()
             || dir.join("pyproject.toml").is_file()
             || dir.join("requirements.txt").is_file()
             || dir.join("Cargo.toml").is_file()
@@ -489,22 +491,19 @@ fn build_full_context(
     let mut ctx = scanner.build_context()?;
     ctx.root = project_root.to_path_buf();
 
-    if target.is_file() {
-        let is_explicitly_ignored = scanner.is_explicitly_ignored(target);
-        if !is_explicitly_ignored {
-            let canonical_target = target
-                .canonicalize()
-                .unwrap_or_else(|_| target.to_path_buf());
-            let already_included = ctx.source_files.iter().any(|f| {
-                f == target
-                    || f == &canonical_target
-                    || f.canonicalize()
-                        .map(|cf| cf == canonical_target)
-                        .unwrap_or(false)
-            });
-            if !already_included {
-                ctx.source_files.push(target.to_path_buf());
-            }
+    if target.is_file() && scanner.is_accepted_source_file(target) {
+        let canonical_target = target
+            .canonicalize()
+            .unwrap_or_else(|_| target.to_path_buf());
+        let already_included = ctx.source_files.iter().any(|f| {
+            f == target
+                || f == &canonical_target
+                || f.canonicalize()
+                    .map(|cf| cf == canonical_target)
+                    .unwrap_or(false)
+        });
+        if !already_included {
+            ctx.source_files.push(target.to_path_buf());
         }
     }
 
@@ -1215,6 +1214,9 @@ fn scan_and_collect_diagnostics(
     if root.is_file() {
         let canonical_target = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
         diagnostics.retain(|d| {
+            if d.rule_id.0.starts_with("DISC-") {
+                return true;
+            }
             let p = &d.location.file_path;
             let full_p = if p.is_relative() {
                 project_root.join(p)
@@ -1550,6 +1552,9 @@ async fn main() -> Result<()> {
     if root.is_file() {
         let canonical_target = root.canonicalize().unwrap_or_else(|_| root.clone());
         diagnostics.retain(|d| {
+            if d.rule_id.0.starts_with("DISC-") {
+                return true;
+            }
             let p = &d.location.file_path;
             let full_p = if p.is_relative() {
                 project_root.join(p)
@@ -1595,7 +1600,7 @@ async fn main() -> Result<()> {
                 let baseline_file = if b_path.is_absolute() {
                     b_path.clone()
                 } else {
-                    root.join(b_path)
+                    project_root.join(b_path)
                 };
                 if !baseline_file.is_file() {
                     eprintln!(
@@ -1743,7 +1748,7 @@ async fn main() -> Result<()> {
                 let baseline_file = if b_path.is_absolute() {
                     b_path.clone()
                 } else {
-                    root.join(b_path)
+                    project_root.join(b_path)
                 };
                 if !baseline_file.is_file() {
                     eprintln!(
@@ -2357,7 +2362,7 @@ async fn main() -> Result<()> {
                         .map(|p| p.as_os_str().is_empty())
                         .unwrap_or(true)
                     {
-                        root.join(output)
+                        project_root.join(output)
                     } else {
                         output.clone()
                     };
@@ -2400,7 +2405,7 @@ async fn main() -> Result<()> {
                         if resolved_baseline.is_absolute() || resolved_baseline.is_file() {
                             resolved_baseline
                         } else {
-                            root.join(resolved_baseline)
+                            project_root.join(resolved_baseline)
                         };
                     if !baseline_file.is_file() {
                         eprintln!(

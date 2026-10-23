@@ -10,7 +10,7 @@ let outputChannel: vscode.OutputChannel;
 let statusBarItem: vscode.StatusBarItem;
 let isScanning = false;
 const pendingScans = new Map<string, boolean>();
-let autoScanDebounceTimer: NodeJS.Timeout | undefined;
+const autoScanDebounceTimers = new Map<string, NodeJS.Timeout>();
 
 /**
  * Performs a workspace or single-file scan and updates diagnostics and status.
@@ -18,7 +18,8 @@ let autoScanDebounceTimer: NodeJS.Timeout | undefined;
 async function performScan(
   targetPath: string,
   extensionPath: string,
-  isManual: boolean = false
+  isManual: boolean = false,
+  token?: vscode.CancellationToken
 ): Promise<void> {
   if (isScanning) {
     // Queue a follow-up scan for this target path once the current scan finishes, preserving manual flag
@@ -35,18 +36,23 @@ async function performScan(
 
   const config = vscode.workspace.getConfiguration('stackvet');
   const customExecutable = config.get<string>('executablePath');
+  const timeoutMs = config.get<number>('timeout', 30000);
+  const allowLiveFallback = config.get<boolean>('allowLiveFallback', false);
   const triggerType = isManual ? 'Manual' : 'Automatic';
 
   outputChannel.appendLine(
     `[${new Date().toLocaleTimeString()}] [${triggerType}] Starting StackVet scan on: ${targetPath}`
   );
 
-  const executeScan = async () => {
+  const executeScan = async (scanToken?: vscode.CancellationToken) => {
     try {
       const result = await runStackvetCli({
         executablePath: customExecutable,
         workspaceRoot: targetPath,
         extensionPath,
+        timeoutMs,
+        allowLiveFallback,
+        cancellationToken: scanToken || token,
         onLog: (msg) => outputChannel.appendLine(`[Runner] ${msg}`),
       });
 
@@ -119,6 +125,14 @@ async function performScan(
       }
     } catch (err: any) {
       const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('cancelled')) {
+        outputChannel.appendLine(`[${new Date().toLocaleTimeString()}] Scan cancelled by user.`);
+        if (statusBarItem) {
+          statusBarItem.text = '$(sync) StackVet: Cancelled';
+          statusBarItem.tooltip = 'StackVet scan was cancelled. Click to scan.';
+        }
+        return;
+      }
       outputChannel.appendLine(`[${new Date().toLocaleTimeString()}] Scan failed: ${msg}`);
       if (statusBarItem) {
         statusBarItem.text = '$(error) StackVet: Error';
@@ -147,12 +161,12 @@ async function performScan(
       {
         location: vscode.ProgressLocation.Notification,
         title: 'StackVet: Scanning workspace...',
-        cancellable: false,
+        cancellable: true,
       },
-      executeScan
+      (_progress, progressToken) => executeScan(progressToken)
     );
   } else {
-    await executeScan();
+    await executeScan(token);
   }
 }
 
@@ -199,11 +213,15 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const scanMode = config.get<string>('scanMode', 'openFilesOnly');
 
-    if (autoScanDebounceTimer) {
-      clearTimeout(autoScanDebounceTimer);
+    const timerKey = documentUri ? documentUri.toString() : '__global__';
+
+    const existingTimer = autoScanDebounceTimers.get(timerKey);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
     }
 
-    autoScanDebounceTimer = setTimeout(() => {
+    const timer = setTimeout(() => {
+      autoScanDebounceTimers.delete(timerKey);
       const targetPaths: string[] = [];
 
       if (documentUri && documentUri.scheme === 'file') {
@@ -248,6 +266,7 @@ export function activate(context: vscode.ExtensionContext): void {
         performScan(target, context.extensionPath, false);
       }
     }, delayMs);
+    autoScanDebounceTimers.set(timerKey, timer);
   };
 
   // 1. Manual Scan Command (Full Workspace Scan)
@@ -322,10 +341,10 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
-  if (autoScanDebounceTimer) {
-    clearTimeout(autoScanDebounceTimer);
-    autoScanDebounceTimer = undefined;
+  for (const timer of autoScanDebounceTimers.values()) {
+    clearTimeout(timer);
   }
+  autoScanDebounceTimers.clear();
   if (diagnosticCollection) {
     diagnosticCollection.clear();
     diagnosticCollection.dispose();

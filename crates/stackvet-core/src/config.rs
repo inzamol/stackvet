@@ -253,6 +253,38 @@ impl StackvetConfig {
             supp.validate().map_err(ConfigError::ValidationError)?;
         }
 
+        let mut seen_layers = std::collections::HashSet::new();
+        for layer in &self.architecture.layers {
+            let trimmed = layer.trim();
+            if trimmed.is_empty() {
+                return Err(ConfigError::ValidationError(
+                    "Architecture layer name cannot be empty".to_string(),
+                ));
+            }
+            if !seen_layers.insert(trimmed) {
+                return Err(ConfigError::ValidationError(format!(
+                    "Duplicate architecture layer '{trimmed}'",
+                )));
+            }
+        }
+
+        for rule in &self.architecture.forbidden {
+            let from_trimmed = rule.from.trim();
+            if from_trimmed.is_empty() || from_trimmed.chars().all(|c| c == '/' || c == '\\') {
+                return Err(ConfigError::ValidationError(format!(
+                    "Invalid forbidden rule 'from': '{}' cannot be empty or only path separators",
+                    rule.from
+                )));
+            }
+            let cannot_trimmed = rule.cannot_import.trim();
+            if cannot_trimmed.is_empty() || cannot_trimmed.chars().all(|c| c == '/' || c == '\\') {
+                return Err(ConfigError::ValidationError(format!(
+                    "Invalid forbidden rule 'cannot_import': '{}' cannot be empty or only path separators",
+                    rule.cannot_import
+                )));
+            }
+        }
+
         Ok(())
     }
 
@@ -659,5 +691,42 @@ baseline = "custom-baseline.json"
             config.resolve_baseline(None),
             Some(PathBuf::from("custom-baseline.json"))
         );
+    }
+
+    #[test]
+    fn test_architecture_validation() {
+        // Empty layer
+        let toml_empty_layer = r#"
+[architecture]
+layers = ["core", "  ", "api"]
+"#;
+        let config: StackvetConfig = toml::from_str(toml_empty_layer).unwrap();
+        assert!(config.validate().is_err());
+
+        // Duplicate layer
+        let toml_dup_layer = r#"
+[architecture]
+layers = ["core", "api", "core"]
+"#;
+        let config: StackvetConfig = toml::from_str(toml_dup_layer).unwrap();
+        assert!(config.validate().is_err());
+
+        // Empty forbidden from
+        let toml_empty_from = r#"
+[[architecture.forbidden]]
+from = "/"
+cannot_import = "db"
+"#;
+        let config: StackvetConfig = toml::from_str(toml_empty_from).unwrap();
+        assert!(config.validate().is_err());
+
+        // Empty forbidden cannot_import
+        let toml_empty_cannot = r#"
+[[architecture.forbidden]]
+from = "api"
+cannot_import = " \\ "
+"#;
+        let config: StackvetConfig = toml::from_str(toml_empty_cannot).unwrap();
+        assert!(config.validate().is_err());
     }
 }

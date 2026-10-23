@@ -65,6 +65,16 @@
           "type": "boolean",
           "default": true,
           "description": "Automatically run StackVet scan when a workspace is opened."
+        },
+        "stackvet.allowLiveFallback": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow falling back to live network execution via npx or pipx if no local StackVet binary is found."
+        },
+        "stackvet.timeout": {
+          "type": "number",
+          "default": 30000,
+          "description": "Maximum execution time in milliseconds before a StackVet scan is timed out."
         }
       }
     }

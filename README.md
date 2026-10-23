@@ -199,20 +199,24 @@ When violations, runtime drift, or missing dependencies are discovered across yo
 ╰──────────┴──────────┴─────────┴───────────────────────────────────┴────────────────────────────────────────────────╯
 ```
 
-### Auto-Remediation Verification Summary (`stackvet fix`)
+### Auto-Remediation Verification Report (`stackvet fix --verify`)
 
-When executing auto-remediation, StackVet provides safe format-preserving modifications with a transactional verification scorecard and rollback checkpoints:
+When executing auto-remediation with `--verify`, StackVet applies safe format-preserving modifications and verifies them against a clean post-fix scan:
 
 ```text
-╭────────────────────────────────────────────────────────────────────────────────────────────────╮
-│                                    Fix Verification Summary                                    │
-╞════════════════════════════════════════════════════════════════════════════════════════════════╡
-│ Status:          ✓ Verified Fixed                                                              │
-│ Initial Score:   86 / 100 (Grade: B)                                                           │
-│ Post-Fix Score:  100 / 100 (Grade: A)                                                          │
-│ Files Modified:  package.json (1 dependency added, comments & formatting preserved)            │
-│ Rollback:        Snapshot saved to .stackvet/rollbacks/20261023-112638-fix.json                │
-╰────────────────────────────────────────────────────────────────────────────────────────────────╯
+Applied fix: Injected 'axios' into package.json dependencies
+All safe fixes applied successfully (1 file(s) updated)!
+
+--- Running Fix Verification ---
+
+--- Fix Verification Report ---
+╭──────────────┬──────────┬──────────────┬─────────────────────────────────────────────────╮
+│ Status       ┆ Rule     ┆ File         ┆ Details                                         │
+╞══════════════╪══════════╪══════════════╪═════════════════════════════════════════════════╡
+│ RESOLVED     ┆ NDEP-001 ┆ package.json ┆ Missing package: 'axios' imported in index.js   │
+╰──────────────┴──────────┴──────────────┴─────────────────────────────────────────────────╯
+
+Verification SUCCESS: 1 issue(s) confirmed resolved with 0 regressions.
 ```
 
 ---

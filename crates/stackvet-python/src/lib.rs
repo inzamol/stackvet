@@ -427,6 +427,24 @@ pub fn get_python_search_roots(
     roots
 }
 
+fn has_python_files(dir: &Path) -> bool {
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        if let Ok(entries) = std::fs::read_dir(&current) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_file() && p.extension().and_then(|s| s.to_str()) == Some("py") {
+                    return true;
+                }
+                if p.is_dir() {
+                    stack.push(p);
+                }
+            }
+        }
+    }
+    false
+}
+
 /// Determines whether a top-level package or module name exists locally in any python search root
 pub fn is_local_python_package(search_roots: &[std::path::PathBuf], root_pkg: &str) -> bool {
     for root in search_roots {
@@ -438,16 +456,8 @@ pub fn is_local_python_package(search_roots: &[std::path::PathBuf], root_pkg: &s
             if dir.join("__init__.py").is_file() {
                 return true;
             }
-            if let Ok(entries) = std::fs::read_dir(&dir) {
-                for entry in entries.flatten() {
-                    let p = entry.path();
-                    if p.is_file() && p.extension().and_then(|s| s.to_str()) == Some("py") {
-                        return true;
-                    }
-                    if p.is_dir() {
-                        return true;
-                    }
-                }
+            if has_python_files(&dir) {
+                return true;
             }
         }
     }

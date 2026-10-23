@@ -160,6 +160,66 @@ impl ProjectScanner {
         }
     }
 
+    /// Checks whether a given path is accepted as a valid source file by the scanner,
+    /// adhering to default exclusions, file size limits, custom ignores, and ignore files.
+    pub fn is_accepted_source_file(&self, path: &Path) -> bool {
+        let Ok(meta) = std::fs::metadata(path) else {
+            return false;
+        };
+        if !meta.is_file() || meta.len() > self.max_file_size {
+            return false;
+        }
+
+        let is_source = path
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|ext| matches!(ext, "py" | "ts" | "tsx" | "js" | "jsx"))
+            .unwrap_or(false);
+        if !is_source {
+            return false;
+        }
+
+        if self.use_default_exclusions {
+            for comp in path.components() {
+                let s = comp.as_os_str().to_string_lossy();
+                if DEFAULT_EXCLUSIONS.contains(&s.as_ref()) {
+                    return false;
+                }
+            }
+        }
+
+        if self.is_explicitly_ignored(path) {
+            return false;
+        }
+
+        let mut builder = WalkBuilder::new(path);
+        builder.hidden(false);
+        builder.parents(self.parents);
+        builder.git_ignore(true);
+        builder.add_custom_ignore_filename(".stackvetignore");
+        if !self.custom_ignores.is_empty() {
+            let mut ov_builder = OverrideBuilder::new(&self.root);
+            for pattern in &self.custom_ignores {
+                let trimmed = pattern.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('!') {
+                    continue;
+                }
+                let _ = ov_builder.add(&format!("!{trimmed}"));
+            }
+            if let Ok(ov) = ov_builder.build() {
+                builder.overrides(ov);
+            }
+        }
+        let walker = builder.build();
+        let mut count = 0;
+        for entry in walker.flatten() {
+            if entry.file_type().is_some_and(|ft| ft.is_file()) {
+                count += 1;
+            }
+        }
+        count > 0
+    }
+
     pub fn scan(&self) -> ScanResult {
         let mut result = ScanResult::default();
         let canonical_root = self

@@ -12,15 +12,24 @@ describe('runner.ts', () => {
     assert.ok(resolved === 'stackvet' || resolved.includes('stackvet'));
   });
 
-  it('resolves live npx and pipx fallback targets when no custom path is set', () => {
-    const targets = resolveExecutionTargets(undefined, undefined, '/test/workspace');
+  it('omits live npx and pipx fallback targets when allowLiveFallback is false', () => {
+    const targets = resolveExecutionTargets(undefined, undefined, '/test/workspace', undefined, false);
+    const hasNpx = targets.some((t) => t.name.includes('npx'));
+    assert.strictEqual(hasNpx, false, 'Expected no live npx fallback target by default');
+
+    const hasPipx = targets.some((t) => t.name.includes('pipx'));
+    assert.strictEqual(hasPipx, false, 'Expected no live pipx fallback target by default');
+  });
+
+  it('resolves live npx and pipx fallback targets when allowLiveFallback is true', () => {
+    const targets = resolveExecutionTargets(undefined, undefined, '/test/workspace', undefined, true);
     assert.ok(targets.length >= 3);
 
-    const hasNpx = targets.some((t) => t.name.includes('npx') && t.args.includes('@inzamol/stackvet'));
-    assert.ok(hasNpx, 'Expected live npx fallback target');
+    const hasNpx = targets.some((t) => t.name.includes('npx') && t.args.some((a) => a.includes('@inzamol/stackvet@')));
+    assert.ok(hasNpx, 'Expected live npx fallback target with pinned version');
 
-    const hasPipx = targets.some((t) => t.name.includes('pipx') && t.args.includes('stackvet'));
-    assert.ok(hasPipx, 'Expected live pipx fallback target');
+    const hasPipx = targets.some((t) => t.name.includes('pipx') && t.args.some((a) => a.includes('stackvet==')));
+    assert.ok(hasPipx, 'Expected live pipx fallback target with pinned version');
   });
 
   it('restricts to single target when custom executable is configured', () => {
@@ -29,7 +38,7 @@ describe('runner.ts', () => {
     assert.strictEqual(targets[0].command, '/custom/bin/stackvet');
   });
 
-  it('rejects with actionable guidance when executable is not found (ENOENT)', async () => {
+  it('rejects with underlying error when custom executable is not found', async () => {
     await assert.rejects(
       async () => {
         await runStackvetCli({
@@ -39,9 +48,58 @@ describe('runner.ts', () => {
       },
       (err: Error) => {
         assert.ok(
-          err.message.includes('was not found') || err.message.includes('Failed to'),
+          err.message.includes('nonexistent-stackvet-binary-xyz-12345'),
           `Unexpected message: ${err.message}`
         );
+        return true;
+      }
+    );
+  });
+
+  it('rejects with installation guidance when all targets are missing and no custom executable is provided', async () => {
+    // Only test if 'stackvet' is not in system PATH
+    const fs = await import('node:fs');
+    try {
+      await runStackvetCli({
+        workspaceRoot: process.cwd(),
+        allowLiveFallback: false,
+      });
+    } catch (err: any) {
+      assert.ok(
+        err.message.includes('StackVet executable was not found. Please install StackVet'),
+        `Unexpected guidance message: ${err.message}`
+      );
+    }
+  });
+
+  it('aborts cleanly when cancellation token is triggered', async () => {
+    let cancelListener: (() => void) | undefined;
+    const fakeToken = {
+      isCancellationRequested: false,
+      onCancellationRequested(listener: () => void) {
+        cancelListener = listener;
+        return { dispose: () => {} };
+      },
+    };
+
+    const runPromise = runStackvetCli({
+      executablePath: process.execPath,
+      args: ['-e', 'setTimeout(() => {}, 10000)'],
+      workspaceRoot: process.cwd(),
+      cancellationToken: fakeToken,
+    });
+
+    // Trigger cancellation after 50ms
+    setTimeout(() => {
+      if (cancelListener) {
+        cancelListener();
+      }
+    }, 50);
+
+    await assert.rejects(
+      runPromise,
+      (err: Error) => {
+        assert.ok(err.message.includes('cancelled'), `Expected cancelled error, got: ${err.message}`);
         return true;
       }
     );
