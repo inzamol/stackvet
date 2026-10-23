@@ -1214,15 +1214,17 @@ fn scan_and_collect_diagnostics(
     if root.is_file() {
         let canonical_target = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
         diagnostics.retain(|d| {
-            if d.rule_id.0.starts_with("DISC-") {
-                return true;
-            }
             let p = &d.location.file_path;
             let full_p = if p.is_relative() {
                 project_root.join(p)
             } else {
                 p.clone()
             };
+            if d.rule_id.0.starts_with("DISC-")
+                && (p.as_os_str().is_empty() || full_p == project_root)
+            {
+                return true;
+            }
             full_p == root
                 || full_p == canonical_target
                 || full_p
@@ -1552,15 +1554,17 @@ async fn main() -> Result<()> {
     if root.is_file() {
         let canonical_target = root.canonicalize().unwrap_or_else(|_| root.clone());
         diagnostics.retain(|d| {
-            if d.rule_id.0.starts_with("DISC-") {
-                return true;
-            }
             let p = &d.location.file_path;
             let full_p = if p.is_relative() {
                 project_root.join(p)
             } else {
                 p.clone()
             };
+            if d.rule_id.0.starts_with("DISC-")
+                && (p.as_os_str().is_empty() || full_p == project_root)
+            {
+                return true;
+            }
             full_p == root
                 || full_p == canonical_target
                 || full_p

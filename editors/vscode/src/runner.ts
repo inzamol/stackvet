@@ -232,6 +232,15 @@ function executeProcess(
       isWindows &&
       (command.toLowerCase().endsWith('.cmd') || command.toLowerCase().endsWith('.bat'));
 
+    if (isBatchShim && effectiveArgs.some((arg) => /[&|<>\^%\r\n]/.test(arg))) {
+      cleanup();
+      const pErr: ProcessError = new Error(
+        `Command line arguments contain unsafe cmd.exe metacharacters for batch shim '${command}'.`
+      );
+      pErr.isNotFound = true;
+      return reject(pErr);
+    }
+
     const spawnCommand = isBatchShim ? (process.env.ComSpec || 'cmd.exe') : command;
     const spawnArgs = isBatchShim
       ? ['/d', '/s', '/c', command, ...effectiveArgs]

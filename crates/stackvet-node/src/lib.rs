@@ -548,7 +548,7 @@ pub fn resolve_package_subpath_package(
 
     // 1. Exact match
     if let Some(targets) = package_imports.get(specifier) {
-        for target in targets {
+        if let Some(target) = targets.first() {
             if !target.starts_with("./") && !target.starts_with('/') {
                 return Some(target.clone());
             }
@@ -582,7 +582,7 @@ pub fn resolve_package_subpath_package(
         let prefix = &pattern[..star_idx];
         let suffix = &pattern[star_idx + 1..];
         let remainder = &specifier[prefix.len()..specifier.len() - suffix.len()];
-        for target in targets {
+        if let Some(target) = targets.first() {
             let clean_target = target.replace('*', remainder);
             if !clean_target.starts_with("./") && !clean_target.starts_with('/') {
                 return Some(clean_target);
@@ -711,16 +711,31 @@ pub fn parse_package_json(content: &str, path: &Path) -> Result<NodeProjectInfo>
 }
 
 fn collect_import_targets(val: &serde_json::Value, out: &mut Vec<String>) {
-    if let Some(s) = val.as_str() {
-        out.push(s.to_string());
-    } else if let Some(arr) = val.as_array() {
-        for elem in arr {
-            collect_import_targets(elem, out);
+    match val {
+        serde_json::Value::String(s) => {
+            out.push(s.clone());
         }
-    } else if let Some(obj) = val.as_object() {
-        for v in obj.values() {
-            collect_import_targets(v, out);
+        serde_json::Value::Array(arr) => {
+            for elem in arr {
+                collect_import_targets(elem, out);
+            }
         }
+        serde_json::Value::Object(map) => {
+            // Node condition keys in declaration order:
+            // Standard recognized Node runtime/import conditions
+            const NODE_CONDITIONS: &[&str] = &["node", "import", "require", "types", "default"];
+            for (key, target) in map {
+                if NODE_CONDITIONS.contains(&key.as_str()) {
+                    collect_import_targets(target, out);
+                    return;
+                }
+            }
+            // Fallback: take first condition in declaration order if none of the standard keys matched
+            if let Some((_, first_target)) = map.iter().next() {
+                collect_import_targets(first_target, out);
+            }
+        }
+        _ => {}
     }
 }
 

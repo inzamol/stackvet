@@ -433,11 +433,15 @@ fn has_python_files(dir: &Path) -> bool {
         if let Ok(entries) = std::fs::read_dir(&current) {
             for entry in entries.flatten() {
                 let p = entry.path();
-                if p.is_file() && p.extension().and_then(|s| s.to_str()) == Some("py") {
-                    return true;
-                }
-                if p.is_dir() {
-                    stack.push(p);
+                if let Ok(ft) = entry.file_type() {
+                    if (ft.is_file() || ft.is_symlink())
+                        && p.extension().and_then(|s| s.to_str()) == Some("py")
+                    {
+                        return true;
+                    }
+                    if ft.is_dir() && !ft.is_symlink() {
+                        stack.push(p);
+                    }
                 }
             }
         }

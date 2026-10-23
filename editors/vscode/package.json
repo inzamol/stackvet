@@ -74,6 +74,7 @@
         "stackvet.timeout": {
           "type": "number",
           "default": 30000,
+          "minimum": 1000,
           "description": "Maximum execution time in milliseconds before a StackVet scan is timed out."
         }
       }

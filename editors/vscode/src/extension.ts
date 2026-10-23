@@ -10,6 +10,7 @@ let outputChannel: vscode.OutputChannel;
 let statusBarItem: vscode.StatusBarItem;
 let isScanning = false;
 const pendingScans = new Map<string, boolean>();
+let activeScanCts: vscode.CancellationTokenSource | undefined;
 const autoScanDebounceTimers = new Map<string, NodeJS.Timeout>();
 
 /**
@@ -36,7 +37,8 @@ async function performScan(
 
   const config = vscode.workspace.getConfiguration('stackvet');
   const customExecutable = config.get<string>('executablePath');
-  const timeoutMs = config.get<number>('timeout', 30000);
+  const rawTimeout = config.get<number>('timeout', 30000);
+  const timeoutMs = typeof rawTimeout === 'number' && rawTimeout > 0 ? rawTimeout : 30000;
   const allowLiveFallback = config.get<boolean>('allowLiveFallback', false);
   const triggerType = isManual ? 'Manual' : 'Automatic';
 
@@ -44,7 +46,27 @@ async function performScan(
     `[${new Date().toLocaleTimeString()}] [${triggerType}] Starting StackVet scan on: ${targetPath}`
   );
 
+  const scanCts = new vscode.CancellationTokenSource();
+  activeScanCts = scanCts;
+
+  let callerTokenSub: vscode.Disposable | undefined;
+  if (token) {
+    if (token.isCancellationRequested) {
+      scanCts.cancel();
+    } else {
+      callerTokenSub = token.onCancellationRequested(() => scanCts.cancel());
+    }
+  }
+
   const executeScan = async (scanToken?: vscode.CancellationToken) => {
+    let progressTokenSub: vscode.Disposable | undefined;
+    if (scanToken && scanToken !== scanCts.token) {
+      if (scanToken.isCancellationRequested) {
+        scanCts.cancel();
+      } else {
+        progressTokenSub = scanToken.onCancellationRequested(() => scanCts.cancel());
+      }
+    }
     try {
       const result = await runStackvetCli({
         executablePath: customExecutable,
@@ -52,7 +74,7 @@ async function performScan(
         extensionPath,
         timeoutMs,
         allowLiveFallback,
-        cancellationToken: scanToken || token,
+        cancellationToken: scanCts.token,
         onLog: (msg) => outputChannel.appendLine(`[Runner] ${msg}`),
       });
 
@@ -142,6 +164,9 @@ async function performScan(
         vscode.window.showErrorMessage(`StackVet: ${msg}`);
       }
     } finally {
+      if (progressTokenSub) {
+        progressTokenSub.dispose();
+      }
       isScanning = false;
 
       // Drain queued scans in order, preserving manual scan intent
@@ -156,17 +181,27 @@ async function performScan(
     }
   };
 
-  if (isManual) {
-    await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: 'StackVet: Scanning workspace...',
-        cancellable: true,
-      },
-      (_progress, progressToken) => executeScan(progressToken)
-    );
-  } else {
-    await executeScan(token);
+  try {
+    if (isManual) {
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: 'StackVet: Scanning workspace...',
+          cancellable: true,
+        },
+        (_progress, progressToken) => executeScan(progressToken)
+      );
+    } else {
+      await executeScan();
+    }
+  } finally {
+    if (callerTokenSub) {
+      callerTokenSub.dispose();
+    }
+    scanCts.dispose();
+    if (activeScanCts === scanCts) {
+      activeScanCts = undefined;
+    }
   }
 }
 
@@ -341,6 +376,11 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
+  if (activeScanCts) {
+    activeScanCts.cancel();
+    activeScanCts.dispose();
+    activeScanCts = undefined;
+  }
   for (const timer of autoScanDebounceTimers.values()) {
     clearTimeout(timer);
   }

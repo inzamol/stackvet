@@ -195,4 +195,29 @@ describe('runner.ts', () => {
     assert.strictEqual(djgFinding.severity, 'Critical');
     assert.ok(djgFinding.suggested_remediation);
   });
+
+  it('rejects batch shim when args contain unsafe cmd.exe metacharacters', async (t) => {
+    if (process.platform !== 'win32') {
+      t.skip('Batch shim test only applies to Windows');
+      return;
+    }
+
+    await assert.rejects(
+      async () => {
+        await runStackvetCli({
+          executablePath: 'fake_shim.cmd',
+          args: ['foo&bar'],
+          workspaceRoot: process.cwd(),
+        });
+      },
+      (err: Error) => {
+        assert.ok(
+          err.message.includes('unsafe cmd.exe metacharacters') ||
+            err.message.includes('fake_shim.cmd'),
+          `Unexpected error message: ${err.message}`
+        );
+        return true;
+      }
+    );
+  });
 });
