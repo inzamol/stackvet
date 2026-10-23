@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { mapFindingsToDiagnostics } from './diagnostics';
 import { runStackvetCli } from './runner';
+import { DiagnosticFinding } from './types';
 
 let diagnosticCollection: vscode.DiagnosticCollection;
 let outputChannel: vscode.OutputChannel;
@@ -59,72 +60,12 @@ async function performScan(
       });
 
       // Resolve effective base directory for relative diagnostic paths
-      let baseDir = targetPath;
       const wsFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(targetPath));
-      let isFileTarget = false;
-      try {
-        isFileTarget = fs.existsSync(targetPath) && !fs.statSync(targetPath).isDirectory();
-      } catch {
-        isFileTarget = false;
-      }
-
-      if (wsFolder) {
-        baseDir = wsFolder.uri.fsPath;
-      } else if (isFileTarget) {
-        baseDir = path.dirname(targetPath);
-      }
-
-      if (isFileTarget) {
-        // Check whether the CLI report expresses findings relative to the nested project root
-        let nestedProjectRoot: string | undefined;
-        let currentDir = path.dirname(path.resolve(targetPath));
-        const stopDir = wsFolder ? path.resolve(wsFolder.uri.fsPath) : undefined;
-        const projectMarkers = [
-          'pyproject.toml',
-          'package.json',
-          'Cargo.toml',
-          'setup.py',
-          'setup.cfg',
-          'requirements.txt',
-          'stackvet.toml',
-          '.stackvet.toml',
-          '.git',
-        ];
-
-        while (currentDir) {
-          const hasMarker = projectMarkers.some((marker) =>
-            fs.existsSync(path.join(currentDir, marker))
-          );
-          if (hasMarker) {
-            nestedProjectRoot = currentDir;
-            break;
-          }
-          if (stopDir && path.resolve(currentDir) === stopDir) {
-            break;
-          }
-          const parent = path.dirname(currentDir);
-          if (parent === currentDir) {
-            break;
-          }
-          currentDir = parent;
-        }
-
-        if (nestedProjectRoot) {
-          const resolvedTarget = path.resolve(targetPath);
-          const hasRelativeFindingInNestedRoot = result.report.diagnostics.some((d) => {
-            const fp = d.location?.file_path;
-            if (fp && !path.isAbsolute(fp)) {
-              const candidate = path.resolve(nestedProjectRoot!, fp);
-              return candidate === resolvedTarget || fs.existsSync(candidate);
-            }
-            return false;
-          });
-
-          if (hasRelativeFindingInNestedRoot) {
-            baseDir = nestedProjectRoot;
-          }
-        }
-      }
+      const baseDir = resolveDiagnosticBaseDir(
+        targetPath,
+        wsFolder ? wsFolder.uri.fsPath : undefined,
+        result.report.diagnostics
+      );
 
       const { diagnosticsByUri, unmappedFindings } = mapFindingsToDiagnostics(
         result.report.diagnostics,
@@ -362,7 +303,18 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   context.subscriptions.push(onConfigChangeDisposable);
 
-  // 7. Initial Automatic Scan on Activation
+  // 7. Invalidate marker cache on marker file creation / deletion
+  try {
+    const markerPattern = `**/{${PROJECT_MARKERS.join(',')}}`;
+    const markerWatcher = vscode.workspace.createFileSystemWatcher(markerPattern);
+    markerWatcher.onDidCreate(() => clearMarkerCache());
+    markerWatcher.onDidDelete(() => clearMarkerCache());
+    context.subscriptions.push(markerWatcher);
+  } catch {
+    // Ignore in environments without workspace watcher
+  }
+
+  // 8. Initial Automatic Scan on Activation
   const config = vscode.workspace.getConfiguration('stackvet');
   if (config.get<boolean>('autoScan', true) && config.get<boolean>('autoScanOnOpen', true)) {
     triggerAutoScan(undefined, 300);
@@ -384,5 +336,144 @@ export function deactivate(): void {
   if (statusBarItem) {
     statusBarItem.dispose();
   }
+  clearMarkerCache();
 }
+
+interface MarkerCacheEntry {
+  root: string | null;
+  mtimeMs: number;
+}
+
+const markerCache = new Map<string, MarkerCacheEntry>();
+
+export function clearMarkerCache(): void {
+  markerCache.clear();
+}
+
+export const PROJECT_MARKERS = [
+  'pyproject.toml',
+  'package.json',
+  'Cargo.toml',
+  'setup.py',
+  'setup.cfg',
+  'requirements.txt',
+  'stackvet.toml',
+  '.stackvet.toml',
+  '.git',
+];
+
+/**
+ * Walks up directory hierarchy looking for project markers, caching results per directory
+ * and invalidating cache when directory mtime changes (e.g. when markers are added/removed).
+ */
+export function findNestedProjectRoot(
+  targetDir: string,
+  stopDir?: string,
+  markers: string[] = PROJECT_MARKERS
+): string | undefined {
+  let currentDir = path.resolve(targetDir);
+  const resolvedStopDir = stopDir ? path.resolve(stopDir).toLowerCase() : undefined;
+
+  while (currentDir) {
+    let currentMtime = 0;
+    try {
+      currentMtime = fs.statSync(currentDir).mtimeMs;
+    } catch {
+      break;
+    }
+
+    const cached = markerCache.get(currentDir);
+    if (cached !== undefined && cached.mtimeMs === currentMtime) {
+      if (cached.root !== null) {
+        return cached.root;
+      }
+    } else {
+      let found = false;
+      for (const marker of markers) {
+        try {
+          if (fs.existsSync(path.join(currentDir, marker))) {
+            found = true;
+            break;
+          }
+        } catch {
+          // Ignore filesystem errors
+        }
+      }
+      if (found) {
+        markerCache.set(currentDir, { root: currentDir, mtimeMs: currentMtime });
+        return currentDir;
+      }
+      markerCache.set(currentDir, { root: null, mtimeMs: currentMtime });
+    }
+
+    if (resolvedStopDir && currentDir.toLowerCase() === resolvedStopDir) {
+      break;
+    }
+    const parent = path.dirname(currentDir);
+    if (parent === currentDir) {
+      break;
+    }
+    currentDir = parent;
+  }
+  return undefined;
+}
+
+/**
+ * Resolves the effective base directory for relative diagnostic paths.
+ * When target is a file, checks whether relative findings in the report correspond
+ * to the scanned target, a sibling file, or a manifest under the nested project root.
+ */
+export function resolveDiagnosticBaseDir(
+  targetPath: string,
+  workspaceFolderPath: string | undefined,
+  diagnostics: DiagnosticFinding[],
+  isFileTarget?: boolean
+): string {
+  const isFile =
+    isFileTarget !== undefined
+      ? isFileTarget
+      : (() => {
+          try {
+            return fs.existsSync(targetPath) && !fs.statSync(targetPath).isDirectory();
+          } catch {
+            return false;
+          }
+        })();
+
+  let baseDir = workspaceFolderPath || (isFile ? path.dirname(targetPath) : targetPath);
+
+  if (isFile) {
+    const nestedRoot = findNestedProjectRoot(path.dirname(targetPath), workspaceFolderPath);
+    if (nestedRoot) {
+      const normalizedTarget = path.resolve(targetPath).replace(/\\/g, '/').toLowerCase();
+      const normalizedNestedRoot = path.resolve(nestedRoot).replace(/\\/g, '/').toLowerCase();
+
+      const hasRelativeFindingInNestedRoot = diagnostics.some((d) => {
+        const fp = d.location?.file_path;
+        if (fp && !path.isAbsolute(fp)) {
+          const resolvedCandidate = path.resolve(nestedRoot, fp);
+          const normalizedCandidate = resolvedCandidate.replace(/\\/g, '/').toLowerCase();
+          if (normalizedCandidate === normalizedTarget) {
+            return true;
+          }
+          if (normalizedCandidate.startsWith(normalizedNestedRoot + '/')) {
+            try {
+              return fs.existsSync(resolvedCandidate);
+            } catch {
+              return false;
+            }
+          }
+        }
+        return false;
+      });
+
+      if (hasRelativeFindingInNestedRoot) {
+        baseDir = nestedRoot;
+      }
+    }
+  }
+
+  return baseDir;
+}
+
 

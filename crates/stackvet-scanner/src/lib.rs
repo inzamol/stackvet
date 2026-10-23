@@ -137,6 +137,29 @@ impl ProjectScanner {
         self
     }
 
+    /// Checks whether a given path is matched by the scanner's explicit custom ignore rules.
+    pub fn is_explicitly_ignored(&self, path: &Path) -> bool {
+        if self.custom_ignores.is_empty() {
+            return false;
+        }
+        let mut ov_builder = OverrideBuilder::new(&self.root);
+        for pattern in &self.custom_ignores {
+            let trimmed = pattern.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('!') {
+                continue;
+            }
+            let rule = format!("!{trimmed}");
+            let _ = ov_builder.add(&rule);
+        }
+        match ov_builder.build() {
+            Ok(overrides) => {
+                let is_dir = path.is_dir();
+                matches!(overrides.matched(path, is_dir), ignore::Match::Ignore(_))
+            }
+            Err(_) => false,
+        }
+    }
+
     pub fn scan(&self) -> ScanResult {
         let mut result = ScanResult::default();
         let canonical_root = self

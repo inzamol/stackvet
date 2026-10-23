@@ -474,6 +474,7 @@ fn build_full_context(
     };
 
     let mut scanner = ProjectScanner::new(scan_root)
+        .with_parents(false)
         .with_default_exclusions(config.ignore.use_defaults())
         .with_ignores(config.ignore.patterns().iter().cloned())
         .with_ignores(cli_ignores.iter().cloned())
@@ -489,18 +490,21 @@ fn build_full_context(
     ctx.root = project_root.to_path_buf();
 
     if target.is_file() {
-        let canonical_target = target
-            .canonicalize()
-            .unwrap_or_else(|_| target.to_path_buf());
-        let already_included = ctx.source_files.iter().any(|f| {
-            f == target
-                || f == &canonical_target
-                || f.canonicalize()
-                    .map(|cf| cf == canonical_target)
-                    .unwrap_or(false)
-        });
-        if !already_included {
-            ctx.source_files.push(target.to_path_buf());
+        let is_explicitly_ignored = scanner.is_explicitly_ignored(target);
+        if !is_explicitly_ignored {
+            let canonical_target = target
+                .canonicalize()
+                .unwrap_or_else(|_| target.to_path_buf());
+            let already_included = ctx.source_files.iter().any(|f| {
+                f == target
+                    || f == &canonical_target
+                    || f.canonicalize()
+                        .map(|cf| cf == canonical_target)
+                        .unwrap_or(false)
+            });
+            if !already_included {
+                ctx.source_files.push(target.to_path_buf());
+            }
         }
     }
 
