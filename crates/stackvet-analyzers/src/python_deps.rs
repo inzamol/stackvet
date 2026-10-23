@@ -23,40 +23,12 @@ impl PythonDependencyAnalyzer {
 
     /// Determines if an import root name corresponds to a local module, package, or PEP 420 namespace package in the repository.
     fn is_local_module_or_package(ctx: &ProjectContext, pkg_name: &str) -> bool {
-        // 1. Direct file in project root or src/: <pkg_name>.py
-        if ctx.root.join(format!("{}.py", pkg_name)).is_file()
-            || ctx
-                .root
-                .join("src")
-                .join(format!("{}.py", pkg_name))
-                .is_file()
-        {
+        let search_roots = stackvet_python::get_python_search_roots(&ctx.root, ctx.python.as_ref());
+        if stackvet_python::is_local_python_package(&search_roots, pkg_name) {
             return true;
         }
 
-        // 2. Package directory with __init__.py or PEP 420 namespace package (directory with .py files)
-        let candidate_dirs = [ctx.root.join(pkg_name), ctx.root.join("src").join(pkg_name)];
-        for dir in &candidate_dirs {
-            if dir.is_dir() {
-                if dir.join("__init__.py").is_file() {
-                    return true;
-                }
-                if let Ok(entries) = fs::read_dir(dir) {
-                    for entry in entries.flatten() {
-                        let path = entry.path();
-                        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("py")
-                        {
-                            return true;
-                        }
-                        if path.is_dir() {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-
-        // 3. Check ctx.source_files
+        // Check ctx.source_files
         for file in &ctx.source_files {
             if let Ok(rel) = file.strip_prefix(&ctx.root) {
                 let rel_str = rel.to_string_lossy().replace('\\', "/");

@@ -26,7 +26,7 @@ fn analyze_fixture(rel_path: &str) -> Vec<Diagnostic> {
         fixture_path.display()
     );
 
-    let scanner = ProjectScanner::new(&fixture_path);
+    let scanner = ProjectScanner::new(&fixture_path).with_parents(false);
     let mut ctx = scanner.build_context().expect("Failed to build context");
     ctx.python = detect_python_project(&fixture_path);
     ctx.node = detect_node_project(&fixture_path);

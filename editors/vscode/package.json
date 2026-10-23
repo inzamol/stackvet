@@ -1,0 +1,94 @@
+{
+  "name": "stackvet-vscode",
+  "displayName": "StackVet",
+  "description": "Universal project health and static diagnostics engine for VS Code",
+  "version": "0.2.1",
+  "publisher": "inzamrzn918",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/inzamol/stackvet"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters"
+  ],
+  "keywords": [
+    "stackvet",
+    "linter",
+    "diagnostics",
+    "health",
+    "security"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "stackvet.scanWorkspace",
+        "title": "StackVet: Scan Workspace",
+        "category": "StackVet"
+      }
+    ],
+    "configuration": {
+      "title": "StackVet",
+      "properties": {
+        "stackvet.executablePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the StackVet executable. If left empty, 'stackvet' is resolved from PATH."
+        },
+        "stackvet.autoScan": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically check files and workspace for issues on open, change, and save."
+        },
+        "stackvet.scanMode": {
+          "type": "string",
+          "enum": [
+            "openFilesOnly",
+            "workspace"
+          ],
+          "default": "openFilesOnly",
+          "description": "Analysis scope: 'openFilesOnly' (Pyright-style: rescan only active/saved files) or 'workspace' (rescan entire project)."
+        },
+        "stackvet.autoScanOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically run StackVet scan whenever a file is saved."
+        },
+        "stackvet.autoScanOnOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically run StackVet scan when a workspace is opened."
+        },
+        "stackvet.allowLiveFallback": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow falling back to live network execution via npx or pipx if no local StackVet binary is found."
+        },
+        "stackvet.timeout": {
+          "type": "number",
+          "default": 30000,
+          "minimum": 1000,
+          "description": "Maximum execution time in milliseconds before a StackVet scan is timed out."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test \"out/test/*.test.js\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  }
+}

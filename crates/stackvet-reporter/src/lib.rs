@@ -2,7 +2,9 @@ use anyhow::Result;
 use colored::*;
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
-use comfy_table::{Cell, Color, Row, Table};
+use comfy_table::{
+    Attribute, Cell, Color, ColumnConstraint, ContentArrangement, Row, Table, Width,
+};
 use serde::{Deserialize, Serialize};
 use stackvet_core::{Diagnostic, HealthScoreExplanation, RootCause, Severity};
 
@@ -147,26 +149,16 @@ impl Reporter {
         let mut out = String::new();
 
         out.push('\n');
-        out.push_str(
-            &"=======================================================================\n"
-                .cyan()
-                .bold()
-                .to_string(),
+        let banner_title = "StackVet Universal Project Health Report";
+        let banner_box = format!(
+            "╭─────────────────────────────────────────────────────────────────────╮\n\
+             │              {}               │\n\
+             ╰─────────────────────────────────────────────────────────────────────╯\n\n",
+            banner_title
         );
-        out.push_str(
-            &"                StackVet Universal Project Health Report               \n"
-                .cyan()
-                .bold()
-                .to_string(),
-        );
-        out.push_str(
-            &"=======================================================================\n\n"
-                .cyan()
-                .bold()
-                .to_string(),
-        );
+        out.push_str(&banner_box.cyan().bold().to_string());
 
-        // Score Card
+        // Score Card with visual progress bar and grade badge
         let score_colored = match score {
             90..=100 => format!("{}", score).green().bold(),
             75..=89 => format!("{}", score).yellow().bold(),
@@ -174,7 +166,34 @@ impl Reporter {
             _ => format!("{}", score).red().bold(),
         };
 
-        out.push_str(&format!("  Health Score: {} / 100\n", score_colored));
+        let grade_badge = match grade.chars().next().unwrap_or('F') {
+            'A' => format!("[ Grade: {} ]", grade).green().bold(),
+            'B' => format!("[ Grade: {} ]", grade).yellow().bold(),
+            'C' => format!("[ Grade: {} ]", grade)
+                .truecolor(255, 140, 0)
+                .bold(),
+            _ => format!("[ Grade: {} ]", grade).red().bold(),
+        };
+
+        let filled_blocks = ((score as usize * 20) + 50) / 100;
+        let empty_blocks = 20usize.saturating_sub(filled_blocks);
+        let bar_filled = "█".repeat(filled_blocks);
+        let bar_empty = "░".repeat(empty_blocks);
+        let bar_colored = match score {
+            90..=100 => format!("{}{}", bar_filled.green(), bar_empty.dimmed()),
+            75..=89 => format!("{}{}", bar_filled.yellow(), bar_empty.dimmed()),
+            50..=74 => format!(
+                "{}{}",
+                bar_filled.truecolor(255, 140, 0),
+                bar_empty.dimmed()
+            ),
+            _ => format!("{}{}", bar_filled.red(), bar_empty.dimmed()),
+        };
+
+        out.push_str(&format!(
+            "  Health Score:  [{}] {} / 100   {}\n",
+            bar_colored, score_colored, grade_badge
+        ));
         out.push_str(&format!("  Overall Grade: {}\n", grade.bold()));
 
         if let Some(exp) = explanation {
@@ -196,7 +215,7 @@ impl Reporter {
         }
         out.push('\n');
 
-        // Counts
+        // Counts with color indicators
         let criticals = diagnostics
             .iter()
             .filter(|d| d.severity == Severity::Critical)
@@ -209,24 +228,35 @@ impl Reporter {
             .iter()
             .filter(|d| d.severity == Severity::Warning)
             .count();
+        let infos = diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Info || d.severity == Severity::Hint)
+            .count();
+
+        let crit_str = if criticals > 0 {
+            format!("● {} Critical", criticals).red().bold()
+        } else {
+            "● 0 Critical".green()
+        };
+        let err_str = if errors > 0 {
+            format!("● {} Errors", errors).red().bold()
+        } else {
+            "● 0 Errors".green()
+        };
+        let warn_str = if warnings > 0 {
+            format!("▲ {} Warnings", warnings).yellow().bold()
+        } else {
+            "▲ 0 Warnings".green()
+        };
+        let info_str = if infos > 0 {
+            format!("ℹ {} Info", infos).cyan()
+        } else {
+            "ℹ 0 Info".dimmed()
+        };
 
         out.push_str(&format!(
-            "  Critical: {}  |  Errors: {}  |  Warnings: {}\n\n",
-            if criticals > 0 {
-                criticals.to_string().red().bold()
-            } else {
-                "0".green()
-            },
-            if errors > 0 {
-                errors.to_string().red()
-            } else {
-                "0".green()
-            },
-            if warnings > 0 {
-                warnings.to_string().yellow()
-            } else {
-                "0".green()
-            }
+            "  Metrics:       {}  │  {}  │  {}  │  {}\n\n",
+            crit_str, err_str, warn_str, info_str
         ));
 
         let disc_diags: Vec<_> = diagnostics
@@ -241,7 +271,12 @@ impl Reporter {
                     .to_string(),
             );
             for d in disc_diags {
-                out.push_str(&format!("  • [{}] {}\n", d.rule_id.0.yellow(), d.message));
+                let clean_msg = d.message.replace(r"\\?\", "");
+                out.push_str(&format!(
+                    "  • [{}] {}\n",
+                    d.rule_id.0.yellow().bold(),
+                    clean_msg
+                ));
             }
             out.push('\n');
         }
@@ -249,11 +284,12 @@ impl Reporter {
         // Score deduction breakdown
         if let Some(exp) = explanation {
             if !exp.rule_contributions.is_empty() {
-                out.push_str(
-                    &"--- Health Score Deduction Breakdown ---\n"
+                out.push_str(&format!(
+                    "{}\n",
+                    "─── Health Score Deduction Breakdown ──────────────────────────────────"
+                        .cyan()
                         .bold()
-                        .to_string(),
-                );
+                ));
                 for contrib in &exp.rule_contributions {
                     let sev_badge = match contrib.severity {
                         Severity::Critical => "[CRITICAL]".red().bold(),
@@ -262,10 +298,10 @@ impl Reporter {
                         _ => "[INFO]".cyan(),
                     };
                     out.push_str(&format!(
-                        "  • {} {}: -{} pts ({} finding{}) - {}\n",
+                        "  • {:<10} {:<10} {:<10} ({} finding{}) ── {}\n",
                         sev_badge,
-                        contrib.rule_id.bold(),
-                        contrib.total_penalty,
+                        contrib.rule_id.bold().cyan(),
+                        format!("-{} pts", contrib.total_penalty).red(),
                         contrib.count,
                         if contrib.count == 1 { "" } else { "s" },
                         contrib.title
@@ -277,11 +313,15 @@ impl Reporter {
 
         // Root causes section
         if !root_causes.is_empty() {
-            out.push_str(
-                &format!("--- Root Cause Clusters ({}) ---\n", root_causes.len())
-                    .bold()
-                    .to_string(),
-            );
+            out.push_str(&format!(
+                "{}\n",
+                format!(
+                    "─── Root Cause Clusters ({}) ───────────────────────────────────────────",
+                    root_causes.len()
+                )
+                .cyan()
+                .bold()
+            ));
             for (idx, rc) in root_causes.iter().enumerate() {
                 let sev_badge = match rc.impact_severity {
                     Severity::Critical => "[CRITICAL]".red().bold(),
@@ -294,46 +334,97 @@ impl Reporter {
                     stackvet_core::CauseRelationship::Verified => rel_str.green(),
                     stackvet_core::CauseRelationship::Inferred => rel_str.magenta(),
                 };
+                let symptoms_count = rc.symptoms.len();
+                let symptoms_label = if symptoms_count == 1 {
+                    "finding"
+                } else {
+                    "findings"
+                };
                 out.push_str(&format!(
-                    "{}. {} {} {}\n",
+                    "  {}. {} {} {}  ({} {})\n",
                     idx + 1,
                     sev_badge,
                     rc.title.bold(),
-                    rel_colored
+                    rel_colored,
+                    symptoms_count,
+                    symptoms_label
                 ));
-                out.push_str(&format!("   Summary: {}\n", rc.summary));
+                out.push_str(&format!("     Summary:      {}\n", rc.summary));
                 out.push_str(&format!(
-                    "   Remediation: {}\n",
+                    "     Remediation:  {}\n",
                     rc.primary_remediation.cyan()
                 ));
                 if !rc.remediation_plan.is_empty() {
-                    out.push_str("   Action Plan:\n");
+                    out.push_str("     Action Plan:\n");
                     for step in &rc.remediation_plan {
-                        out.push_str(&format!("     {}. {}\n", step.order, step.action));
+                        out.push_str(&format!("       {}. {}\n", step.order, step.action));
                     }
                 }
-                out.push_str(&format!("   Symptoms Count: {}\n\n", rc.symptoms.len()));
+                out.push('\n');
             }
         }
 
         // Diagnostics table
         if !diagnostics.is_empty() {
-            out.push_str(&"--- Diagnostic Details ---\n".bold().to_string());
+            out.push_str(&format!(
+                "{}\n",
+                "─── Diagnostic Details ────────────────────────────────────────────────"
+                    .cyan()
+                    .bold()
+            ));
+            let term_width = crossterm::terminal::size()
+                .map(|(w, _)| w.saturating_sub(2))
+                .unwrap_or(100)
+                .min(130);
+
             let mut table = Table::new();
             table
                 .load_preset(UTF8_FULL)
                 .apply_modifier(UTF8_ROUND_CORNERS)
+                .set_content_arrangement(ContentArrangement::Dynamic)
+                .set_width(term_width)
                 .set_header(vec![
-                    Cell::new("Rule").fg(Color::Cyan),
-                    Cell::new("Severity"),
-                    Cell::new("Target"),
-                    Cell::new("File Location"),
-                    Cell::new("Message"),
+                    Cell::new("Rule")
+                        .fg(Color::Cyan)
+                        .add_attribute(Attribute::Bold),
+                    Cell::new("Severity")
+                        .fg(Color::Cyan)
+                        .add_attribute(Attribute::Bold),
+                    Cell::new("Target")
+                        .fg(Color::Cyan)
+                        .add_attribute(Attribute::Bold),
+                    Cell::new("File Location")
+                        .fg(Color::Cyan)
+                        .add_attribute(Attribute::Bold),
+                    Cell::new("Message")
+                        .fg(Color::Cyan)
+                        .add_attribute(Attribute::Bold),
                 ]);
+
+            let (rule_w, sev_w, target_w, loc_w) = if term_width < 80 {
+                (7, 6, 6, 20)
+            } else {
+                (9, 9, 8, 35)
+            };
+
+            if let Some(col) = table.column_mut(0) {
+                col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(rule_w)));
+            }
+            if let Some(col) = table.column_mut(1) {
+                col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(sev_w)));
+            }
+            if let Some(col) = table.column_mut(2) {
+                col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(target_w)));
+            }
+            if let Some(col) = table.column_mut(3) {
+                col.set_constraint(ColumnConstraint::UpperBoundary(Width::Fixed(loc_w)));
+            }
 
             for d in diagnostics {
                 let sev_cell = match d.severity {
-                    Severity::Critical => Cell::new("CRITICAL").fg(Color::DarkRed),
+                    Severity::Critical => Cell::new("CRITICAL")
+                        .fg(Color::DarkRed)
+                        .add_attribute(Attribute::Bold),
                     Severity::Error => Cell::new("ERROR").fg(Color::Red),
                     Severity::Warning => Cell::new("WARN").fg(Color::Yellow),
                     Severity::Info => Cell::new("INFO").fg(Color::Blue),
@@ -343,7 +434,7 @@ impl Reporter {
                 let loc_str = d.location.display_location();
 
                 table.add_row(Row::from(vec![
-                    Cell::new(d.rule_id.as_str()),
+                    Cell::new(d.rule_id.as_str()).fg(Color::Cyan),
                     sev_cell,
                     Cell::new(d.language.as_str()),
                     Cell::new(loc_str),

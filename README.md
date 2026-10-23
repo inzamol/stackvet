@@ -20,6 +20,7 @@
 - [Key Features](#key-features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Terminal UI & Interactive Scorecard](#terminal-ui--interactive-scorecard)
 - [CLI Command Guide](#cli-command-guide)
   - [`stackvet doctor` (aliases: `diagnose`, `health`)](#stackvet-doctor)
   - [`stackvet check` (aliases: `scan`, `audit`)](#stackvet-check)
@@ -30,16 +31,12 @@
   - [`stackvet baseline`](#stackvet-baseline)
   - [`stackvet init` (alias: `setup`)](#stackvet-init)
   - [`stackvet rules` (aliases: `catalog`, `list-rules`)](#stackvet-rules)
-- [Diagnostic Rules Catalog (132 Rules)](#diagnostic-rules-catalog)
+- [Diagnostic Rules Catalog & Highlights](#diagnostic-rules-catalog--highlights)
   - [Python Dependency Rules (`DEP-xxx`)](#python-dependency-rules-dep-xxx)
   - [Node Dependency Rules (`NDEP-xxx`)](#node-dependency-rules-ndep-xxx)
   - [Import & Architecture Rules (`IMP-xxx`, `ARC-xxx`)](#import--architecture-rules-imp-xxx-arc-xxx)
   - [Environment & Drift Rules (`ENV-xxx`)](#environment--drift-rules-env-xxx)
-  - [Docker Rules (`DOC-xxx`)](#docker-rules-doc-xxx)
   - [FastAPI Framework Rules (`FAP-xxx`)](#fastapi-framework-rules-fap-xxx)
-  - [SQLAlchemy Rules (`SQL-xxx`)](#sqlalchemy-rules-sql-xxx)
-  - [Django Rules (`DJG-xxx`)](#django-rules-djg-xxx)
-  - [Celery Rules (`CEL-xxx`)](#celery-rules-cel-xxx)
   - [React & Next.js Rules (`RCT-xxx`, `NXT-xxx`)](#react--nextjs-rules-rct-xxx-nxt-xxx)
 - [Output Formats](#output-formats)
 - [Process Exit Codes](#process-exit-codes)
@@ -62,7 +59,7 @@ When applications break, developers often suffer from **alert fatigue**—facing
 1. **Parallel Static Analysis**: Uses Rust with `ruff_python_parser` and `oxc_parser` to inspect ASTs without running user code.
 2. **Cross-Layer Drift Detection**: Detects mismatches between local environments, package manifests, lockfiles, Docker images, and CI matrix definitions.
 3. **Correlation Engine**: Groups individual symptoms into concise **Root Cause Clusters**.
-4. **Health Score & Grade**: Produces an actionable 0–100 health score with letter grades (A through F).
+4. **Health Score & Grade**: Produces an actionable 0–100 health score with letter grades (A, B, C, or F).
 5. **Format-Preserving Auto-Fixes**: Injects missing dependencies into `pyproject.toml` or `package.json` preserving user comments and indentation using `toml_edit`.
 
 ---
@@ -117,22 +114,109 @@ Run a full project health check in your repository root:
 stackvet doctor
 ```
 
-Output:
 ```text
-=======================================================================
-                StackVet Universal Project Health Report               
-=======================================================================
+╭─────────────────────────────────────────────────────────────────────╮
+│              StackVet Universal Project Health Report               │
+╰─────────────────────────────────────────────────────────────────────╯
 
-  Health Score: 92 / 100
+  Health Score:  [████████████████████] 100 / 100   [ Grade: A (Healthy) ]
   Overall Grade: A (Healthy)
+  Calculation:   Base 100 - 0 deductions (0 unique findings, 0 duplicates ignored)
 
-  Critical: 0  |  Errors: 0  |  Warnings: 2
+  Metrics:       ● 0 Critical  │  ● 0 Errors  │  ▲ 0 Warnings  │  ℹ 0 Info
 
---- Root Cause Clusters (1) ---
-1. [WARN] Environment, Lockfile & Runtime Drift
-   Summary: Detected 1 discrepancy(ies) between local manifests, Docker, CI matrix, or lockfiles.
-   Remediation: Align runtime version declarations across pyproject, package.json, Dockerfile, and CI workflows.
-   Symptoms Count: 1
+No issues found! Your project stack is pristine.
+```
+
+---
+
+## Terminal UI & Interactive Scorecard
+
+StackVet features an enterprise-grade terminal user interface designed with adaptive formatting, UTF-8 rounded box-drawing characters, ANSI color-coded severity badges, and visual health score meters.
+
+### Executive Diagnostic Report
+
+When violations, runtime drift, or missing dependencies are discovered across your stack, `stackvet doctor` renders an interactive diagnostic dashboard:
+
+```text
+╭─────────────────────────────────────────────────────────────────────╮
+│              StackVet Universal Project Health Report               │
+╰─────────────────────────────────────────────────────────────────────╯
+
+  Health Score:  [█████████████████░░░] 86 / 100   [ Grade: B (Fair) ]
+  Overall Grade: B (Fair)
+  Calculation:   Base 100 - 14 deductions (4 unique findings, 0 duplicates ignored)
+
+  Metrics:       ● 0 Critical  │  ● 1 Errors  │  ▲ 3 Warnings  │  ℹ 0 Info
+
+─── Health Score Deduction Breakdown ──────────────────────────────────
+  • [ERROR]    NDEP-001   -8 pts     (1 finding)  ── Missing Node Package
+  • [WARN]     IMP-003    -2 pts     (1 finding)  ── Unused / orphan local module
+  • [WARN]     NDEP-004   -2 pts     (1 finding)  ── Lockfile Out of Sync
+  • [WARN]     SEC-001    -2 pts     (1 finding)  ── Security analysis unavailable
+
+─── Root Cause Clusters (4) ───────────────────────────────────────────
+  1. [ERROR] Missing Project Dependency: 'axios' [Verified]  (1 finding)
+     Summary:      Package 'axios' is imported across 1 file location(s) but undeclared in manifests.
+     Remediation:  Add 'axios' to project manifest dependencies.
+     Action Plan:
+       1. Add 'axios' to project manifest dependencies.
+       2. Synchronize package manager lockfile.
+
+  2. [WARN] Environment, Lockfile & Runtime Drift [Verified]  (1 finding)
+     Summary:      Detected 1 discrepancy(ies) between local manifests, Docker, CI matrix, or lockfiles.
+     Remediation:  Align runtime version declarations across pyproject, package.json, Dockerfile, and CI workflows.
+     Action Plan:
+       1. Synchronize dependency declarations and lockfile versions.
+       2. Align target runtime specifications across Dockerfiles, CI matrices, and project manifests.
+
+  3. [WARN] Rule Violation: IMP-003 [Verified]  (1 finding)
+     Summary:      File is never imported by any other source files in the project. It may be dead code or an unexported utility.
+     Remediation:  Import the module or delete it if obsolete.
+     Action Plan:
+       1. Import the module or delete it if obsolete.
+
+  4. [WARN] Rule Violation: SEC-001 [Verified]  (1 finding)
+     Summary:      StackVet requires a vulnerability database to detect known CVEs in project dependencies. Without a connection or local cache, vulnerability scanning cannot be performed.
+     Remediation:  Connect to the internet and run 'stackvet scan --refresh-vuln-cache' to populate the local vulnerability database.
+     Action Plan:
+       1. Connect to the internet and run 'stackvet scan --refresh-vuln-cache' to populate the local vulnerability database.
+
+─── Diagnostic Details ────────────────────────────────────────────────
+╭──────────┬──────────┬─────────┬───────────────────────────────────┬────────────────────────────────────────────────╮
+│ Rule     ┆ Severity ┆ Target  ┆ File Location                     ┆ Message                                        │
+╞══════════╪══════════╪═════════╪═══════════════════════════════════╪════════════════════════════════════════════════╡
+│ NDEP-001 ┆ ERROR    ┆ Node.js ┆ server.js:2:15                    ┆ Package 'axios' is imported in source code     │
+│          ┆          ┆         ┆                                   ┆ but not declared in package.json               │
+├╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
+│ IMP-003  ┆ WARN     ┆ General ┆ server.js                         ┆ Orphan source file with 0 incoming imports:    │
+│          ┆          ┆         ┆                                   ┆ 'server.js'                                    │
+├╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
+│ NDEP-004 ┆ WARN     ┆ Node.js ┆ package.json                      ┆ No lockfile detected (pnpm-lock.yaml /         │
+│          ┆          ┆         ┆                                   ┆ package-lock.json / yarn.lock)                 │
+├╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
+│ SEC-001  ┆ WARN     ┆ General ┆ package.json                      ┆ Vulnerability advisory database cache missing  │
+╰──────────┴──────────┴─────────┴───────────────────────────────────┴────────────────────────────────────────────────╯
+```
+
+### Auto-Remediation Verification Report (`stackvet fix --verify`)
+
+When executing auto-remediation with `--verify`, StackVet applies safe format-preserving modifications and verifies them against a clean post-fix scan:
+
+```text
+Applied fix: Injected 'axios' into package.json dependencies
+All safe fixes applied successfully (1 file(s) updated)!
+
+--- Running Fix Verification ---
+
+--- Fix Verification Report ---
+╭──────────────┬──────────┬──────────────┬─────────────────────────────────────────────────╮
+│ Status       ┆ Rule     ┆ File         ┆ Details                                         │
+╞══════════════╪══════════╪══════════════╪═════════════════════════════════════════════════╡
+│ RESOLVED     ┆ NDEP-001 ┆ package.json ┆ Missing package: 'axios' imported in index.js   │
+╰──────────────┴──────────┴──────────────┴─────────────────────────────────────────────────╯
+
+Verification SUCCESS: 1 issue(s) confirmed resolved with 0 regressions.
 ```
 
 ---
@@ -142,7 +226,7 @@ Output:
 All subcommands support positional path arguments (e.g. `stackvet doctor ./backend`) as well as the global `-p / --path` option.
 
 ### `stackvet doctor` (aliases: `diagnose`, `health`)
-Runs a comprehensive health check, aggregates symptoms into root causes, and assigns a health grade (A–F).
+Runs a comprehensive health check, aggregates symptoms into root causes, and assigns a health grade (A, B, C, or F).
 
 ```bash
 # Run on current directory
@@ -179,7 +263,7 @@ StackVet computes an objective, deterministic 0–100 health score subtracted fr
 | **`WARN`** | **-2 pts** | Lockfile drift, unused dependencies, version mismatches |
 | **`INFO` / `HINT`** | **0 pts** | Informational architecture advice and guidance |
 
-- **Letter Grades**: **A (90–100)** | **B (75–89)** | **C (50–74)** | **F (0–49)**
+- **Letter Grades**: **A (90–100, Healthy)** | **B (75–89, Fair)** | **C (50–74, Degraded)** | **F (0–49, Critical Issues)**
 - **Deduplication Safety**: Duplicate findings across identical files and lines are suppressed so redundant occurrences never distort the score.
 
 
@@ -312,7 +396,7 @@ stackvet init --ci
 ---
 
 ### `stackvet rules` (aliases: `catalog`, `list-rules`)
-Displays the complete catalog of 132 supported diagnostic rules across Python, Node.js, Docker, CI/CD, and frameworks.
+Displays the catalog of supported diagnostic rules across Python, Node.js, Docker, CI/CD, and frameworks. Run `stackvet rules` to view all rules and their metadata directly in your terminal.
 
 ```bash
 # Show all rules in a formatted table
@@ -327,7 +411,9 @@ stackvet rules react
 
 ---
 
-## Diagnostic Rules Catalog
+## Diagnostic Rules Catalog & Highlights
+
+Below is an overview of representative diagnostic rules across key categories. Run `stackvet rules` to browse the full catalog or `stackvet explain <RULE_ID>` for deep-dive remediations.
 
 ### Python Dependency Rules (`DEP-xxx`)
 

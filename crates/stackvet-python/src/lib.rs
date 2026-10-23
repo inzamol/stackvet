@@ -337,7 +337,246 @@ pub fn parse_pyproject_toml(content: &str, path: &Path) -> Result<PythonProjectI
         info.package_manager = "uv".to_string();
     }
 
+    // Extract declared pythonpath / src layout search roots from pyproject.toml
+    collect_pyproject_pythonpath(&parsed, path, &mut info.pythonpath);
+    info.pythonpath.sort();
+    info.pythonpath.dedup();
+
+    // Extract declared entry points from pyproject.toml
+    collect_pyproject_entry_points(&parsed, &mut info.entry_points);
+    info.entry_points.sort();
+    info.entry_points.dedup();
+
     Ok(info)
+}
+
+fn collect_pyproject_pythonpath(val: &toml::Value, manifest_path: &Path, out: &mut Vec<String>) {
+    // 1. If manifest_path directory has a src/ folder, default to src
+    if let Some(parent) = manifest_path.parent() {
+        if parent.join("src").is_dir() {
+            out.push("src".to_string());
+        }
+    }
+
+    if let Some(tool) = val.get("tool").and_then(|v| v.as_table()) {
+        // [tool.pytest.ini_options].pythonpath
+        if let Some(pytest) = tool.get("pytest").and_then(|v| v.as_table()) {
+            if let Some(ini) = pytest.get("ini_options").and_then(|v| v.as_table()) {
+                if let Some(pp) = ini.get("pythonpath") {
+                    if let Some(arr) = pp.as_array() {
+                        for item in arr.iter().filter_map(|v| v.as_str()) {
+                            out.push(item.to_string());
+                        }
+                    } else if let Some(s) = pp.as_str() {
+                        out.push(s.to_string());
+                    }
+                }
+            }
+        }
+
+        // [tool.setuptools.package-dir] e.g. "" = "src"
+        if let Some(st) = tool.get("setuptools").and_then(|v| v.as_table()) {
+            if let Some(pkg_dir) = st.get("package-dir").and_then(|v| v.as_table()) {
+                if let Some(dir) = pkg_dir.get("").and_then(|v| v.as_str()) {
+                    if !dir.is_empty() {
+                        out.push(dir.to_string());
+                    }
+                }
+            }
+        }
+
+        // [tool.ruff].src
+        if let Some(ruff) = tool.get("ruff").and_then(|v| v.as_table()) {
+            if let Some(src_val) = ruff.get("src").and_then(|v| v.as_array()) {
+                for item in src_val.iter().filter_map(|v| v.as_str()) {
+                    out.push(item.to_string());
+                }
+            }
+        }
+
+        // [tool.pyright].extraPaths
+        if let Some(pyright) = tool.get("pyright").and_then(|v| v.as_table()) {
+            if let Some(ep) = pyright.get("extraPaths").and_then(|v| v.as_array()) {
+                for item in ep.iter().filter_map(|v| v.as_str()) {
+                    out.push(item.to_string());
+                }
+            }
+        }
+    }
+}
+
+/// Returns all candidate python module search roots (e.g. root, root/src, and configured pythonpath entries)
+pub fn get_python_search_roots(
+    root: &Path,
+    info: Option<&stackvet_core::PythonProjectInfo>,
+) -> Vec<std::path::PathBuf> {
+    let mut roots = Vec::new();
+    roots.push(root.to_path_buf());
+    let src_dir = root.join("src");
+    if src_dir.is_dir() && !roots.contains(&src_dir) {
+        roots.push(src_dir);
+    }
+    if let Some(py_info) = info {
+        for p in &py_info.pythonpath {
+            let path = root.join(p);
+            if path.is_dir() && !roots.contains(&path) {
+                roots.push(path);
+            }
+        }
+    }
+    roots
+}
+
+fn has_python_files(dir: &Path) -> bool {
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        if let Ok(entries) = std::fs::read_dir(&current) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if let Ok(ft) = entry.file_type() {
+                    if (ft.is_file() || ft.is_symlink())
+                        && p.extension().and_then(|s| s.to_str()) == Some("py")
+                    {
+                        return true;
+                    }
+                    if ft.is_dir() && !ft.is_symlink() {
+                        stack.push(p);
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Determines whether a top-level package or module name exists locally in any python search root
+pub fn is_local_python_package(search_roots: &[std::path::PathBuf], root_pkg: &str) -> bool {
+    for root in search_roots {
+        if root.join(format!("{}.py", root_pkg)).is_file() {
+            return true;
+        }
+        let dir = root.join(root_pkg);
+        if dir.is_dir() {
+            if dir.join("__init__.py").is_file() {
+                return true;
+            }
+            if has_python_files(&dir) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Resolves an absolute Python import against candidate search roots
+pub fn resolve_python_absolute_import(
+    search_roots: &[std::path::PathBuf],
+    imp: &PythonImport,
+) -> Option<std::path::PathBuf> {
+    let mod_subpath = imp.module.replace('.', "/");
+    for root in search_roots {
+        // 1. root / mod_subpath.py
+        let candidate_file = root.join(format!("{}.py", mod_subpath));
+        if candidate_file.is_file() {
+            return Some(candidate_file);
+        }
+        // 2. Candidate directory
+        let candidate_dir = root.join(&mod_subpath);
+
+        // 3. Symbol as submodule within candidate_dir (e.g. from my_pkg import worker -> my_pkg/worker.py)
+        if let Some(sym) = &imp.symbol {
+            let symbol_file = candidate_dir.join(format!("{}.py", sym));
+            if symbol_file.is_file() {
+                return Some(symbol_file);
+            }
+            let symbol_init = candidate_dir.join(sym).join("__init__.py");
+            if symbol_init.is_file() {
+                return Some(symbol_init);
+            }
+        }
+
+        // 4. root / mod_subpath / __init__.py
+        let candidate_init = candidate_dir.join("__init__.py");
+        if candidate_init.is_file() {
+            return Some(candidate_init);
+        }
+        // 4. PEP 420 namespace package
+        if candidate_dir.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&candidate_dir) {
+                let mut py_files: Vec<std::path::PathBuf> = entries
+                    .flatten()
+                    .map(|e| e.path())
+                    .filter(|p| p.is_file() && p.extension().and_then(|s| s.to_str()) == Some("py"))
+                    .collect();
+                py_files.sort();
+                if let Some(first) = py_files.into_iter().next() {
+                    return Some(first);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn collect_pyproject_entry_points(val: &toml::Value, out: &mut Vec<String>) {
+    // 1. [project.scripts] and [project.gui-scripts]
+    if let Some(project) = val.get("project") {
+        if let Some(scripts) = project.get("scripts").and_then(|v| v.as_table()) {
+            for spec in scripts.values().filter_map(|v| v.as_str()) {
+                add_python_entry_spec(spec, out);
+            }
+        }
+        if let Some(gui_scripts) = project.get("gui-scripts").and_then(|v| v.as_table()) {
+            for spec in gui_scripts.values().filter_map(|v| v.as_str()) {
+                add_python_entry_spec(spec, out);
+            }
+        }
+        if let Some(entry_points) = project.get("entry-points").and_then(|v| v.as_table()) {
+            for group in entry_points.values().filter_map(|v| v.as_table()) {
+                for spec in group.values().filter_map(|v| v.as_str()) {
+                    add_python_entry_spec(spec, out);
+                }
+            }
+        }
+    }
+
+    // 2. [tool.poetry.scripts]
+    if let Some(poetry_scripts) = val
+        .get("tool")
+        .and_then(|t| t.get("poetry"))
+        .and_then(|p| p.get("scripts"))
+        .and_then(|s| s.as_table())
+    {
+        for spec in poetry_scripts.values().filter_map(|v| v.as_str()) {
+            add_python_entry_spec(spec, out);
+        }
+    }
+
+    // 3. [tool.flit.scripts]
+    if let Some(flit_scripts) = val
+        .get("tool")
+        .and_then(|t| t.get("flit"))
+        .and_then(|f| f.get("scripts"))
+        .and_then(|s| s.as_table())
+    {
+        for spec in flit_scripts.values().filter_map(|v| v.as_str()) {
+            add_python_entry_spec(spec, out);
+        }
+    }
+}
+
+fn add_python_entry_spec(spec: &str, out: &mut Vec<String>) {
+    let trimmed = spec.trim();
+    if !trimmed.is_empty() {
+        out.push(trimmed.to_string());
+        // Also add the module part before ':'
+        if let Some((module, _)) = trimmed.split_once(':') {
+            let m_trim = module.trim();
+            if !m_trim.is_empty() {
+                out.push(m_trim.to_string());
+            }
+        }
+    }
 }
 
 pub fn parse_requirements_txt(content: &str, path: &Path) -> PythonProjectInfo {
@@ -760,5 +999,87 @@ dev = [
         assert!(info.direct_dependencies.contains_key("fastapi"));
         assert!(info.direct_dependencies.contains_key("uvicorn"));
         assert!(info.dev_dependencies.contains_key("pytest"));
+    }
+
+    #[test]
+    fn test_pythonpath_extraction_and_resolution() {
+        let toml_str = r#"
+[project]
+name = "my-app"
+version = "0.1.0"
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "lib"]
+
+[tool.ruff]
+src = ["src", "custom_dir"]
+"#;
+        let info = parse_pyproject_toml(toml_str, Path::new("pyproject.toml")).unwrap();
+        assert!(info.pythonpath.contains(&"src".to_string()));
+        assert!(info.pythonpath.contains(&"lib".to_string()));
+        assert!(info.pythonpath.contains(&"custom_dir".to_string()));
+
+        let temp_dir = std::env::temp_dir().join(format!(
+            "stackvet_python_search_roots_test_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let src_dir = temp_dir.join("src");
+        let pkg_dir = src_dir.join("my_service");
+        fs::create_dir_all(&pkg_dir).unwrap();
+        fs::write(pkg_dir.join("__init__.py"), "").unwrap();
+        fs::write(pkg_dir.join("worker.py"), "def work(): pass\n").unwrap();
+
+        let search_roots = get_python_search_roots(&temp_dir, Some(&info));
+        assert!(search_roots.contains(&temp_dir));
+        assert!(search_roots.contains(&src_dir));
+
+        assert!(is_local_python_package(&search_roots, "my_service"));
+        assert!(!is_local_python_package(&search_roots, "nonexistent_pkg"));
+
+        let imp = PythonImport {
+            module: "my_service.worker".to_string(),
+            symbol: None,
+            line: 1,
+            is_relative: false,
+            level: 0,
+            is_dynamic: false,
+            span: None,
+            statement_line: 1,
+        };
+        let resolved = resolve_python_absolute_import(&search_roots, &imp);
+        assert!(resolved.is_some());
+        assert_eq!(resolved.unwrap(), pkg_dir.join("worker.py"));
+
+        let imp_from = PythonImport {
+            module: "my_service".to_string(),
+            symbol: Some("worker".to_string()),
+            line: 1,
+            is_relative: false,
+            level: 0,
+            is_dynamic: false,
+            span: None,
+            statement_line: 1,
+        };
+        let resolved_from = resolve_python_absolute_import(&search_roots, &imp_from);
+        assert!(resolved_from.is_some());
+        assert_eq!(resolved_from.unwrap(), pkg_dir.join("worker.py"));
+
+        let imp_missing = PythonImport {
+            module: "my_service.missing_mod".to_string(),
+            symbol: None,
+            line: 1,
+            is_relative: false,
+            level: 0,
+            is_dynamic: false,
+            span: None,
+            statement_line: 1,
+        };
+        let resolved_missing = resolve_python_absolute_import(&search_roots, &imp_missing);
+        assert!(resolved_missing.is_none());
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

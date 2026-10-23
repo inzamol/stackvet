@@ -1,0 +1,54 @@
+name: Self Check
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  self_check:
+    name: StackVet Dogfooding & Self-Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build StackVet binary
+        run: cargo build -p stackvet --release --locked
+
+      - name: Set PATH to release binary
+        run: echo "$(pwd)/target/release" >> $GITHUB_PATH
+
+      - name: Verify CLI health and rules catalog
+        run: |
+          stackvet --version
+          stackvet rules
+          stackvet explain DEP-001
+
+      - name: "Self-Check: Root Repository Gate (check .)"
+        run: stackvet check .
+
+      - name: "Self-Check: Root Repository Health (doctor .)"
+        run: stackvet doctor .
+
+      - name: "Self-Check: VS Code Extension Gate (check editors/vscode)"
+        run: stackvet check editors/vscode
+
+      - name: "Self-Check: VS Code Extension Health (doctor editors/vscode)"
+        run: stackvet doctor editors/vscode

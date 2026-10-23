@@ -71,6 +71,20 @@ impl Analyzer for NodeDependencyAnalyzer {
                     if is_node_builtin(&imp.specifier) {
                         continue;
                     }
+                    if imp.specifier.starts_with('#') {
+                        if let Some(target_pkg) = stackvet_node::resolve_package_subpath_package(
+                            &node_info.package_imports,
+                            &imp.specifier,
+                        ) {
+                            if let Some(pkg_name) = extract_package_name(&target_pkg) {
+                                imported_packages
+                                    .entry(pkg_name)
+                                    .or_default()
+                                    .push((file, imp.line, imp.span));
+                            }
+                        }
+                        continue;
+                    }
                     if is_tsconfig_alias(&imp.specifier, &node_info.tsconfig_paths) {
                         continue;
                     }

@@ -41,6 +41,14 @@ impl ImportGraph {
         self.edges.iter().filter(|(from, _)| from == node).count()
     }
 
+    pub fn edges(&self) -> &[(String, String)] {
+        &self.edges
+    }
+
+    pub fn has_edge(&self, from: &str, to: &str) -> bool {
+        self.edges.iter().any(|(f, t)| f == from && t == to)
+    }
+
     /// Finds all circular dependencies using Tarjan's Strongly Connected Components algorithm
     pub fn find_cycles(&self) -> Vec<Vec<String>> {
         let mut graph = DiGraphMap::<&str, ()>::new();

@@ -47,6 +47,7 @@ pub struct ProjectScanner {
     max_depth: usize,
     max_files: usize,
     follow_symlinks: bool,
+    parents: bool,
     cancellation_token: Option<stackvet_core::CancellationToken>,
 }
 
@@ -76,6 +77,7 @@ impl ProjectScanner {
             max_depth: 40,
             max_files: 50_000,
             follow_symlinks: false,
+            parents: true,
             cancellation_token: None,
         }
     }
@@ -83,6 +85,12 @@ impl ProjectScanner {
     /// Configures an optional cooperative cancellation token.
     pub fn with_cancellation_token(mut self, token: stackvet_core::CancellationToken) -> Self {
         self.cancellation_token = Some(token);
+        self
+    }
+
+    /// Configures whether parent directories are traversed for ignore files.
+    pub fn with_parents(mut self, parents: bool) -> Self {
+        self.parents = parents;
         self
     }
 
@@ -129,6 +137,89 @@ impl ProjectScanner {
         self
     }
 
+    /// Checks whether a given path is matched by the scanner's explicit custom ignore rules.
+    pub fn is_explicitly_ignored(&self, path: &Path) -> bool {
+        if self.custom_ignores.is_empty() {
+            return false;
+        }
+        let mut ov_builder = OverrideBuilder::new(&self.root);
+        for pattern in &self.custom_ignores {
+            let trimmed = pattern.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('!') {
+                continue;
+            }
+            let rule = format!("!{trimmed}");
+            let _ = ov_builder.add(&rule);
+        }
+        match ov_builder.build() {
+            Ok(overrides) => {
+                let is_dir = path.is_dir();
+                matches!(overrides.matched(path, is_dir), ignore::Match::Ignore(_))
+            }
+            Err(_) => false,
+        }
+    }
+
+    /// Checks whether a given path is accepted as a valid source file by the scanner,
+    /// adhering to default exclusions, file size limits, custom ignores, and ignore files.
+    pub fn is_accepted_source_file(&self, path: &Path) -> bool {
+        let Ok(meta) = std::fs::metadata(path) else {
+            return false;
+        };
+        if !meta.is_file() || meta.len() > self.max_file_size {
+            return false;
+        }
+
+        let is_source = path
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|ext| matches!(ext, "py" | "ts" | "tsx" | "js" | "jsx"))
+            .unwrap_or(false);
+        if !is_source {
+            return false;
+        }
+
+        if self.use_default_exclusions {
+            for comp in path.components() {
+                let s = comp.as_os_str().to_string_lossy();
+                if DEFAULT_EXCLUSIONS.contains(&s.as_ref()) {
+                    return false;
+                }
+            }
+        }
+
+        if self.is_explicitly_ignored(path) {
+            return false;
+        }
+
+        let mut builder = WalkBuilder::new(path);
+        builder.hidden(false);
+        builder.parents(self.parents);
+        builder.git_ignore(true);
+        builder.add_custom_ignore_filename(".stackvetignore");
+        if !self.custom_ignores.is_empty() {
+            let mut ov_builder = OverrideBuilder::new(&self.root);
+            for pattern in &self.custom_ignores {
+                let trimmed = pattern.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('!') {
+                    continue;
+                }
+                let _ = ov_builder.add(&format!("!{trimmed}"));
+            }
+            if let Ok(ov) = ov_builder.build() {
+                builder.overrides(ov);
+            }
+        }
+        let walker = builder.build();
+        let mut count = 0;
+        for entry in walker.flatten() {
+            if entry.file_type().is_some_and(|ft| ft.is_file()) {
+                count += 1;
+            }
+        }
+        count > 0
+    }
+
     pub fn scan(&self) -> ScanResult {
         let mut result = ScanResult::default();
         let canonical_root = self
@@ -138,7 +229,7 @@ impl ProjectScanner {
 
         let mut builder = WalkBuilder::new(&self.root);
         builder.hidden(false);
-        builder.parents(false);
+        builder.parents(self.parents);
         builder.git_ignore(true);
         builder.max_depth(Some(self.max_depth));
         builder.follow_links(self.follow_symlinks);
@@ -347,6 +438,7 @@ impl ProjectScanner {
         for (oversized_path, size_bytes) in &scan.oversized_files {
             let size_mb = size_bytes / (1024 * 1024);
             let limit_mb = self.max_file_size / (1024 * 1024);
+            let clean_path = oversized_path.to_string_lossy().replace(r"\\?\", "");
             ctx.discovery_diagnostics.push(
                 stackvet_core::Diagnostic::builder(
                     "DISC-005",
@@ -355,7 +447,7 @@ impl ProjectScanner {
                 )
                 .message(format!(
                     "File '{}' ({} MB) exceeds maximum scanner size limit ({} MB)",
-                    oversized_path.display(),
+                    clean_path,
                     size_mb,
                     limit_mb
                 ))
@@ -367,6 +459,7 @@ impl ProjectScanner {
         }
 
         for (symlink_path, reason) in &scan.skipped_symlinks {
+            let clean_symlink = symlink_path.to_string_lossy().replace(r"\\?\", "");
             ctx.discovery_diagnostics.push(
                 stackvet_core::Diagnostic::builder(
                     "DISC-005",
@@ -375,7 +468,7 @@ impl ProjectScanner {
                 )
                 .message(format!(
                     "Symlink '{}' was skipped: {}",
-                    symlink_path.display(),
+                    clean_symlink,
                     reason
                 ))
                 .location(stackvet_core::DiagnosticLocation::new(symlink_path.clone()))

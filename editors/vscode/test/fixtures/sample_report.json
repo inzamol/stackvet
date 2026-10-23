@@ -1,0 +1,141 @@
+{
+  "schema_version": "1.0.0",
+  "tool": {
+    "name": "stackvet",
+    "version": "0.2.0",
+    "repository": "https://github.com/stackvet/stackvet"
+  },
+  "summary": {
+    "total_issues": 6,
+    "critical_count": 1,
+    "error_count": 2,
+    "warning_count": 2,
+    "info_count": 1,
+    "hint_count": 0,
+    "fixable_count": 1,
+    "is_complete": true
+  },
+  "health_score": 65,
+  "grade": "C (Needs Attention)",
+  "root_causes": [],
+  "diagnostics": [
+    {
+      "rule_id": "DJG-002",
+      "message": "Insecure default or hardcoded SECRET_KEY in Django settings",
+      "severity": "Critical",
+      "location": {
+        "file_path": "\\\\?\\C:\\projects\\myapp\\settings.py",
+        "span": {
+          "start_line": 7,
+          "start_col": 1,
+          "end_line": 7,
+          "end_col": 35
+        },
+        "snippet": "SECRET_KEY = 'insecure-key'",
+        "message": null
+      },
+      "explanation": "The default django-insecure SECRET_KEY is publicly known. An attacker can forge cryptographic signatures.",
+      "suggested_remediation": "Load SECRET_KEY securely from environment variables.",
+      "fix": null,
+      "language": "Python",
+      "confidence": "High"
+    },
+    {
+      "rule_id": "DEP-001",
+      "message": "Unpinned dependency 'requests' detected",
+      "severity": "Warning",
+      "location": {
+        "file_path": "requirements.txt",
+        "span": {
+          "start_line": 12,
+          "start_col": 1,
+          "end_line": 12,
+          "end_col": 15
+        },
+        "snippet": "requests",
+        "message": null
+      },
+      "explanation": "Unpinned dependencies lead to non-deterministic builds.",
+      "suggested_remediation": "Pin requests with exact version: requests==2.31.0",
+      "fix": {
+        "description": "Pin requests",
+        "file_path": "requirements.txt",
+        "replacement": "requests==2.31.0",
+        "span": {
+          "start_line": 12,
+          "start_col": 1,
+          "end_line": 12,
+          "end_col": 15
+        }
+      },
+      "language": "Python",
+      "confidence": "High"
+    },
+    {
+      "rule_id": "NDEP-004",
+      "message": "Missing engines field in package.json",
+      "severity": "Info",
+      "location": {
+        "file_path": "path with spaces/nested folder/package.json",
+        "span": {
+          "start_line": 1,
+          "start_col": 1,
+          "end_line": 1,
+          "end_col": 1
+        }
+      },
+      "explanation": "Declaring engines field ensures consistent Node.js runtime across environments.",
+      "suggested_remediation": "Add 'engines': { 'node': '>=18' } to package.json",
+      "language": "Node",
+      "confidence": "Medium"
+    },
+    {
+      "rule_id": "FAP-002",
+      "message": "Blocking I/O in async FastAPI endpoint",
+      "severity": "Error",
+      "location": {
+        "file_path": "src/тест_unicode/api.py",
+        "span": {
+          "start_line": 25,
+          "start_col": 5,
+          "end_line": 27,
+          "end_col": 20
+        }
+      },
+      "explanation": "Synchronous file or network calls inside async endpoints block the event loop.",
+      "suggested_remediation": "Use async libraries or run in threadpool with anyio.to_thread.run_sync.",
+      "language": "Python",
+      "confidence": "High"
+    },
+    {
+      "rule_id": "DOC-001",
+      "message": "Missing project README or license documentation",
+      "severity": "Warning",
+      "location": {
+        "file_path": "<unknown>",
+        "span": null
+      },
+      "explanation": "Repositories should provide a README.md and LICENSE file.",
+      "suggested_remediation": "Create a README.md explaining project setup.",
+      "language": "General",
+      "confidence": "Low"
+    },
+    {
+      "rule_id": "CST-999",
+      "message": "Custom rule violation with unknown severity",
+      "severity": "Notice",
+      "location": {
+        "file_path": "src/app.py",
+        "span": {
+          "start_line": 0,
+          "start_col": -5,
+          "end_line": -1,
+          "end_col": 0
+        }
+      },
+      "explanation": "Testing fallback handling for invalid ranges and unknown severity.",
+      "suggested_remediation": "Review custom policy.",
+      "language": "General"
+    }
+  ]
+}
