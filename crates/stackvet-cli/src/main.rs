@@ -460,19 +460,20 @@ fn find_enclosing_project_root(path: &Path) -> PathBuf {
 }
 
 fn build_full_context(
-    root: &Path,
+    target: &Path,
+    project_root: &Path,
     config: &StackvetConfig,
     cli_ignores: &[String],
     verbose: bool,
     cancellation_token: Option<stackvet_core::CancellationToken>,
 ) -> Result<ProjectContext> {
-    let project_root = if root.is_file() {
-        find_enclosing_project_root(root)
+    let scan_root = if target.is_file() {
+        project_root
     } else {
-        root.to_path_buf()
+        target
     };
 
-    let mut scanner = ProjectScanner::new(root)
+    let mut scanner = ProjectScanner::new(scan_root)
         .with_default_exclusions(config.ignore.use_defaults())
         .with_ignores(config.ignore.patterns().iter().cloned())
         .with_ignores(cli_ignores.iter().cloned())
@@ -485,14 +486,29 @@ fn build_full_context(
         scanner = scanner.with_cancellation_token(token);
     }
     let mut ctx = scanner.build_context()?;
-    if root.is_file() {
-        ctx.root = project_root.clone();
+    ctx.root = project_root.to_path_buf();
+
+    if target.is_file() {
+        let canonical_target = target
+            .canonicalize()
+            .unwrap_or_else(|_| target.to_path_buf());
+        let already_included = ctx.source_files.iter().any(|f| {
+            f == target
+                || f == &canonical_target
+                || f.canonicalize()
+                    .map(|cf| cf == canonical_target)
+                    .unwrap_or(false)
+        });
+        if !already_included {
+            ctx.source_files.push(target.to_path_buf());
+        }
     }
-    let (py_proj, py_diags) = detect_python_project_with_diagnostics(&project_root);
+
+    let (py_proj, py_diags) = detect_python_project_with_diagnostics(project_root);
     ctx.python = py_proj;
     ctx.discovery_diagnostics.extend(py_diags);
 
-    let (node_proj, node_diags) = detect_node_project_with_diagnostics(&project_root);
+    let (node_proj, node_diags) = detect_node_project_with_diagnostics(project_root);
     ctx.node = node_proj;
     ctx.discovery_diagnostics.extend(node_diags);
     ctx.architecture = Some(config.architecture.clone());
@@ -1182,18 +1198,41 @@ fn scan_and_collect_diagnostics(
     offline: bool,
     config: &StackvetConfig,
 ) -> Result<Vec<stackvet_core::Diagnostic>> {
-    let ctx = build_full_context(root, config, cli_ignore, false, None)?;
+    let project_root = if root.is_file() {
+        find_enclosing_project_root(root)
+    } else {
+        root.to_path_buf()
+    };
+    let ctx = build_full_context(root, &project_root, config, cli_ignore, false, None)?;
     let (raw, _) = collect_all_diagnostics(&ctx, config, offline, false)?;
     let after_rules = config.apply_rule_overrides(raw)?;
-    let outcome = apply_suppressions(root, &config.suppressions, after_rules, None);
-    Ok(outcome.active_diagnostics)
+    let outcome = apply_suppressions(&project_root, &config.suppressions, after_rules, None);
+    let mut diagnostics = outcome.active_diagnostics;
+    if root.is_file() {
+        let canonical_target = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+        diagnostics.retain(|d| {
+            let p = &d.location.file_path;
+            let full_p = if p.is_relative() {
+                project_root.join(p)
+            } else {
+                p.clone()
+            };
+            full_p == root
+                || full_p == canonical_target
+                || full_p
+                    .canonicalize()
+                    .map(|cp| cp == canonical_target)
+                    .unwrap_or(false)
+        });
+    }
+    Ok(diagnostics)
 }
 
 fn print_verification_summary(result: &stackvet_remediation::FixVerificationResult) {
     let term_width = crossterm::terminal::size()
         .map(|(w, _)| w.saturating_sub(2))
         .unwrap_or(100)
-        .clamp(80, 130);
+        .min(130);
 
     let mut table = Table::new();
     table
@@ -1327,12 +1366,18 @@ async fn main() -> Result<()> {
         ExitCode::ExecutionError.exit();
     }
 
+    let project_root = if root.is_file() {
+        find_enclosing_project_root(&root)
+    } else {
+        root.clone()
+    };
+
     // Load project configuration (explicit path or discovered in project directory)
     let config = if let Some(cfg_path) = &cli.config {
         let p = if cfg_path.is_absolute() {
             cfg_path.clone()
         } else {
-            root.join(cfg_path)
+            project_root.join(cfg_path)
         };
         match StackvetConfig::from_file(&p) {
             Ok(cfg) => cfg,
@@ -1358,7 +1403,7 @@ async fn main() -> Result<()> {
             }
         }
     } else {
-        match StackvetConfig::discover_in_dir(&root) {
+        match StackvetConfig::discover_in_dir(&project_root) {
             Ok(Some(cfg)) => cfg,
             Ok(None) => StackvetConfig::default(),
             Err(ConfigError::ParseError(e)) | Err(ConfigError::ValidationError(e)) => {
@@ -1374,7 +1419,7 @@ async fn main() -> Result<()> {
 
     // Command: init
     if let Some(Commands::Init { ci, .. }) = &cli.command {
-        initialize_project(&root, *ci)?;
+        initialize_project(&project_root, *ci)?;
         ExitCode::Success.exit();
     }
 
@@ -1410,6 +1455,7 @@ async fn main() -> Result<()> {
     // Build context with ignore filtering (CLI --ignore > config.ignore > .stackvetignore > default exclusions)
     let ctx = match build_full_context(
         &root,
+        &project_root,
         &config,
         &all_cli_ignores,
         cli.verbose,
@@ -1440,7 +1486,7 @@ async fn main() -> Result<()> {
     let use_incremental = (cli.incremental || config.cache.enabled) && !cli.no_cache;
     let (raw_diagnostics, duplicates_ignored) = if use_incremental {
         match collect_diagnostics_incremental(
-            &root,
+            &project_root,
             &ctx,
             &config,
             &all_cli_ignores,
@@ -1487,10 +1533,33 @@ async fn main() -> Result<()> {
     };
 
     // Apply configured suppressions and inline comment suppressions
-    let suppression_outcome =
-        apply_suppressions(&root, &config.suppressions, diagnostics_after_rules, None);
-    let diagnostics = suppression_outcome.active_diagnostics;
+    let suppression_outcome = apply_suppressions(
+        &project_root,
+        &config.suppressions,
+        diagnostics_after_rules,
+        None,
+    );
+    let mut diagnostics = suppression_outcome.active_diagnostics;
     let suppressed_diagnostics = suppression_outcome.suppressed;
+
+    // Preserve file-scoped behavior: filter diagnostics to the target file if invoked on a file
+    if root.is_file() {
+        let canonical_target = root.canonicalize().unwrap_or_else(|_| root.clone());
+        diagnostics.retain(|d| {
+            let p = &d.location.file_path;
+            let full_p = if p.is_relative() {
+                project_root.join(p)
+            } else {
+                p.clone()
+            };
+            full_p == root
+                || full_p == canonical_target
+                || full_p
+                    .canonicalize()
+                    .map(|cp| cp == canonical_target)
+                    .unwrap_or(false)
+        });
+    }
 
     let mut explanation = calculate_health_score_explained(&diagnostics);
     explanation.duplicate_findings_ignored = duplicates_ignored;
@@ -1500,7 +1569,7 @@ async fn main() -> Result<()> {
 
     let correlator = CorrelationEngine::new();
     let root_causes = correlator.correlate(diagnostics.clone());
-    let reporter = Reporter::with_root(&root);
+    let reporter = Reporter::with_root(&project_root);
 
     match &cli.command {
         None | Some(Commands::Doctor { .. }) => {
@@ -2663,7 +2732,7 @@ async fn main() -> Result<()> {
         }
         Some(Commands::BugReport { output, json, .. }) => {
             let report = bug_report::generate_bug_report(
-                &root,
+                &project_root,
                 &ctx,
                 &config,
                 &diagnostics,

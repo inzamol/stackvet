@@ -522,7 +522,7 @@ pub fn print_bug_report_summary(report: &BugReportData) {
     let term_width = crossterm::terminal::size()
         .map(|(w, _)| w.saturating_sub(2))
         .unwrap_or(100)
-        .clamp(80, 130);
+        .min(130);
 
     let mut table = Table::new();
     table.load_preset(UTF8_FULL);

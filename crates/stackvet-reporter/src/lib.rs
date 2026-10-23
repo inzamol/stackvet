@@ -375,7 +375,7 @@ impl Reporter {
             let term_width = crossterm::terminal::size()
                 .map(|(w, _)| w.saturating_sub(2))
                 .unwrap_or(100)
-                .clamp(80, 130);
+                .min(130);
 
             let mut table = Table::new();
             table
@@ -401,17 +401,23 @@ impl Reporter {
                         .add_attribute(Attribute::Bold),
                 ]);
 
+            let (rule_w, sev_w, target_w, loc_w) = if term_width < 80 {
+                (7, 6, 6, 20)
+            } else {
+                (9, 9, 8, 35)
+            };
+
             if let Some(col) = table.column_mut(0) {
-                col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(9)));
+                col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(rule_w)));
             }
             if let Some(col) = table.column_mut(1) {
-                col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(9)));
+                col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(sev_w)));
             }
             if let Some(col) = table.column_mut(2) {
-                col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(8)));
+                col.set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(target_w)));
             }
             if let Some(col) = table.column_mut(3) {
-                col.set_constraint(ColumnConstraint::UpperBoundary(Width::Fixed(35)));
+                col.set_constraint(ColumnConstraint::UpperBoundary(Width::Fixed(loc_w)));
             }
 
             for d in diagnostics {

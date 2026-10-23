@@ -32,13 +32,27 @@ export class Uri {
   }
 
   static parse(uriStr: string): Uri {
-    return new Uri('file', uriStr);
+    let clean = uriStr;
+    if (clean.startsWith('file://')) {
+      clean = clean.slice(7);
+      if (clean.startsWith('/') && process.platform === 'win32' && /^[a-zA-Z]:/.test(clean.slice(1))) {
+        clean = clean.slice(1);
+      }
+      try {
+        clean = decodeURI(clean);
+      } catch {}
+    }
+    return new Uri('file', clean);
   }
 
   constructor(public readonly scheme: string, public readonly fsPath: string) {}
 
   toString(): string {
-    return `${this.scheme}://${this.fsPath.replace(/\\/g, '/')}`;
+    let norm = this.fsPath.replace(/\\/g, '/');
+    if (!norm.startsWith('/')) {
+      norm = '/' + norm;
+    }
+    return `${this.scheme}://${encodeURI(norm)}`;
   }
 }
 

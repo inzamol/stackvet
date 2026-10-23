@@ -27,7 +27,6 @@ pub static NODE_BUILTINS: &[&str] = &[
     "path",
     "path/posix",
     "path/win32",
-    "navigator",
     "perf_hooks",
     "process",
     "punycode",
@@ -35,16 +34,12 @@ pub static NODE_BUILTINS: &[&str] = &[
     "readline",
     "readline/promises",
     "repl",
-    "sea",
-    "sqlite",
     "stream",
     "stream/promises",
     "stream/consumers",
     "stream/web",
     "string_decoder",
     "sys",
-    "test",
-    "test/reporters",
     "timers",
     "timers/promises",
     "tls",
@@ -56,7 +51,6 @@ pub static NODE_BUILTINS: &[&str] = &[
     "v8",
     "vm",
     "wasi",
-    "websocket",
     "worker_threads",
     "zlib",
 ];
@@ -75,7 +69,7 @@ pub fn is_node_builtin(specifier: &str) -> bool {
         return true;
     }
     // 4. Host/platform runtime ambient APIs (injected by host environment, never in npm dependencies)
-    if specifier == "vscode" || specifier == "electron" || specifier == "original-fs" {
+    if specifier == "vscode" || specifier == "original-fs" {
         return true;
     }
     let spec = specifier.strip_prefix("node:").unwrap_or(specifier);
@@ -92,8 +86,13 @@ mod tests {
         assert!(is_node_builtin("fs/promises"));
         assert!(is_node_builtin("node:fs"));
         assert!(is_node_builtin("node:fs/promises"));
-        assert!(is_node_builtin("test"));
-        assert!(is_node_builtin("test/reporters"));
+        assert!(!is_node_builtin("test"));
+        assert!(!is_node_builtin("test/reporters"));
+        assert!(!is_node_builtin("sqlite"));
+        assert!(!is_node_builtin("sea"));
+        assert!(!is_node_builtin("navigator"));
+        assert!(!is_node_builtin("websocket"));
+        assert!(!is_node_builtin("electron"));
         assert!(is_node_builtin("node:test"));
         assert!(is_node_builtin("node:test/reporters"));
         assert!(is_node_builtin("node:sqlite"));
@@ -103,7 +102,7 @@ mod tests {
     #[test]
     fn test_runtime_and_platform_builtins() {
         assert!(is_node_builtin("vscode"));
-        assert!(is_node_builtin("electron"));
+        assert!(is_node_builtin("original-fs"));
         assert!(is_node_builtin("bun"));
         assert!(is_node_builtin("bun:test"));
         assert!(is_node_builtin("bun:sqlite"));
@@ -116,6 +115,7 @@ mod tests {
         assert!(!is_node_builtin("react"));
         assert!(!is_node_builtin("axios"));
         assert!(!is_node_builtin("lodash"));
+        assert!(!is_node_builtin("electron"));
         assert!(!is_node_builtin("@types/node"));
     }
 }

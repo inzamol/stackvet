@@ -8,6 +8,7 @@ This extension brings StackVet's static analysis, dependency health, framework d
 
 ## Features
 
+- **Automatic Background Scanning**: Scans active files or the entire workspace on open and save with configurable debouncing.
 - **Command Palette Integration**: Run `StackVet: Scan Workspace` on demand to audit the current workspace.
 - **Problems Panel Diagnostics**: View rule violations with exact rule IDs (e.g. `DEP-001`, `DJG-002`, `FAP-002`), severities, and source code navigation.
 - **Inline Remediation Guidance**: Actionable remediation instructions supplied by StackVet are displayed directly on hover and in problem details.
@@ -35,21 +36,25 @@ You can also install StackVet globally via:
 
 ## Configuration
 
-This extension provides the following setting:
+This extension provides the following settings:
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
-| `stackvet.executablePath` | `string` | `""` | Custom path to the `stackvet` executable. If empty, `stackvet` is resolved from system `PATH`. |
+| `stackvet.executablePath` | `string` | `""` | Custom path to the `stackvet` executable. If empty, `stackvet` is resolved from bundled binary or system `PATH`. |
+| `stackvet.autoScan` | `boolean` | `true` | Automatically check files and workspace for issues on open, change, and save. |
+| `stackvet.scanMode` | `string` | `"openFilesOnly"` | Analysis scope: `'openFilesOnly'` (scans active/saved file for instant feedback) or `'workspace'` (scans entire repository). |
+| `stackvet.autoScanOnSave` | `boolean` | `true` | Automatically run StackVet scan whenever a file is saved. |
+| `stackvet.autoScanOnOpen` | `boolean` | `true` | Automatically run StackVet scan when a workspace is opened. |
 
 ---
 
 ## Usage
 
-1. Open a workspace folder in Visual Studio Code.
-2. Open the Command Palette (`Ctrl+Shift+P` on Windows/Linux, `Cmd+Shift+P` on macOS).
-3. Type and select **`StackVet: Scan Workspace`**.
-4. The scan will execute and report findings in the **Problems** panel (`Ctrl+Shift+M` / `Cmd+Shift+M`).
-5. Click on any finding in the Problems panel to jump to the offending file, line, and column.
+1. Open a workspace folder or project file in Visual Studio Code.
+2. **Automatic Diagnostics**: When `stackvet.autoScan` is enabled (default), diagnostics are automatically updated as you open and save files.
+3. **Manual Workspace Scan**: Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`), type and select **`StackVet: Scan Workspace`**.
+4. Findings appear immediately in the **Problems** panel (`Ctrl+Shift+M` / `Cmd+Shift+M`) and in the Status Bar.
+5. Click on any finding in the Problems panel to jump directly to the offending file, line, and column.
 
 ---
 

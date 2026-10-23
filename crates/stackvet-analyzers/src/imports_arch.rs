@@ -215,6 +215,9 @@ impl Analyzer for ImportsArchAnalyzer {
         let mut all_source_files: HashSet<String> = HashSet::new();
 
         // 1. Parallel AST parsing and local import resolution across Rayon thread pool
+        let python_search_roots =
+            stackvet_python::get_python_search_roots(&ctx.root, ctx.python.as_ref());
+
         let parsed_files: Vec<ParsedFileImports> = ctx
             .source_files
             .par_iter()
@@ -321,58 +324,53 @@ impl Analyzer for ImportsArchAnalyzer {
                                     let root_pkg = imp.module.split('.').next().unwrap_or(&imp.module);
                                     if !stackvet_python::stdlib::is_python_stdlib(root_pkg)
                                         && !is_pep594_removed(root_pkg)
-                                    {
-                                        let search_roots = stackvet_python::get_python_search_roots(
-                                            &ctx.root,
-                                            ctx.python.as_ref(),
-                                        );
-                                        if stackvet_python::is_local_python_package(
-                                            &search_roots,
+                                        && stackvet_python::is_local_python_package(
+                                            &python_search_roots,
                                             root_pkg,
-                                        ) {
-                                            if let Some(target_file) =
-                                                stackvet_python::resolve_python_absolute_import(
-                                                    &search_roots,
-                                                    &imp,
-                                                )
-                                            {
-                                                let target_rel = target_file
-                                                    .strip_prefix(&ctx.root)
-                                                    .unwrap_or(&target_file)
-                                                    .to_string_lossy()
-                                                    .replace('\\', "/");
-                                                file_imports.push((rel_path.clone(), target_rel, false));
+                                        )
+                                    {
+                                        if let Some(target_file) =
+                                            stackvet_python::resolve_python_absolute_import(
+                                                &python_search_roots,
+                                                &imp,
+                                            )
+                                        {
+                                            let target_rel = target_file
+                                                .strip_prefix(&ctx.root)
+                                                .unwrap_or(&target_file)
+                                                .to_string_lossy()
+                                                .replace('\\', "/");
+                                            file_imports.push((rel_path.clone(), target_rel, false));
+                                        } else {
+                                            let import_desc = if let Some(sym) = &imp.symbol {
+                                                format!("from {} import {}", imp.module, sym)
                                             } else {
-                                                let import_desc = if let Some(sym) = &imp.symbol {
-                                                    format!("from {} import {}", imp.module, sym)
-                                                } else {
-                                                    format!("import {}", imp.module)
-                                                };
-                                                let loc = make_import_location(
-                                                    file,
-                                                    imp.span.as_ref(),
-                                                    imp.line,
-                                                    &content,
-                                                );
-                                                file_diags.push(
-                                                    Diagnostic::builder(
-                                                        "IMP-002",
-                                                        Severity::Error,
-                                                        LanguageTarget::Python,
-                                                    )
-                                                    .message(format!(
-                                                        "Unresolved local Python import '{}' in '{}'",
-                                                        import_desc, rel_path
-                                                    ))
-                                                    .location(loc)
-                                                    .explanation(format!(
-                                                        "Package '{}' is a local project module, but the imported path '{}' could not be resolved in candidate search roots ({:?}).",
-                                                        root_pkg, imp.module, search_roots
-                                                    ))
-                                                    .remediation("Verify the module name, check PYTHONPATH / src layout, and ensure the target file exists.")
-                                                    .build(),
-                                                );
-                                            }
+                                                format!("import {}", imp.module)
+                                            };
+                                            let loc = make_import_location(
+                                                file,
+                                                imp.span.as_ref(),
+                                                imp.line,
+                                                &content,
+                                            );
+                                            file_diags.push(
+                                                Diagnostic::builder(
+                                                    "IMP-002",
+                                                    Severity::Error,
+                                                    LanguageTarget::Python,
+                                                )
+                                                .message(format!(
+                                                    "Unresolved local Python import '{}' in '{}'",
+                                                    import_desc, rel_path
+                                                ))
+                                                .location(loc)
+                                                .explanation(format!(
+                                                    "Package '{}' is a local project module, but the imported path '{}' could not be resolved in candidate search roots ({:?}).",
+                                                    root_pkg, imp.module, python_search_roots
+                                                ))
+                                                .remediation("Verify the module name, check PYTHONPATH / src layout, and ensure the target file exists.")
+                                                .build(),
+                                            );
                                         }
                                     }
                                 }
@@ -598,39 +596,44 @@ impl Analyzer for ImportsArchAnalyzer {
             graph.add_node(pf.rel_path.clone());
             diagnostics.extend(pf.diagnostics);
             for (from, to, is_type) in pf.imports {
-                graph.add_import(from.clone(), to.clone());
                 let key = (from, to);
-                edge_type_only
-                    .entry(key)
-                    .and_modify(|current| *current = *current && is_type)
-                    .or_insert(is_type);
+                match edge_type_only.entry(key) {
+                    std::collections::hash_map::Entry::Occupied(mut occ) => {
+                        *occ.get_mut() = *occ.get() && is_type;
+                    }
+                    std::collections::hash_map::Entry::Vacant(vac) => {
+                        let (f, t) = vac.key().clone();
+                        graph.add_import(f, t);
+                        vac.insert(is_type);
+                    }
+                }
             }
         }
 
         // 3. IMP-001: Circular Imports via Tarjan's SCC with type-only cycle differentiation
+        // Build runtime-only graph to determine which nodes participate in runtime cycles
+        let mut runtime_graph = ImportGraph::new();
+        for ((from, to), &is_type) in &edge_type_only {
+            if !is_type {
+                runtime_graph.add_import(from.clone(), to.clone());
+            }
+        }
+        let runtime_cycles = runtime_graph.find_cycles();
+        let mut runtime_cycle_nodes: HashSet<&str> = HashSet::new();
+        for rc in &runtime_cycles {
+            for node in rc {
+                runtime_cycle_nodes.insert(node.as_str());
+            }
+        }
+
         let cycles = graph.find_cycles();
         for cycle in cycles {
             let cycle_path = cycle.join(" -> ");
+            let has_runtime_cycle = cycle
+                .iter()
+                .any(|node| runtime_cycle_nodes.contains(node.as_str()));
 
-            let mut has_type_only_edge = false;
-            for i in 0..cycle.len() {
-                let from = &cycle[i];
-                let to = if i + 1 < cycle.len() {
-                    &cycle[i + 1]
-                } else {
-                    &cycle[0]
-                };
-                let is_type = edge_type_only
-                    .get(&(from.clone(), to.clone()))
-                    .copied()
-                    .unwrap_or(false);
-                if is_type {
-                    has_type_only_edge = true;
-                    break;
-                }
-            }
-
-            if has_type_only_edge {
+            if !has_runtime_cycle {
                 // Type-only cycles are completely erased at compile-time and cannot cause runtime failures.
                 let mut builder = Diagnostic::builder("IMP-001", Severity::Info, LanguageTarget::General)
                     .message(format!("Type-only circular dependency detected: {}", cycle_path))
@@ -766,6 +769,17 @@ impl Analyzer for ImportsArchAnalyzer {
         let edges = graph.edges();
         let mut checked_custom = false;
 
+        let matches_path_segment = |path: &str, pat: &str| -> bool {
+            let trimmed = pat.trim_matches('/');
+            if trimmed.is_empty() {
+                return false;
+            }
+            path == trimmed
+                || path.starts_with(&format!("{}/", trimmed))
+                || path.ends_with(&format!("/{}", trimmed))
+                || path.contains(&format!("/{}/", trimmed))
+        };
+
         if let Some(ref arch_cfg) = ctx.architecture {
             // A. Explicit forbidden dependency rules
             for rule in &arch_cfg.forbidden {
@@ -777,13 +791,8 @@ impl Analyzer for ImportsArchAnalyzer {
                     let from_norm = from_file.replace('\\', "/");
                     let to_norm = to_file.replace('\\', "/");
 
-                    let matches_from = from_norm.contains(&format!("/{}/", from_pat))
-                        || from_norm.starts_with(&format!("{}/", from_pat))
-                        || from_norm.contains(&from_pat);
-
-                    let matches_to = to_norm.contains(&format!("/{}/", to_pat))
-                        || to_norm.starts_with(&format!("{}/", to_pat))
-                        || to_norm.contains(&to_pat);
+                    let matches_from = matches_path_segment(&from_norm, &from_pat);
+                    let matches_to = matches_path_segment(&to_norm, &to_pat);
 
                     if matches_from && matches_to {
                         let custom_msg = rule.message.clone().unwrap_or_else(|| {
@@ -820,10 +829,8 @@ impl Analyzer for ImportsArchAnalyzer {
                             let from_norm = from_file.replace('\\', "/");
                             let to_norm = to_file.replace('\\', "/");
 
-                            let from_has_lower = from_norm.contains(&format!("/{}/", lower_layer))
-                                || from_norm.starts_with(&format!("{}/", lower_layer));
-                            let to_has_upper = to_norm.contains(&format!("/{}/", upper_layer))
-                                || to_norm.starts_with(&format!("{}/", upper_layer));
+                            let from_has_lower = matches_path_segment(&from_norm, &lower_layer);
+                            let to_has_upper = matches_path_segment(&to_norm, &upper_layer);
 
                             if from_has_lower && to_has_upper {
                                 diagnostics.push(
@@ -860,10 +867,8 @@ impl Analyzer for ImportsArchAnalyzer {
                 for (from_file, to_file) in edges {
                     let from_norm = from_file.replace('\\', "/");
                     let to_norm = to_file.replace('\\', "/");
-                    let from_has_lower = from_norm.contains(&format!("/{}/", lower_layer))
-                        || from_norm.starts_with(&format!("{}/", lower_layer));
-                    let to_has_upper = to_norm.contains(&format!("/{}/", upper_layer))
-                        || to_norm.starts_with(&format!("{}/", upper_layer));
+                    let from_has_lower = matches_path_segment(&from_norm, lower_layer);
+                    let to_has_upper = matches_path_segment(&to_norm, upper_layer);
 
                     if from_has_lower && to_has_upper {
                         diagnostics.push(
@@ -923,9 +928,9 @@ fn is_manifest_entrypoint(
         {
             return true;
         }
-        if !module_subpath.is_empty()
+        if !file_stem.is_empty()
             && norm_file.ends_with(&format!("{}.py", file_stem))
-            && module_subpath.ends_with(file_stem)
+            && (module_subpath == file_stem || module_subpath.ends_with(&format!("/{}", file_stem)))
         {
             return true;
         }

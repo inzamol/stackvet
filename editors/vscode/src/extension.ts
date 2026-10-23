@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { mapFindingsToDiagnostics } from './diagnostics';
@@ -7,7 +8,7 @@ let diagnosticCollection: vscode.DiagnosticCollection;
 let outputChannel: vscode.OutputChannel;
 let statusBarItem: vscode.StatusBarItem;
 let isScanning = false;
-let pendingScanRoot: string | null = null;
+const pendingScans = new Map<string, boolean>();
 let autoScanDebounceTimer: NodeJS.Timeout | undefined;
 
 /**
@@ -19,8 +20,9 @@ async function performScan(
   isManual: boolean = false
 ): Promise<void> {
   if (isScanning) {
-    // Queue a follow-up scan for this target path once the current scan finishes
-    pendingScanRoot = targetPath;
+    // Queue a follow-up scan for this target path once the current scan finishes, preserving manual flag
+    const existingManual = pendingScans.get(targetPath) ?? false;
+    pendingScans.set(targetPath, isManual || existingManual);
     return;
   }
 
@@ -56,9 +58,77 @@ async function performScan(
         }
       });
 
+      // Resolve effective base directory for relative diagnostic paths
+      let baseDir = targetPath;
+      const wsFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(targetPath));
+      let isFileTarget = false;
+      try {
+        isFileTarget = fs.existsSync(targetPath) && !fs.statSync(targetPath).isDirectory();
+      } catch {
+        isFileTarget = false;
+      }
+
+      if (wsFolder) {
+        baseDir = wsFolder.uri.fsPath;
+      } else if (isFileTarget) {
+        baseDir = path.dirname(targetPath);
+      }
+
+      if (isFileTarget) {
+        // Check whether the CLI report expresses findings relative to the nested project root
+        let nestedProjectRoot: string | undefined;
+        let currentDir = path.dirname(path.resolve(targetPath));
+        const stopDir = wsFolder ? path.resolve(wsFolder.uri.fsPath) : undefined;
+        const projectMarkers = [
+          'pyproject.toml',
+          'package.json',
+          'Cargo.toml',
+          'setup.py',
+          'setup.cfg',
+          'requirements.txt',
+          'stackvet.toml',
+          '.stackvet.toml',
+          '.git',
+        ];
+
+        while (currentDir) {
+          const hasMarker = projectMarkers.some((marker) =>
+            fs.existsSync(path.join(currentDir, marker))
+          );
+          if (hasMarker) {
+            nestedProjectRoot = currentDir;
+            break;
+          }
+          if (stopDir && path.resolve(currentDir) === stopDir) {
+            break;
+          }
+          const parent = path.dirname(currentDir);
+          if (parent === currentDir) {
+            break;
+          }
+          currentDir = parent;
+        }
+
+        if (nestedProjectRoot) {
+          const resolvedTarget = path.resolve(targetPath);
+          const hasRelativeFindingInNestedRoot = result.report.diagnostics.some((d) => {
+            const fp = d.location?.file_path;
+            if (fp && !path.isAbsolute(fp)) {
+              const candidate = path.resolve(nestedProjectRoot!, fp);
+              return candidate === resolvedTarget || fs.existsSync(candidate);
+            }
+            return false;
+          });
+
+          if (hasRelativeFindingInNestedRoot) {
+            baseDir = nestedProjectRoot;
+          }
+        }
+      }
+
       const { diagnosticsByUri, unmappedFindings } = mapFindingsToDiagnostics(
         result.report.diagnostics,
-        targetPath
+        baseDir
       );
 
       for (const [uriString, fileDiagnostics] of diagnosticsByUri.entries()) {
@@ -119,11 +189,14 @@ async function performScan(
     } finally {
       isScanning = false;
 
-      // If a save or request arrived while the scan was running, process the pending scan now
-      if (pendingScanRoot) {
-        const nextRoot = pendingScanRoot;
-        pendingScanRoot = null;
-        performScan(nextRoot, extensionPath, false);
+      // Drain queued scans in order, preserving manual scan intent
+      if (pendingScans.size > 0) {
+        const nextEntry = pendingScans.entries().next().value;
+        if (nextEntry) {
+          const [nextTarget, nextIsManual] = nextEntry;
+          pendingScans.delete(nextTarget);
+          performScan(nextTarget, extensionPath, nextIsManual);
+        }
       }
     }
   };

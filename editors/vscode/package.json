@@ -23,8 +23,7 @@
     "security"
   ],
   "activationEvents": [
-    "onStartupFinished",
-    "workspaceContains:**/*"
+    "onStartupFinished"
   ],
   "main": "./out/src/extension.js",
   "contributes": {
@@ -74,7 +73,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node --test out/test/**/*.test.js"
+    "test": "npm run compile && node --test \"out/test/*.test.js\""
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

@@ -6,6 +6,7 @@ import { StackvetReport } from './types';
 
 export interface RunOptions {
   executablePath?: string;
+  args?: string[];
   workspaceRoot: string;
   timeoutMs?: number;
   extensionPath?: string;
@@ -37,7 +38,8 @@ export interface ExecutionTarget {
 export function resolveExecutionTargets(
   customPath?: string,
   extensionPath?: string,
-  workspaceRoot?: string
+  workspaceRoot?: string,
+  customArgs?: string[]
 ): ExecutionTarget[] {
   const ws = workspaceRoot || '.';
   const targets: ExecutionTarget[] = [];
@@ -47,7 +49,7 @@ export function resolveExecutionTargets(
     targets.push({
       name: 'Custom Executable',
       command: customPath.trim(),
-      args: ['--format', 'json', 'check', ws],
+      args: customArgs || ['--format', 'json', 'check', ws],
     });
     return targets;
   }
@@ -150,9 +152,26 @@ function executeProcess(
       }
     };
 
+    let effectiveCwd = options.workspaceRoot;
+    let effectiveArgs = [...args];
     try {
-      child = spawn(command, args, {
-        cwd: options.workspaceRoot,
+      if (options.workspaceRoot && fs.existsSync(options.workspaceRoot)) {
+        const stat = fs.statSync(options.workspaceRoot);
+        if (!stat.isDirectory()) {
+          const resolvedTarget = path.resolve(options.workspaceRoot);
+          effectiveArgs = effectiveArgs.map((arg) =>
+            arg === options.workspaceRoot ? resolvedTarget : arg
+          );
+          effectiveCwd = path.dirname(resolvedTarget);
+        }
+      }
+    } catch {
+      // Path inspection failed, keep options.workspaceRoot and original args
+    }
+
+    try {
+      child = spawn(command, effectiveArgs, {
+        cwd: effectiveCwd,
         shell: false,
         windowsHide: true,
       });
@@ -238,7 +257,9 @@ function executeProcess(
       }
 
       const stderrMsg = stderrData.trim();
-      const errorDetail = stderrMsg ? `: ${stderrMsg}` : ` (exit code ${exitCode})`;
+      const errorDetail = stderrMsg
+        ? `: ${stderrMsg} (exit code ${exitCode})`
+        : ` (exit code ${exitCode})`;
       return reject(new Error(`StackVet failed${errorDetail}`));
     });
   });
@@ -252,7 +273,8 @@ export async function runStackvetCli(options: RunOptions): Promise<RunResult> {
   const targets = resolveExecutionTargets(
     options.executablePath,
     options.extensionPath,
-    options.workspaceRoot
+    options.workspaceRoot,
+    options.args
   );
   let lastError: Error | undefined;
 

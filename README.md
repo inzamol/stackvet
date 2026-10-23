@@ -20,6 +20,7 @@
 - [Key Features](#key-features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Terminal UI & Interactive Scorecard](#terminal-ui--interactive-scorecard)
 - [CLI Command Guide](#cli-command-guide)
   - [`stackvet doctor` (aliases: `diagnose`, `health`)](#stackvet-doctor)
   - [`stackvet check` (aliases: `scan`, `audit`)](#stackvet-check)
@@ -117,22 +118,97 @@ Run a full project health check in your repository root:
 stackvet doctor
 ```
 
-Output:
 ```text
-=======================================================================
-                StackVet Universal Project Health Report               
-=======================================================================
+╭─────────────────────────────────────────────────────────────────────╮
+│              StackVet Universal Project Health Report               │
+╰─────────────────────────────────────────────────────────────────────╯
 
-  Health Score: 92 / 100
+  Health Score:  [████████████████████] 100 / 100   [ Grade: A (Healthy) ]
   Overall Grade: A (Healthy)
+  Calculation:   Base 100 - 0 deductions (0 unique findings, 0 duplicates ignored)
 
-  Critical: 0  |  Errors: 0  |  Warnings: 2
+  Metrics:       ● 0 Critical  │  ● 0 Errors  │  ▲ 0 Warnings  │  ℹ 0 Info
 
---- Root Cause Clusters (1) ---
-1. [WARN] Environment, Lockfile & Runtime Drift
-   Summary: Detected 1 discrepancy(ies) between local manifests, Docker, CI matrix, or lockfiles.
-   Remediation: Align runtime version declarations across pyproject, package.json, Dockerfile, and CI workflows.
-   Symptoms Count: 1
+No issues found! Your project stack is pristine.
+```
+
+---
+
+## Terminal UI & Interactive Scorecard
+
+StackVet features an enterprise-grade terminal user interface designed with adaptive formatting, UTF-8 rounded box-drawing characters, ANSI color-coded severity badges, and visual health score meters.
+
+### Executive Diagnostic Report
+
+When violations, runtime drift, or missing dependencies are discovered across your stack, `stackvet doctor` renders an interactive diagnostic dashboard:
+
+```text
+╭─────────────────────────────────────────────────────────────────────╮
+│              StackVet Universal Project Health Report               │
+╰─────────────────────────────────────────────────────────────────────╯
+
+  Health Score:  [█████████████████░░░] 86 / 100   [ Grade: B (Fair) ]
+  Overall Grade: B (Fair)
+  Calculation:   Base 100 - 14 deductions (4 unique findings, 0 duplicates ignored)
+
+  Metrics:       ● 0 Critical  │  ● 1 Errors  │  ▲ 3 Warnings  │  ℹ 0 Info
+
+─── Health Score Deduction Breakdown ──────────────────────────────────
+  • [ERROR]    NDEP-001   -8 pts     (1 finding)  ── Missing Node Package
+  • [WARN]     IMP-003    -2 pts     (1 finding)  ── Unused / orphan local module
+  • [WARN]     NDEP-004   -2 pts     (1 finding)  ── Lockfile Out of Sync
+  • [WARN]     SEC-001    -2 pts     (1 finding)  ── Security analysis unavailable
+
+─── Root Cause Clusters (4) ───────────────────────────────────────────
+  1. [ERROR] Missing Project Dependency: 'axios' [Verified]  (1 finding)
+     Summary:      Package 'axios' is imported across 1 file location(s) but undeclared in manifests.
+     Remediation:  Add 'axios' to project manifest dependencies.
+     Action Plan:
+       1. Add 'axios' to project manifest dependencies.
+       2. Synchronize package manager lockfile.
+
+  2. [WARN] Environment, Lockfile & Runtime Drift [Verified]  (1 finding)
+     Summary:      Detected 1 discrepancy(ies) between local manifests, Docker, CI matrix, or lockfiles.
+     Remediation:  Align runtime version declarations across pyproject, package.json, Dockerfile, and CI workflows.
+     Action Plan:
+       1. Synchronize dependency declarations and lockfile versions.
+       2. Align target runtime specifications across Dockerfiles, CI matrices, and project manifests.
+
+  3. [WARN] Rule Violation: IMP-003 [Verified]  (1 finding)
+     Summary:      File is never imported by any other source files in the project. It may be dead code or an unexported utility.
+     Remediation:  Import the module or delete it if obsolete.
+     Action Plan:
+       1. Import the module or delete it if obsolete.
+
+─── Diagnostic Details ────────────────────────────────────────────────
+╭──────────┬──────────┬─────────┬───────────────────────────────────┬────────────────────────────────────────────────╮
+│ Rule     ┆ Severity ┆ Target  ┆ File Location                     ┆ Message                                        │
+╞══════════╪══════════╪═════════╪═══════════════════════════════════╪════════════════════════════════════════════════╡
+│ NDEP-001 ┆ ERROR    ┆ Node.js ┆ server.js:2:15                    ┆ Package 'axios' is imported in source code     │
+│          ┆          ┆         ┆                                   ┆ but not declared in package.json               │
+├╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
+│ IMP-003  ┆ WARN     ┆ General ┆ server.js                         ┆ Orphan source file with 0 incoming imports:    │
+│          ┆          ┆         ┆                                   ┆ 'server.js'                                    │
+├╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
+│ NDEP-004 ┆ WARN     ┆ Node.js ┆ package.json                      ┆ No lockfile detected (pnpm-lock.yaml /         │
+│          ┆          ┆         ┆                                   ┆ package-lock.json / yarn.lock)                 │
+╰──────────┴──────────┴─────────┴───────────────────────────────────┴────────────────────────────────────────────────╯
+```
+
+### Auto-Remediation Verification Summary (`stackvet fix`)
+
+When executing auto-remediation, StackVet provides safe format-preserving modifications with a transactional verification scorecard and rollback checkpoints:
+
+```text
+╭────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                    Fix Verification Summary                                    │
+╞════════════════════════════════════════════════════════════════════════════════════════════════╡
+│ Status:          ✓ Verified Fixed                                                              │
+│ Initial Score:   86 / 100 (Grade: B)                                                           │
+│ Post-Fix Score:  100 / 100 (Grade: A)                                                          │
+│ Files Modified:  package.json (1 dependency added, comments & formatting preserved)            │
+│ Rollback:        Snapshot saved to .stackvet/rollbacks/20261023-112638-fix.json                │
+╰────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ---

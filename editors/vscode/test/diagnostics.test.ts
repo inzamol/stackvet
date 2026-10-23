@@ -118,7 +118,7 @@ function getFixturePath(name: string): string {
     // Check path with spaces
     let spaceUriFound = false;
     for (const [uriStr] of result.diagnosticsByUri.entries()) {
-      if (uriStr.includes('path with spaces')) {
+      if (decodeURI(uriStr).includes('path with spaces') || uriStr.includes('path%20with%20spaces')) {
         spaceUriFound = true;
       }
     }
@@ -127,7 +127,7 @@ function getFixturePath(name: string): string {
     // Check path with Unicode
     let unicodeUriFound = false;
     for (const [uriStr] of result.diagnosticsByUri.entries()) {
-      if (uriStr.includes('тест_unicode')) {
+      if (decodeURI(uriStr).includes('тест_unicode') || uriStr.includes(encodeURI('тест_unicode'))) {
         unicodeUriFound = true;
       }
     }

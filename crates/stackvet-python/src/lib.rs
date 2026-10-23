@@ -377,7 +377,7 @@ fn collect_pyproject_pythonpath(val: &toml::Value, manifest_path: &Path, out: &m
         // [tool.setuptools.package-dir] e.g. "" = "src"
         if let Some(st) = tool.get("setuptools").and_then(|v| v.as_table()) {
             if let Some(pkg_dir) = st.get("package-dir").and_then(|v| v.as_table()) {
-                for dir in pkg_dir.values().filter_map(|v| v.as_str()) {
+                if let Some(dir) = pkg_dir.get("").and_then(|v| v.as_str()) {
                     if !dir.is_empty() {
                         out.push(dir.to_string());
                     }

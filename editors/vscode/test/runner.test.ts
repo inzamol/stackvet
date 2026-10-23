@@ -48,22 +48,36 @@ describe('runner.ts', () => {
   });
 
   it('handles execution error exit codes cleanly', async () => {
-    // Run node executing an exit with code 2 and stderr
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const fixtureDir = path.join(__dirname, 'fixtures');
+    if (!fs.existsSync(fixtureDir)) {
+      fs.mkdirSync(fixtureDir, { recursive: true });
+    }
+    const fixtureScript = path.join(fixtureDir, 'fail_exit2.js');
+    fs.writeFileSync(
+      fixtureScript,
+      'process.stderr.write("Custom error on stderr\\n"); process.exit(2);\n',
+      'utf8'
+    );
+
     await assert.rejects(
       async () => {
         await runStackvetCli({
           executablePath: process.execPath,
+          args: [fixtureScript],
           workspaceRoot: process.cwd(),
         });
       },
       (err: Error) => {
-        assert.ok(err.message.length > 0);
+        assert.ok(err.message.includes('exit code 2'), `Message should include exit code: ${err.message}`);
+        assert.ok(err.message.includes('Custom error on stderr'), `Message should include stderr: ${err.message}`);
         return true;
       }
     );
   });
 
-  it('runs against real native StackVet binary when available', async () => {
+  it('runs against real native StackVet binary when available', async (t) => {
     const fs = await import('node:fs');
     const path = await import('node:path');
     const os = await import('node:os');
@@ -99,12 +113,13 @@ describe('runner.ts', () => {
     }
 
     if (!foundBin) {
-      // Skip if binary hasn't been compiled locally
+      t.skip('Native StackVet binary not found');
       return;
     }
 
     const fixtureDir = path.join(root, 'tests', 'fixtures', 'regression', 'positive', 'django_violations');
     if (!fs.existsSync(fixtureDir)) {
+      t.skip('django_violations fixture directory not found');
       return;
     }
 
