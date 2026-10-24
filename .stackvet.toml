@@ -1,17 +1,28 @@
-# StackVet Project Configuration
 [project]
 name = "stackvet"
-min_score = 80
+min_score = 90
+strict = false
 
-[scan]
-exclude = [
+[thresholds]
+fail_on = "error"
+min_score = 90
+
+[ci]
+baseline = ".stackvet-baseline.json"
+fail_on = "error"
+strict = false
+
+[ignore]
+patterns = [
     "tests/fixtures/**",
     "target/**",
     "node_modules/**",
     "dist/**",
     "site/**",
     "scripts/**",
+    "editors/vscode/out/**",
+    "editors/vscode/bin/**",
 ]
 
-[rules]
-# All default rules active
+[cache]
+enabled = true

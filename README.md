@@ -7,7 +7,7 @@
 > **Universal Project Health & Static Diagnostics Engine**  
 > *Analyze Python, JavaScript, and TypeScript projects for dependency issues, environment drift, framework pitfalls, and architectural problems—alongside Docker and CI/CD configuration.*
 
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.3.0-orange.svg)](https://crates.io)
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.3.1-orange.svg)](https://crates.io)
 [![PyPI](https://img.shields.io/badge/pypi-stackvet-blue.svg)](https://pypi.org/project/stackvet/)
 [![npm](https://img.shields.io/badge/npm-@inzamol/stackvet-red.svg)](https://www.npmjs.com/package/@inzamol/stackvet)
 [![VS Code](https://img.shields.io/badge/VS%20Code-StackVet-blueviolet.svg)](https://marketplace.visualstudio.com/items?itemName=inzamrzn918.stackvet-vscode)

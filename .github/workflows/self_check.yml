@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  security-events: write
 
 jobs:
   self_check:
@@ -27,7 +28,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Build StackVet binary
         run: cargo build -p stackvet --release --locked
@@ -40,15 +41,44 @@ jobs:
           stackvet --version
           stackvet rules
           stackvet explain DEP-001
+          stackvet explain NDEP-001
+          stackvet explain RCT-002
 
-      - name: "Self-Check: Root Repository Gate (check .)"
-        run: stackvet check .
+      - name: "Self-Check: Strict Root Repository Gate (check . --strict)"
+        run: stackvet check . --strict
 
-      - name: "Self-Check: Root Repository Health (doctor .)"
+      - name: "Self-Check: Root Repository Health Doctor (doctor .)"
         run: stackvet doctor .
 
-      - name: "Self-Check: VS Code Extension Gate (check editors/vscode)"
-        run: stackvet check editors/vscode
+      - name: "Self-Check: Baseline Verification (baseline verify .)"
+        run: stackvet baseline verify .
+
+      - name: "Self-Check: Architecture & Import Graph (graph)"
+        run: stackvet graph --style ascii
+
+      - name: "Self-Check: VS Code Extension Gate (check editors/vscode --strict)"
+        run: stackvet check editors/vscode --strict
 
       - name: "Self-Check: VS Code Extension Health (doctor editors/vscode)"
         run: stackvet doctor editors/vscode
+
+      - name: "Self-Check: Generate SARIF Security Report"
+        if: always()
+        run: stackvet --format sarif doctor . > stackvet-results.sarif
+
+      - name: "Self-Check: Upload SARIF to GitHub Security Tab"
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: stackvet-results.sarif
+
+      - name: "Self-Check: Generate Standalone HTML Health Report"
+        if: always()
+        run: stackvet --format html doctor . > stackvet-report.html
+
+      - name: "Self-Check: Upload HTML Health Report Artifact"
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stackvet-health-report
+          path: stackvet-report.html

@@ -121,6 +121,7 @@ desktop.ini
 **/.stackvet/
 .stackvet/
 **/.stackvet-baseline.json
+!.stackvet-baseline.json
 tests/fixtures/**/*.log
 tests/fixtures/**/.stackvet.toml
 tests/fixtures/**/.stackvet-baseline.json

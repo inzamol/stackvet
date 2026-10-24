@@ -30,7 +30,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
@@ -46,6 +46,9 @@ jobs:
 
       - name: Run test suite
         run: cargo test --all-targets --all-features
+
+      - name: Run VS Code extension tests
+        run: npm test --prefix editors/vscode
 
       - name: Run documentation tests
         run: cargo test --doc
