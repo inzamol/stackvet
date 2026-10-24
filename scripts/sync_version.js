@@ -24,6 +24,7 @@ const targetVersion = match[1];
 
 const rootPkgPath = path.join(root, 'package.json');
 const npmPkgPath = path.join(root, 'packages', 'npm', 'package.json');
+const vscodePkgPath = path.join(root, 'editors', 'vscode', 'package.json');
 const pyprojectPath = path.join(root, 'pyproject.toml');
 
 if (isCheckMode) {
@@ -54,6 +55,16 @@ if (isCheckMode) {
   } else {
     console.error(`✗ Missing packages/npm/package.json at: ${npmPkgPath}`);
     hasError = true;
+  }
+
+  if (fs.existsSync(vscodePkgPath)) {
+    const vscodePkg = JSON.parse(fs.readFileSync(vscodePkgPath, 'utf8'));
+    if (vscodePkg.version !== targetVersion) {
+      console.error(`✗ Mismatch in editors/vscode/package.json: expected "${targetVersion}", found "${vscodePkg.version}"`);
+      hasError = true;
+    } else {
+      console.log(`✓ editors/vscode/package.json matches (${targetVersion})`);
+    }
   }
 
   if (fs.existsSync(pyprojectPath)) {
@@ -94,6 +105,16 @@ if (fs.existsSync(npmPkgPath)) {
     npmPkg.version = targetVersion;
     fs.writeFileSync(npmPkgPath, JSON.stringify(npmPkg, null, 2) + '\n');
     console.log(`Updated packages/npm/package.json -> ${targetVersion}`);
+  }
+}
+
+// 3. Sync editors/vscode/package.json
+if (fs.existsSync(vscodePkgPath)) {
+  const vscodePkg = JSON.parse(fs.readFileSync(vscodePkgPath, 'utf8'));
+  if (vscodePkg.version !== targetVersion) {
+    vscodePkg.version = targetVersion;
+    fs.writeFileSync(vscodePkgPath, JSON.stringify(vscodePkg, null, 2) + '\n');
+    console.log(`Updated editors/vscode/package.json -> ${targetVersion}`);
   }
 }
 

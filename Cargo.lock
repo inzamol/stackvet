@@ -2077,7 +2077,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "stackvet"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2109,7 +2109,7 @@ dependencies = [
 
 [[package]]
 name = "stackvet-analyzers"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "rayon",
@@ -2128,7 +2128,7 @@ dependencies = [
 
 [[package]]
 name = "stackvet-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "ignore",
@@ -2141,7 +2141,7 @@ dependencies = [
 
 [[package]]
 name = "stackvet-correlation"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "stackvet-core",
@@ -2149,7 +2149,7 @@ dependencies = [
 
 [[package]]
 name = "stackvet-frameworks"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "oxc_ast",
@@ -2162,7 +2162,7 @@ dependencies = [
 
 [[package]]
 name = "stackvet-graph"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "petgraph",
@@ -2171,7 +2171,7 @@ dependencies = [
 
 [[package]]
 name = "stackvet-node"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "oxc_allocator",
@@ -2187,7 +2187,7 @@ dependencies = [
 
 [[package]]
 name = "stackvet-python"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "get-size2",
@@ -2202,7 +2202,7 @@ dependencies = [
 
 [[package]]
 name = "stackvet-remediation"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -2213,7 +2213,7 @@ dependencies = [
 
 [[package]]
 name = "stackvet-reporter"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "colored",
@@ -2226,7 +2226,7 @@ dependencies = [
 
 [[package]]
 name = "stackvet-scanner"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "ignore",

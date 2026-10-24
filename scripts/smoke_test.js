@@ -39,6 +39,12 @@ assert(rootPkg.version === cargoVersion, `Root package.json version (${rootPkg.v
 const npmPkg = JSON.parse(fs.readFileSync(path.join(root, 'packages', 'npm', 'package.json'), 'utf8'));
 assert(npmPkg.version === cargoVersion, `packages/npm/package.json version (${npmPkg.version}) matches Cargo.toml (${cargoVersion})`);
 
+const vscodePkgPath = path.join(root, 'editors', 'vscode', 'package.json');
+if (fs.existsSync(vscodePkgPath)) {
+  const vscodePkg = JSON.parse(fs.readFileSync(vscodePkgPath, 'utf8'));
+  assert(vscodePkg.version === cargoVersion, `editors/vscode/package.json version (${vscodePkg.version}) matches Cargo.toml (${cargoVersion})`);
+}
+
 const pyprojectContent = fs.readFileSync(path.join(root, 'pyproject.toml'), 'utf8');
 assert(
   pyprojectContent.includes('dynamic = ["version"]'),
