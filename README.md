@@ -7,9 +7,10 @@
 > **Universal Project Health & Static Diagnostics Engine**  
 > *Analyze Python, JavaScript, and TypeScript projects for dependency issues, environment drift, framework pitfalls, and architectural problems—alongside Docker and CI/CD configuration.*
 
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.1.0-orange.svg)](https://crates.io)
-[![PyPI](https://img.shields.io/badge/pypi-stackvet-blue.svg)](https://pypi.org)
-[![npm](https://img.shields.io/badge/npm-stackvet-red.svg)](https://npmjs.com)
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.3.0-orange.svg)](https://crates.io)
+[![PyPI](https://img.shields.io/badge/pypi-stackvet-blue.svg)](https://pypi.org/project/stackvet/)
+[![npm](https://img.shields.io/badge/npm-@inzamol/stackvet-red.svg)](https://www.npmjs.com/package/@inzamol/stackvet)
+[![VS Code](https://img.shields.io/badge/VS%20Code-StackVet-blueviolet.svg)](https://marketplace.visualstudio.com/items?itemName=inzamrzn918.stackvet-vscode)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -32,12 +33,12 @@
   - [`stackvet init` (alias: `setup`)](#stackvet-init)
   - [`stackvet rules` (aliases: `catalog`, `list-rules`)](#stackvet-rules)
 - [Diagnostic Rules Catalog & Highlights](#diagnostic-rules-catalog--highlights)
+  - [Node & Frontend Dependency Rules (`NDEP-xxx`)](#node-dependency-rules-ndep-xxx)
+  - [React & Next.js Rules (`RCT-xxx`, `NXT-xxx`)](#react--nextjs-rules-rct-xxx-nxt-xxx)
   - [Python Dependency Rules (`DEP-xxx`)](#python-dependency-rules-dep-xxx)
-  - [Node Dependency Rules (`NDEP-xxx`)](#node-dependency-rules-ndep-xxx)
+  - [FastAPI Framework Rules (`FAP-xxx`)](#fastapi-framework-rules-fap-xxx)
   - [Import & Architecture Rules (`IMP-xxx`, `ARC-xxx`)](#import--architecture-rules-imp-xxx-arc-xxx)
   - [Environment & Drift Rules (`ENV-xxx`)](#environment--drift-rules-env-xxx)
-  - [FastAPI Framework Rules (`FAP-xxx`)](#fastapi-framework-rules-fap-xxx)
-  - [React & Next.js Rules (`RCT-xxx`, `NXT-xxx`)](#react--nextjs-rules-rct-xxx-nxt-xxx)
 - [Output Formats](#output-formats)
 - [Process Exit Codes](#process-exit-codes)
 - [Project Configuration (`stackvet.toml`)](#project-configuration)
@@ -51,58 +52,65 @@
 
 ## Overview
 
-Modern software applications are polyglot by nature: Python backends (FastAPI, Django), Node/TypeScript frontends (React, Next.js), Docker containers, and CI/CD pipelines.
+Modern software applications are polyglot by nature: Node/TypeScript frontends (React, Next.js, Express, Vue), Python backends (FastAPI, Django, Celery), Docker containers, and CI/CD pipelines.
 
 When applications break, developers often suffer from **alert fatigue**—facing dozens of disconnected warnings across different linters that fail to identify the single underlying root cause.
 
 **StackVet** bridges this gap:
-1. **Parallel Static Analysis**: Uses Rust with `ruff_python_parser` and `oxc_parser` to inspect ASTs without running user code.
-2. **Cross-Layer Drift Detection**: Detects mismatches between local environments, package manifests, lockfiles, Docker images, and CI matrix definitions.
-3. **Correlation Engine**: Groups individual symptoms into concise **Root Cause Clusters**.
+1. **Parallel Static Analysis**: Uses native Rust with `oxc_parser` (JavaScript/TypeScript) and `ruff_python_parser` (Python) to inspect ASTs without running user code.
+2. **Cross-Layer Drift Detection**: Detects mismatches between local environments, package manifests, lockfiles (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `uv.lock`), Docker images, and CI matrix definitions.
+3. **Correlation Engine**: Groups individual symptoms across all languages into concise **Root Cause Clusters**.
 4. **Health Score & Grade**: Produces an actionable 0–100 health score with letter grades (A, B, C, or F).
-5. **Format-Preserving Auto-Fixes**: Injects missing dependencies into `pyproject.toml` or `package.json` preserving user comments and indentation using `toml_edit`.
+5. **Format-Preserving Auto-Fixes**: Injects missing dependencies into `package.json` or `pyproject.toml` preserving user comments and indentation using `toml_edit` and JSON serializers.
 
 ---
 
 ## Key Features
 
 - **Blazing Fast**: Native Rust engine with Rayon parallel processing; analyzes multi-thousand-file repositories in milliseconds.
-- **AST-Level Accuracy**: Direct AST traversal eliminating regex false positives.
+- **AST-Level Accuracy**: Direct AST traversal for JavaScript, TypeScript, and Python, eliminating regex false positives.
+- **Universal Package Intelligence**: Inspects `package.json`, `pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `bun.lockb`, `pyproject.toml`, `requirements.txt`, and `uv.lock`.
+- **Framework-Aware Diagnostics**: Built-in rules for React, Next.js (Server/Client boundary and secret leaks), FastAPI, SQLAlchemy, and Django.
 - **Circular Dependency Detection**: Detects import cycles using Tarjan's Strongly Connected Components (SCC) algorithm.
-- **Zero-Config Discovery**: Automatically discovers `pyproject.toml`, `requirements.txt`, `uv.lock`, `package.json`, `pnpm-lock.yaml`, Dockerfiles, and GitHub workflows.
+- **Zero-Config Discovery**: Automatically discovers manifests, lockfiles, Dockerfiles, and GitHub workflows across monorepos and microservices.
 - **Enterprise Reporting**: Outputs rich terminal tables, machine-readable JSON, OASIS SARIF v2.1.0 for GitHub Code Scanning, and standalone responsive dark-mode HTML reports.
 
 ---
 
 ## Installation
 
+### Via npm / npx (Node.js & TypeScript)
+```bash
+# Run instantly with npx (no install required):
+npx @inzamol/stackvet doctor
+
+# Or install in your project (npm / pnpm / yarn / bun):
+npm install --save-dev @inzamol/stackvet
+pnpm add -D @inzamol/stackvet
+yarn add -D @inzamol/stackvet
+bun add -d @inzamol/stackvet
+```
+
+### Via uv / pip (Python)
+```bash
+# Run instantly with uvx or pipx (no install required):
+uvx stackvet doctor
+# or
+pipx run stackvet doctor
+
+# Or install in your virtual environment:
+pip install stackvet
+# or
+uv add --dev stackvet
+```
+
 ### Via Cargo (Rust)
 ```bash
 cargo install stackvet
 ```
 
-### Via uv / pip (Python)
-```bash
-# Run instantly with uvx (no install required):
-uvx stackvet doctor
-
-# Or install with pip / pipx:
-pip install stackvet
-# or
-pipx install stackvet
-```
-
-### Via npm / npx (Node.js)
-```bash
-# Run instantly with npx (no install required):
-npx @inzamol/stackvet doctor
-
-# Or install in your project:
-npm install --save-dev @inzamol/stackvet
-# or with pnpm / yarn:
-pnpm add -D @inzamol/stackvet
-yarn add -D @inzamol/stackvet
-```
+### Official VS Code Extension
+Install the official [StackVet VS Code Extension](https://marketplace.visualstudio.com/items?itemName=inzamrzn918.stackvet-vscode) from the Visual Studio Marketplace or search `StackVet` in the Extensions view (`Ctrl+Shift+X` / `Cmd+Shift+X`).
 
 ---
 
@@ -229,15 +237,16 @@ All subcommands support positional path arguments (e.g. `stackvet doctor ./backe
 Runs a comprehensive health check, aggregates symptoms into root causes, and assigns a health grade (A, B, C, or F).
 
 ```bash
-# Run on current directory
+# Run on current directory (auto-detects Node.js, TypeScript, Python, Docker)
 stackvet doctor
 
-# Run on a target directory (positional or -p)
+# Run on a target project or subfolder
+stackvet doctor ./frontend
 stackvet doctor ./backend
-stackvet -p ./services/api doctor
+stackvet -p ./packages/web doctor
 
 # Using intuitive aliases
-stackvet health ./backend
+stackvet health ./frontend
 stackvet diagnose
 
 # Fail CI with exit code 1 if health score is below 85
@@ -258,9 +267,9 @@ StackVet computes an objective, deterministic 0–100 health score subtracted fr
 
 | Severity | Deduction | Description |
 |---|---|---|
-| **`CRITICAL`** | **-20 pts** | Blocking synchronous calls in async handlers, critical event loop freezes |
-| **`ERROR`** | **-8 pts** | Missing dependencies, circular imports, unresolved modules |
-| **`WARN`** | **-2 pts** | Lockfile drift, unused dependencies, version mismatches |
+| **`CRITICAL`** | **-20 pts** | Blocking synchronous calls in async handlers, critical event loop freezes, exposed client secrets |
+| **`ERROR`** | **-8 pts** | Missing dependencies (`NDEP-001`, `DEP-002`), circular imports (`IMP-001`), conditional hooks (`RCT-002`), unresolved modules |
+| **`WARN`** | **-2 pts** | Lockfile drift (`NDEP-004`, `DEP-005`), unused packages (`NDEP-002`, `DEP-003`), version mismatches |
 | **`INFO` / `HINT`** | **0 pts** | Informational architecture advice and guidance |
 
 - **Letter Grades**: **A (90–100, Healthy)** | **B (75–89, Fair)** | **C (50–74, Degraded)** | **F (0–49, Critical Issues)**
@@ -274,8 +283,9 @@ A fast gate optimized for pre-commit hooks and CI pipelines. Returns exit code `
 
 ```bash
 # Normal check (fails only on ERROR and CRITICAL)
+stackvet check ./frontend
 stackvet check ./backend
-stackvet scan ./backend
+stackvet scan .
 
 # Custom severity failure threshold (e.g. fail on warning or higher)
 stackvet check --fail-on warning
@@ -301,14 +311,16 @@ Deep diagnostics inspection displaying code locations, snippets, severity, and t
 
 ```bash
 # Inspect all detected diagnostics
+stackvet inspect ./frontend
 stackvet inspect ./backend
-stackvet examine ./backend
 
 # Filter diagnostics by rule category prefix:
+stackvet inspect --rule NDEP  # Only Node.js dependency rules
+stackvet inspect --rule RCT   # Only React rules
+stackvet inspect --rule NXT   # Only Next.js rules
 stackvet inspect --rule FAP   # Only FastAPI rules
 stackvet inspect --rule SQL   # Only SQLAlchemy rules
 stackvet inspect --rule DOC   # Only Docker rules
-stackvet inspect --rule RCT   # Only React rules
 ```
 
 ---
@@ -318,8 +330,10 @@ Displays in-depth documentation, potential runtime consequences, code examples, 
 
 ```bash
 # Explain any rule in detail
+stackvet explain NDEP-001
+stackvet explain RCT-002
+stackvet explain NXT-001
 stackvet explain FAP-001
-stackvet explain SQL-004
 stackvet explain DOC-001
 ```
 
@@ -415,6 +429,32 @@ stackvet rules react
 
 Below is an overview of representative diagnostic rules across key categories. Run `stackvet rules` to browse the full catalog or `stackvet explain <RULE_ID>` for deep-dive remediations.
 
+### Node Dependency Rules (`NDEP-xxx`)
+
+| Rule ID | Severity | Name | Description |
+|---|---|---|---|
+| `NDEP-001` | `ERROR` | Missing Node Package | Package imported in `.ts`/`.tsx`/`.js` is missing from `package.json`. |
+| `NDEP-002` | `WARN` | Unused Node Package | Production dependency in `package.json` is never imported in source files. |
+| `NDEP-003` | `ERROR` | Unmet Peer Dependency | Declared dependencies conflict with peer dependency constraints. |
+| `NDEP-004` | `WARN` | Lockfile Out of Sync | Missing lockfile (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`). |
+| `NDEP-005` | `ERROR` | DevDependency in Production | A package from `devDependencies` is imported inside production source files (outside test files). |
+
+---
+
+### React & Next.js Rules (`RCT-xxx`, `NXT-xxx`)
+
+| Rule ID | Severity | Name | Description |
+|---|---|---|---|
+| `RCT-001` | `WARN` | Missing Hook Dependencies | `useEffect` or `useCallback` missing referenced variables in dependency array. |
+| `RCT-002` | `ERROR` | Conditional Hook Call | React hook (`useState`, `useEffect`) invoked conditionally inside an `if` block. |
+| `RCT-003` | `ERROR` | Direct State Mutation | Modifying state directly (`state.foo = 1`) rather than calling state dispatcher. |
+| `RCT-004` | `WARN` | Missing Key in List | JSX elements rendered inside `.map()` missing a unique `key` prop. |
+| `RCT-005` | `WARN` | Barrel Import Bloat | Importing from root barrel exports (e.g. `from '@mui/material'`) causing bundle bloat. |
+| `NXT-001` | `ERROR` | Server Component Client API | Browser APIs (`window`, `localStorage`) or client hooks used without `"use client"` directive. |
+| `NXT-002` | `CRITICAL` | Client Component Private Secret | Client Component accesses private environment variable (not prefixed with `NEXT_PUBLIC_`). |
+
+---
+
 ### Python Dependency Rules (`DEP-xxx`)
 
 | Rule ID | Severity | Name | Description |
@@ -429,15 +469,18 @@ Below is an overview of representative diagnostic rules across key categories. R
 
 ---
 
-### Node Dependency Rules (`NDEP-xxx`)
+### FastAPI Framework Rules (`FAP-xxx`)
 
 | Rule ID | Severity | Name | Description |
 |---|---|---|---|
-| `NDEP-001` | `ERROR` | Missing Node Package | Package imported in `.ts`/`.tsx`/`.js` is missing from `package.json`. |
-| `NDEP-002` | `WARN` | Unused Node Package | Production dependency in `package.json` is never imported in source files. |
-| `NDEP-003` | `ERROR` | Unmet Peer Dependency | Declared dependencies conflict with peer dependency constraints. |
-| `NDEP-004` | `WARN` | Lockfile Out of Sync | Missing lockfile (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`). |
-| `NDEP-005` | `ERROR` | DevDependency in Production | A package from `devDependencies` is imported inside production source files (outside test files). |
+| `FAP-001` | `CRITICAL` | Blocking Call in Async Route | Calling blocking functions (`time.sleep()`, synchronous `requests.*`, `subprocess.*`) inside `async def` routes. |
+| `FAP-003` | `WARN` | Missing Response Model | FastAPI route handler lacks a `response_model` argument or return type annotation (`-> Model`). |
+| `FAP-004` | `CRITICAL` | Insecure Wildcard CORS | `CORSMiddleware` configured with `allow_origins=["*"]` combined with `allow_credentials=True`. |
+| `FAP-006` | `ERROR` | Missing Path Parameter | URL template contains a placeholder (e.g. `/{item_id}`) not present in handler arguments. |
+| `FAP-008` | `WARN` | Deprecated on_event | Using `@app.on_event("startup")` instead of modern `lifespan` context managers. |
+| `FAP-010` | `ERROR` | Duplicate Route Path | Multiple handlers registered for the exact same HTTP method and path template. |
+| `FAP-011` | `ERROR` | Mutable Default Argument | Route parameter has a mutable default value (e.g. `def list_items(tags: list = []):`). |
+| `FAP-015` | `ERROR` | Sync File I/O in Async Handler | Synchronous `open()` or `with open(...)` executed inside an `async def` route handler. |
 
 ---
 
@@ -459,37 +502,8 @@ Below is an overview of representative diagnostic rules across key categories. R
 | Rule ID | Severity | Name | Description |
 |---|---|---|---|
 | `ENV-001` | `WARN` | Runtime Drift | `.python-version` or `.nvmrc` contradicts the runtime constraint in `pyproject.toml` or `package.json`. |
-| `ENV-002` | `ERROR` | Docker Drift | `Dockerfile` base image (e.g. `python:3.10-slim`) contradicts project requirement (`>=3.12`). |
+| `ENV-002` | `ERROR` | Docker Drift | `Dockerfile` base image (e.g. `node:18-alpine` or `python:3.10-slim`) contradicts project requirement. |
 | `ENV-003` | `ERROR` | CI Matrix Drift | GitHub Actions workflow matrix runs tests on unsupported runtime versions. |
-
----
-
-### FastAPI Framework Rules (`FAP-xxx`)
-
-| Rule ID | Severity | Name | Description |
-|---|---|---|---|
-| `FAP-001` | `CRITICAL` | Blocking Call in Async Route | Calling blocking functions (`time.sleep()`, synchronous `requests.*`, `subprocess.*`) inside `async def` routes. |
-| `FAP-003` | `WARN` | Missing Response Model | FastAPI route handler lacks a `response_model` argument or return type annotation (`-> Model`). |
-| `FAP-004` | `CRITICAL` | Insecure Wildcard CORS | `CORSMiddleware` configured with `allow_origins=["*"]` combined with `allow_credentials=True`. |
-| `FAP-006` | `ERROR` | Missing Path Parameter | URL template contains a placeholder (e.g. `/{item_id}`) not present in handler arguments. |
-| `FAP-008` | `WARN` | Deprecated on_event | Using `@app.on_event("startup")` instead of modern `lifespan` context managers. |
-| `FAP-010` | `ERROR` | Duplicate Route Path | Multiple handlers registered for the exact same HTTP method and path template. |
-| `FAP-011` | `ERROR` | Mutable Default Argument | Route parameter has a mutable default value (e.g. `def list_items(tags: list = []):`). |
-| `FAP-015` | `ERROR` | Sync File I/O in Async Handler | Synchronous `open()` or `with open(...)` executed inside an `async def` route handler. |
-
----
-
-### React & Next.js Rules (`RCT-xxx`, `NXT-xxx`)
-
-| Rule ID | Severity | Name | Description |
-|---|---|---|---|
-| `RCT-001` | `WARN` | Missing Hook Dependencies | `useEffect` or `useCallback` missing referenced variables in dependency array. |
-| `RCT-002` | `ERROR` | Conditional Hook Call | React hook (`useState`, `useEffect`) invoked conditionally inside an `if` block. |
-| `RCT-003` | `ERROR` | Direct State Mutation | Modifying state directly (`state.foo = 1`) rather than calling state dispatcher. |
-| `RCT-004` | `WARN` | Missing Key in List | JSX elements rendered inside `.map()` missing a unique `key` prop. |
-| `RCT-005` | `WARN` | Barrel Import Bloat | Importing from root barrel exports (e.g. `from '@mui/material'`) causing bundle bloat. |
-| `NXT-001` | `ERROR` | Server Component Client API | Browser APIs (`window`, `localStorage`) or client hooks used without `"use client"` directive. |
-| `NXT-002` | `CRITICAL` | Client Component Private Secret | Client Component accesses private environment variable (not prefixed with `NEXT_PUBLIC_`). |
 
 ---
 
@@ -521,11 +535,11 @@ StackVet returns stable, predictable exit codes across all commands, checks, and
 
 ## Project Configuration
 
-StackVet automatically discovers and loads configuration from `stackvet.toml`, `.stackvet.toml`, or `pyproject.toml` (under `[tool.stackvet]`), or from an explicit file via `--config <PATH>`.
+StackVet automatically discovers and loads configuration from `stackvet.toml`, `.stackvet.toml`, `package.json` (under the `"stackvet"` property), or `pyproject.toml` (under `[tool.stackvet]`), or from an explicit file via `--config <PATH>`.
 
 ### Precedence Hierarchy
 1. **CLI Arguments** (`--fail-on`, `--strict`, `--min-score`, `--baseline`) — Highest precedence.
-2. **Project Config File** (`stackvet.toml` / `.stackvet.toml` / `pyproject.toml`) — Overrides defaults.
+2. **Project Config File** (`stackvet.toml` / `.stackvet.toml` / `package.json` / `pyproject.toml`) — Overrides defaults.
 3. **Built-in Defaults** (`fail_on = "error"`, `min_score = None`) — Fallback.
 
 ### Example `stackvet.toml`
@@ -549,6 +563,8 @@ strict = false
 
 [rules]
 # Override rule severities or disable rules entirely
+NDEP-001 = "error"
+RCT-001 = "warning"
 DEP-001 = "warning"
 CEL-001 = "disabled"   # or "off"
 ARC-001 = "error"
@@ -560,13 +576,18 @@ enabled = true
 
 # Ignore patterns (file/directory globs relative to project root)
 [ignore]
-patterns = ["legacy/**", "benchmarks/**", "*.generated.ts"]
+patterns = ["legacy/**", "benchmarks/**", "*.generated.ts", "dist/**", "build/**"]
 
 # Configured suppressions with rule, path pattern, and expiration date
 [[suppressions]]
+rule = "NDEP-001"
+path = "legacy/**/*.tsx"
+reason = "Legacy frontend package scheduled for migration"
+
+[[suppressions]]
 rule = "DEP-001"
 path = "legacy/**/*.py"
-reason = "Legacy package scheduled for removal"
+reason = "Legacy backend package scheduled for removal"
 
 [[suppressions]]
 rule = "SQL-001"
@@ -574,12 +595,33 @@ until = "2026-12-31"   # ISO 8601 YYYY-MM-DD expiration
 reason = "Temporary bypass during query optimization"
 ```
 
-Inline comment suppressions are also supported in Python, JavaScript, and TypeScript files:
+### Inline Comment Suppressions
+
+Inline comment suppressions are supported across **TypeScript**, **JavaScript**, and **Python**:
+
+#### TypeScript & JavaScript
+```typescript
+// Single line suppression with rule ID and reason
+import axios from 'axios'; // stackvet:ignore[NDEP-001]: bundled via CDN script
+
+// Suppress next line
+// stackvet:ignore-next-line[RCT-002]
+if (condition) useState(0);
+
+// Suppress entire file
+// stackvet:ignore-file[NXT-001]: legacy client-only module exempt from server check
+```
+
+#### Python
 ```python
-# Inline comment suppression examples
+# Single line suppression with rule ID and reason
 time.sleep(1)  # stackvet:ignore[FAP-001]: intentional delay
+
+# Suppress next line
 # stackvet:ignore-next-line[DEP-001]
 import optional_pkg
+
+# Suppress entire file
 # stackvet:ignore-file[DJG-001]: legacy file exempt from django check
 ```
 
@@ -587,7 +629,29 @@ import optional_pkg
 
 ## CI/CD Integration
 
-### GitHub Actions (with SARIF Security Tab)
+### Node.js (`package.json` & lint-staged)
+
+Add StackVet to your `package.json` scripts:
+```json
+{
+  "scripts": {
+    "vet": "stackvet doctor",
+    "check": "stackvet check --strict",
+    "fix": "stackvet fix --yes"
+  }
+}
+```
+
+Pre-commit with **Husky** / **lint-staged**:
+```json
+{
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,json,py}": ["stackvet check --strict"]
+  }
+}
+```
+
+### GitHub Actions (Universal via `npx` & SARIF Security Tab)
 
 ```yaml
 name: StackVet Health Check
@@ -603,17 +667,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install StackVet
-        run: cargo install stackvet
-
-      # Fast CI Gate (Fails on Error)
+      # Fast CI Gate via npx (Zero Setup Required)
       - name: Run StackVet Check
-        run: stackvet check --strict
+        run: npx @inzamol/stackvet check --strict
 
       # Generate SARIF report for GitHub Code Scanning
       - name: Generate SARIF Report
         if: always()
-        run: stackvet --format sarif doctor > stackvet-results.sarif
+        run: npx @inzamol/stackvet --format sarif doctor > stackvet-results.sarif
 
       - name: Upload SARIF to GitHub Security Tab
         uses: github/codeql-action/upload-sarif@v3
@@ -622,7 +683,7 @@ jobs:
           sarif_file: stackvet-results.sarif
 ```
 
-### Pre-Commit Hook (`.pre-commit-config.yaml`)
+### Python Pre-Commit Hook (`.pre-commit-config.yaml`)
 
 ```yaml
 repos:
@@ -682,7 +743,7 @@ stackvet/
 
 1. Clone repository:
    ```bash
-   git clone https://github.com/stackvet/stackvet.git
+   git clone https://github.com/inzamol/stackvet.git
    cd stackvet
    ```
 

@@ -2,17 +2,18 @@
 
 <div align="center" markdown>
 
-**Universal Project Health & Static Diagnostics Engine for Python, Node.js, Docker & CI Stacks**
+**Universal Project Health & Static Diagnostics Engine for Node.js, TypeScript, Python, Docker & CI Stacks**
 
 [![PyPI Version](https://img.shields.io/pypi/v/stackvet.svg?color=blue)](https://pypi.org/project/stackvet/)
 [![npm Version](https://img.shields.io/npm/v/@inzamol/stackvet.svg?color=cb3837)](https://www.npmjs.com/package/@inzamol/stackvet)
-[![Python Versions](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://pypi.org/project/stackvet/)
+[![VS Code](https://img.shields.io/badge/VS%20Code-StackVet-blueviolet.svg)](https://marketplace.visualstudio.com/items?itemName=inzamrzn918.stackvet-vscode)
 [![Node Versions](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg)](https://www.npmjs.com/package/@inzamol/stackvet)
+[![Python Versions](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://pypi.org/project/stackvet/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 </div>
 
-`stackvet` is a high-performance, polyglot diagnostic and project health engine for modern stacks (Python, Node.js/TypeScript, Docker, and CI/CD). It inspects your project manifests (`pyproject.toml`, `package.json`, lockfiles), active runtime environments, source code ASTs, and infrastructure definitions in milliseconds to uncover broken dependencies, undeclared packages, circular import loops, and runtime drift.
+`stackvet` is a high-performance, polyglot diagnostic and project health engine for modern stacks (Node.js/TypeScript, Python, Docker, and CI/CD). It inspects your project manifests (`package.json`, `pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `pyproject.toml`, `requirements.txt`, `uv.lock`), active runtime environments, source code ASTs, and infrastructure definitions in milliseconds to uncover broken dependencies, undeclared packages, circular import loops, and runtime drift.
 
 ---
 
@@ -23,15 +24,15 @@ Unlike generic tools that only inspect a single lockfile or flat requirements li
 ```mermaid
 flowchart TD
     subgraph Discovery["1. Discovery & Context Ingestion"]
-        A["<b>Project Manifests & Active Environment</b><br/>pyproject.toml • requirements.txt • active virtualenv"]
-        B["<b>Source Code AST & Infrastructure</b><br/>Module AST imports • Dockerfile • CI workflows"]
+        A["<b>Project Manifests & Active Environment</b><br/>package.json • pnpm/npm/yarn lockfiles • pyproject.toml • requirements.txt"]
+        B["<b>Source Code AST & Infrastructure</b><br/>TS/JS/Python AST imports • Dockerfile • CI workflows"]
     end
 
     subgraph Analyzers["2. Subsystem Analyzers"]
-        C["<b>Dependencies Analyzer</b><br/>Constraint conflicts, missing & unused packages"]
-        D["<b>Environment & Drift Analyzer</b><br/>Python interpreter, Docker base image & CI matrix drift"]
+        C["<b>Dependencies Analyzers</b><br/>Node (NDEP) & Python (DEP) conflicts, missing & unused packages"]
+        D["<b>Environment & Drift Analyzer</b><br/>Node/Python runtimes, Docker base images & CI matrix drift"]
         E["<b>Imports & Architecture Analyzer</b><br/>Circular import cycle detection & unresolvable modules"]
-        F["<b>Packaging Analyzer</b><br/>PEP 621 metadata & configuration schema"]
+        F["<b>Frameworks & Packaging</b><br/>React (RCT), Next.js (NXT), FastAPI (FAP), Django (DJG), and manifests"]
     end
 
     subgraph Correlator["3. Root Cause Engine & Health Score"]
@@ -60,7 +61,7 @@ flowchart TD
 
 ## 2. Install & Usage
 
-Run `stackvet doctor` or `stackvet scan` directly in any Python project root:
+Run `stackvet doctor` or `stackvet scan` directly in any Node.js, TypeScript, Python, or polyglot repository root:
 
 === "Run without installing (npx)"
     ```bash
@@ -200,31 +201,37 @@ Run `stackvet doctor` or `stackvet scan` directly in any Python project root:
 
 | Subsystem | Scope & Capabilities | Key Rules |
 |---|---|---|
-| **Dependencies** | Constraint conflicts, undeclared imports, unused packages, Python compatibility mismatches | `DEP-001` through `DEP-006` |
-| **Environment** | Interpreter version drift, Dockerfile base image mismatches, CI matrix synchronization | `ENV-001` through `ENV-003` |
-| **Architecture** | Circular import cycle detection, unresolvable module imports, dead orphan files, deprecated stdlib | `IMP-001` through `IMP-004` |
-| **Packaging** | PEP 621 metadata validation, TOML syntax verification, entrypoint checks | `PKG-001`, `PKG-002` |
-| **Docker** | Security best practices, root user risks, unpinned base images, sensitive file leaks | `DOC-001` through `DOC-014` |
+| **Node Dependencies** | Undeclared package imports in TS/JS, unused production dependencies, peer conflicts, lockfile drift (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `bun.lockb`) | `NDEP-001` through `NDEP-005` |
+| **React & Next.js** | Hook dependencies, conditional hook calls, direct state mutation, missing keys in lists, barrel import bloat, Server/Client component leaks, private environment variable exposure | `RCT-001`–`RCT-005`, `NXT-001`–`NXT-002` |
+| **Python Dependencies** | Constraint conflicts, undeclared imports, unused packages, Python runtime compatibility mismatches, lockfile drift (`uv.lock`, `poetry.lock`) | `DEP-001` through `DEP-007` |
+| **FastAPI & Python Frameworks** | Blocking calls in async routes, missing response models, wildcard CORS, path parameter discrepancies, SQLAlchemy N+1 queries, Django settings, Celery risks | `FAP-xxx`, `SQL-xxx`, `DJG-xxx`, `CEL-xxx` |
+| **Environment & Drift** | Node (`.nvmrc`, `package.json` engines) and Python (`.python-version`, `pyproject.toml`) runtime drift against Dockerfile base images and CI test matrices | `ENV-001` through `ENV-003` |
+| **Architecture & Imports** | Circular import cycle detection, unresolvable module imports, dead orphan files, deprecated stdlib, architectural tier violations | `IMP-001`–`IMP-004`, `ARC-001`–`ARC-002` |
+| **Docker & Containers** | Security best practices, root user risks, unpinned base images, sensitive file leaks, caching optimizations | `DOC-001` through `DOC-014` |
 | **CI Workflows** | Matrix mismatches, unpinned dependencies, outdated GitHub Actions, quality gates, hardcoded secrets | `CI-001` through `CI-006` |
-| **Frameworks** | FastAPI (`FAP-xxx`), SQLAlchemy (`SQL-xxx`), Django (`DJG-xxx`), Celery (`CEL-xxx`) | `FAP`, `SQL`, `DJG`, `CEL` |
 
 👉 *Browse full rule descriptions and remediation strategies in the [Rules Catalog](rules.md).*
 
 ---
 
-## 5. Feature Comparison
+## 5. Unified Polyglot Advantage
 
-| Capability | `stackvet` | `pip check` | `deptry` | `pip-audit` |
+`stackvet` replaces multiple fragmented, single-ecosystem linters with a single, ultra-fast native engine producing unified health scoring across your entire stack:
+
+| Capability | `stackvet` | `depcheck` / `knip` (Node) | `pip check` / `deptry` (Python) | `npm audit` / `pip-audit` |
 |---|:---:|:---:|:---:|:---:|
-| **Dependency Constraint Conflicts** | :white_check_mark: | :white_check_mark: | :x: | :x: |
-| **Undeclared & Unused Dependencies** | :white_check_mark: | :x: | :white_check_mark: | :x: |
-| **Circular Import Cycle Detection** | :white_check_mark: | :x: | :x: | :x: |
-| **Python & Docker/CI Runtime Drift** | :white_check_mark: | :x: | :x: | :x: |
+| **Polyglot Monorepo Analysis** (Node + Python) | :white_check_mark: | :x: | :x: | :x: |
+| **Node.js Dependency & Peer Auditing** | :white_check_mark: | :white_check_mark: | :x: | :x: |
+| **React & Next.js Architectural Rules** | :white_check_mark: | :x: | :x: | :x: |
+| **Python Dependency & Constraint Conflicts** | :white_check_mark: | :x: | :white_check_mark: | :x: |
+| **FastAPI, Django & SQLAlchemy Hazards** | :white_check_mark: | :x: | :x: | :x: |
+| **Circular Import Cycle Detection** | :white_check_mark: | :warning: (JS only) | :x: | :x: |
+| **Cross-Layer Runtime & Docker/CI Drift** | :white_check_mark: | :x: | :x: | :x: |
 | **Interactive Terminal Explorer (TUI)** | :white_check_mark: | :x: | :x: | :x: |
 | **Standalone Interactive HTML Reports** | :white_check_mark: | :x: | :x: | :x: |
-| **Automated Safe Remediation (`stackvet fix`)** | :white_check_mark: | :x: | :x: | :x: |
+| **Format-Preserving Auto-Fixes (`stackvet fix`)** | :white_check_mark: | :x: | :x: | :x: |
 | **SARIF v2.1.0 & GitHub PR Annotations** | :white_check_mark: | :x: | :x: | :x: |
-| **Sub-Second Offline Execution** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: (requires network) |
+| **Sub-Second Native Rust Execution** | :white_check_mark: | :x: (Node runtime) | :x: (Python runtime) | :x: (Network bound) |
 
 ---
 
