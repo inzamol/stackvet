@@ -531,10 +531,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#5-feature-comparison" class="md-nav__link">
+  <a href="#5-unified-polyglot-advantage" class="md-nav__link">
     <span class="md-ellipsis">
       
-        5. Feature Comparison
+        5. Unified Polyglot Advantage
       
     </span>
   </a>
@@ -1254,10 +1254,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#5-feature-comparison" class="md-nav__link">
+  <a href="#5-unified-polyglot-advantage" class="md-nav__link">
     <span class="md-ellipsis">
       
-        5. Feature Comparison
+        5. Unified Polyglot Advantage
       
     </span>
   </a>
@@ -1305,28 +1305,29 @@
 
 <h1 id="stackvet-documentation">stackvet Documentation</h1>
 <div align="center">
-<p><strong>Universal Project Health &amp; Static Diagnostics Engine for Python, Node.js, Docker &amp; CI Stacks</strong></p>
+<p><strong>Universal Project Health &amp; Static Diagnostics Engine for Node.js, TypeScript, Python, Docker &amp; CI Stacks</strong></p>
 <p><a href="https://pypi.org/project/stackvet/"><img alt="PyPI Version" src="https://img.shields.io/pypi/v/stackvet.svg?color=blue" /></a>
 <a href="https://www.npmjs.com/package/@inzamol/stackvet"><img alt="npm Version" src="https://img.shields.io/npm/v/@inzamol/stackvet.svg?color=cb3837" /></a>
-<a href="https://pypi.org/project/stackvet/"><img alt="Python Versions" src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue" /></a>
+<a href="https://marketplace.visualstudio.com/items?itemName=inzamrzn918.stackvet-vscode"><img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-StackVet-blueviolet.svg" /></a>
 <a href="https://www.npmjs.com/package/@inzamol/stackvet"><img alt="Node Versions" src="https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg" /></a>
+<a href="https://pypi.org/project/stackvet/"><img alt="Python Versions" src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue" /></a>
 <a href="https://opensource.org/licenses/MIT"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green.svg" /></a></p>
 </div>
-<p><code>stackvet</code> is a high-performance, polyglot diagnostic and project health engine for modern stacks (Python, Node.js/TypeScript, Docker, and CI/CD). It inspects your project manifests (<code>pyproject.toml</code>, <code>package.json</code>, lockfiles), active runtime environments, source code ASTs, and infrastructure definitions in milliseconds to uncover broken dependencies, undeclared packages, circular import loops, and runtime drift.</p>
+<p><code>stackvet</code> is a high-performance, polyglot diagnostic and project health engine for modern stacks (Node.js/TypeScript, Python, Docker, and CI/CD). It inspects your project manifests (<code>package.json</code>, <code>pnpm-lock.yaml</code>, <code>package-lock.json</code>, <code>yarn.lock</code>, <code>pyproject.toml</code>, <code>requirements.txt</code>, <code>uv.lock</code>), active runtime environments, source code ASTs, and infrastructure definitions in milliseconds to uncover broken dependencies, undeclared packages, circular import loops, and runtime drift.</p>
 <hr />
 <h2 id="1-overview-architecture">1. Overview &amp; Architecture</h2>
 <p>Unlike generic tools that only inspect a single lockfile or flat requirements list, <code>stackvet</code> correlates multi-layer diagnostic signals across your entire project ecosystem:</p>
 <pre class="mermaid"><code>flowchart TD
     subgraph Discovery["1. Discovery &amp; Context Ingestion"]
-        A["&lt;b&gt;Project Manifests &amp; Active Environment&lt;/b&gt;&lt;br/&gt;pyproject.toml • requirements.txt • active virtualenv"]
-        B["&lt;b&gt;Source Code AST &amp; Infrastructure&lt;/b&gt;&lt;br/&gt;Module AST imports • Dockerfile • CI workflows"]
+        A["&lt;b&gt;Project Manifests &amp; Active Environment&lt;/b&gt;&lt;br/&gt;package.json • pnpm/npm/yarn lockfiles • pyproject.toml • requirements.txt"]
+        B["&lt;b&gt;Source Code AST &amp; Infrastructure&lt;/b&gt;&lt;br/&gt;TS/JS/Python AST imports • Dockerfile • CI workflows"]
     end
 
     subgraph Analyzers["2. Subsystem Analyzers"]
-        C["&lt;b&gt;Dependencies Analyzer&lt;/b&gt;&lt;br/&gt;Constraint conflicts, missing &amp; unused packages"]
-        D["&lt;b&gt;Environment &amp; Drift Analyzer&lt;/b&gt;&lt;br/&gt;Python interpreter, Docker base image &amp; CI matrix drift"]
+        C["&lt;b&gt;Dependencies Analyzers&lt;/b&gt;&lt;br/&gt;Node (NDEP) &amp; Python (DEP) conflicts, missing &amp; unused packages"]
+        D["&lt;b&gt;Environment &amp; Drift Analyzer&lt;/b&gt;&lt;br/&gt;Node/Python runtimes, Docker base images &amp; CI matrix drift"]
         E["&lt;b&gt;Imports &amp; Architecture Analyzer&lt;/b&gt;&lt;br/&gt;Circular import cycle detection &amp; unresolvable modules"]
-        F["&lt;b&gt;Packaging Analyzer&lt;/b&gt;&lt;br/&gt;PEP 621 metadata &amp; configuration schema"]
+        F["&lt;b&gt;Frameworks &amp; Packaging&lt;/b&gt;&lt;br/&gt;React (RCT), Next.js (NXT), FastAPI (FAP), Django (DJG), and manifests"]
     end
 
     subgraph Correlator["3. Root Cause Engine &amp; Health Score"]
@@ -1350,7 +1351,7 @@
 <p>👉 <em>Learn more in the comprehensive <a href="architecture/">Architecture &amp; Internal Design</a> documentation.</em></p>
 <hr />
 <h2 id="2-install-usage">2. Install &amp; Usage</h2>
-<p>Run <code>stackvet doctor</code> or <code>stackvet scan</code> directly in any Python project root:</p>
+<p>Run <code>stackvet doctor</code> or <code>stackvet scan</code> directly in any Node.js, TypeScript, Python, or polyglot repository root:</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:9"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><input id="__tabbed_1_4" name="__tabbed_1" type="radio" /><input id="__tabbed_1_5" name="__tabbed_1" type="radio" /><input id="__tabbed_1_6" name="__tabbed_1" type="radio" /><input id="__tabbed_1_7" name="__tabbed_1" type="radio" /><input id="__tabbed_1_8" name="__tabbed_1" type="radio" /><input id="__tabbed_1_9" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Run without installing (npx)</label><label for="__tabbed_1_2">Using npm (Node.js)</label><label for="__tabbed_1_3">Using pnpm / yarn</label><label for="__tabbed_1_4">Run without installing (uvx / pipx)</label><label for="__tabbed_1_5">Using uv (Python)</label><label for="__tabbed_1_6">Using pip (Python)</label><label for="__tabbed_1_7">Via Cargo (Rust)</label><label for="__tabbed_1_8">From GitHub (Latest)</label><label for="__tabbed_1_9">From Local Codebase</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
@@ -1477,28 +1478,38 @@
 </thead>
 <tbody>
 <tr>
-<td><strong>Dependencies</strong></td>
-<td>Constraint conflicts, undeclared imports, unused packages, Python compatibility mismatches</td>
-<td><code>DEP-001</code> through <code>DEP-006</code></td>
+<td><strong>Node Dependencies</strong></td>
+<td>Undeclared package imports in TS/JS, unused production dependencies, peer conflicts, lockfile drift (<code>pnpm-lock.yaml</code>, <code>package-lock.json</code>, <code>yarn.lock</code>, <code>bun.lockb</code>)</td>
+<td><code>NDEP-001</code> through <code>NDEP-005</code></td>
 </tr>
 <tr>
-<td><strong>Environment</strong></td>
-<td>Interpreter version drift, Dockerfile base image mismatches, CI matrix synchronization</td>
+<td><strong>React &amp; Next.js</strong></td>
+<td>Hook dependencies, conditional hook calls, direct state mutation, missing keys in lists, barrel import bloat, Server/Client component leaks, private environment variable exposure</td>
+<td><code>RCT-001</code>–<code>RCT-005</code>, <code>NXT-001</code>–<code>NXT-002</code></td>
+</tr>
+<tr>
+<td><strong>Python Dependencies</strong></td>
+<td>Constraint conflicts, undeclared imports, unused packages, Python runtime compatibility mismatches, lockfile drift (<code>uv.lock</code>, <code>poetry.lock</code>)</td>
+<td><code>DEP-001</code> through <code>DEP-007</code></td>
+</tr>
+<tr>
+<td><strong>FastAPI &amp; Python Frameworks</strong></td>
+<td>Blocking calls in async routes, missing response models, wildcard CORS, path parameter discrepancies, SQLAlchemy N+1 queries, Django settings, Celery risks</td>
+<td><code>FAP-xxx</code>, <code>SQL-xxx</code>, <code>DJG-xxx</code>, <code>CEL-xxx</code></td>
+</tr>
+<tr>
+<td><strong>Environment &amp; Drift</strong></td>
+<td>Node (<code>.nvmrc</code>, <code>package.json</code> engines) and Python (<code>.python-version</code>, <code>pyproject.toml</code>) runtime drift against Dockerfile base images and CI test matrices</td>
 <td><code>ENV-001</code> through <code>ENV-003</code></td>
 </tr>
 <tr>
-<td><strong>Architecture</strong></td>
-<td>Circular import cycle detection, unresolvable module imports, dead orphan files, deprecated stdlib</td>
-<td><code>IMP-001</code> through <code>IMP-004</code></td>
+<td><strong>Architecture &amp; Imports</strong></td>
+<td>Circular import cycle detection, unresolvable module imports, dead orphan files, deprecated stdlib, architectural tier violations</td>
+<td><code>IMP-001</code>–<code>IMP-004</code>, <code>ARC-001</code>–<code>ARC-002</code></td>
 </tr>
 <tr>
-<td><strong>Packaging</strong></td>
-<td>PEP 621 metadata validation, TOML syntax verification, entrypoint checks</td>
-<td><code>PKG-001</code>, <code>PKG-002</code></td>
-</tr>
-<tr>
-<td><strong>Docker</strong></td>
-<td>Security best practices, root user risks, unpinned base images, sensitive file leaks</td>
+<td><strong>Docker &amp; Containers</strong></td>
+<td>Security best practices, root user risks, unpinned base images, sensitive file leaks, caching optimizations</td>
 <td><code>DOC-001</code> through <code>DOC-014</code></td>
 </tr>
 <tr>
@@ -1506,50 +1517,67 @@
 <td>Matrix mismatches, unpinned dependencies, outdated GitHub Actions, quality gates, hardcoded secrets</td>
 <td><code>CI-001</code> through <code>CI-006</code></td>
 </tr>
-<tr>
-<td><strong>Frameworks</strong></td>
-<td>FastAPI (<code>FAP-xxx</code>), SQLAlchemy (<code>SQL-xxx</code>), Django (<code>DJG-xxx</code>), Celery (<code>CEL-xxx</code>)</td>
-<td><code>FAP</code>, <code>SQL</code>, <code>DJG</code>, <code>CEL</code></td>
-</tr>
 </tbody>
 </table>
 <p>👉 <em>Browse full rule descriptions and remediation strategies in the <a href="rules/">Rules Catalog</a>.</em></p>
 <hr />
-<h2 id="5-feature-comparison">5. Feature Comparison</h2>
+<h2 id="5-unified-polyglot-advantage">5. Unified Polyglot Advantage</h2>
+<p><code>stackvet</code> replaces multiple fragmented, single-ecosystem linters with a single, ultra-fast native engine producing unified health scoring across your entire stack:</p>
 <table>
 <thead>
 <tr>
 <th>Capability</th>
 <th style="text-align: center;"><code>stackvet</code></th>
-<th style="text-align: center;"><code>pip check</code></th>
-<th style="text-align: center;"><code>deptry</code></th>
-<th style="text-align: center;"><code>pip-audit</code></th>
+<th style="text-align: center;"><code>depcheck</code> / <code>knip</code> (Node)</th>
+<th style="text-align: center;"><code>pip check</code> / <code>deptry</code> (Python)</th>
+<th style="text-align: center;"><code>npm audit</code> / <code>pip-audit</code></th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>Dependency Constraint Conflicts</strong></td>
+<td><strong>Polyglot Monorepo Analysis</strong> (Node + Python)</td>
+<td style="text-align: center;"><img alt="✅" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/2705.svg" title=":white_check_mark:" /></td>
+<td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
+<td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
+<td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
+</tr>
+<tr>
+<td><strong>Node.js Dependency &amp; Peer Auditing</strong></td>
 <td style="text-align: center;"><img alt="✅" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/2705.svg" title=":white_check_mark:" /></td>
 <td style="text-align: center;"><img alt="✅" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/2705.svg" title=":white_check_mark:" /></td>
 <td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
 <td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
 </tr>
 <tr>
-<td><strong>Undeclared &amp; Unused Dependencies</strong></td>
+<td><strong>React &amp; Next.js Architectural Rules</strong></td>
+<td style="text-align: center;"><img alt="✅" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/2705.svg" title=":white_check_mark:" /></td>
+<td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
+<td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
+<td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
+</tr>
+<tr>
+<td><strong>Python Dependency &amp; Constraint Conflicts</strong></td>
 <td style="text-align: center;"><img alt="✅" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/2705.svg" title=":white_check_mark:" /></td>
 <td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
 <td style="text-align: center;"><img alt="✅" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/2705.svg" title=":white_check_mark:" /></td>
+<td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
+</tr>
+<tr>
+<td><strong>FastAPI, Django &amp; SQLAlchemy Hazards</strong></td>
+<td style="text-align: center;"><img alt="✅" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/2705.svg" title=":white_check_mark:" /></td>
+<td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
+<td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
 <td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
 </tr>
 <tr>
 <td><strong>Circular Import Cycle Detection</strong></td>
 <td style="text-align: center;"><img alt="✅" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/2705.svg" title=":white_check_mark:" /></td>
-<td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
+<td style="text-align: center;"><img alt="⚠" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/26a0.svg" title=":warning:" /> (JS only)</td>
 <td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
 <td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
 </tr>
 <tr>
-<td><strong>Python &amp; Docker/CI Runtime Drift</strong></td>
+<td><strong>Cross-Layer Runtime &amp; Docker/CI Drift</strong></td>
 <td style="text-align: center;"><img alt="✅" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/2705.svg" title=":white_check_mark:" /></td>
 <td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
 <td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
@@ -1570,7 +1598,7 @@
 <td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
 </tr>
 <tr>
-<td><strong>Automated Safe Remediation (<code>stackvet fix</code>)</strong></td>
+<td><strong>Format-Preserving Auto-Fixes (<code>stackvet fix</code>)</strong></td>
 <td style="text-align: center;"><img alt="✅" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/2705.svg" title=":white_check_mark:" /></td>
 <td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
 <td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
@@ -1584,11 +1612,11 @@
 <td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /></td>
 </tr>
 <tr>
-<td><strong>Sub-Second Offline Execution</strong></td>
+<td><strong>Sub-Second Native Rust Execution</strong></td>
 <td style="text-align: center;"><img alt="✅" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/2705.svg" title=":white_check_mark:" /></td>
-<td style="text-align: center;"><img alt="✅" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/2705.svg" title=":white_check_mark:" /></td>
-<td style="text-align: center;"><img alt="✅" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/2705.svg" title=":white_check_mark:" /></td>
-<td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /> (requires network)</td>
+<td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /> (Node runtime)</td>
+<td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /> (Python runtime)</td>
+<td style="text-align: center;"><img alt="❌" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/274c.svg" title=":x:" /> (Network bound)</td>
 </tr>
 </tbody>
 </table>
