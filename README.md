@@ -1,17 +1,24 @@
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="StackVet Logo" width="96" height="96" />
+  <a href="https://inzamol.github.io/stackvet/">
+    <img src="https://raw.githubusercontent.com/inzamol/stackvet/main/docs/assets/logo.svg" alt="StackVet Logo" width="128" height="128" />
+  </a>
 </p>
 
-# StackVet (`stackvet`)
+<h1 align="center">StackVet</h1>
 
-> **Universal Project Health & Static Diagnostics Engine**  
-> *Analyze Python, JavaScript, and TypeScript projects for dependency issues, environment drift, framework pitfalls, and architectural problems—alongside Docker and CI/CD configuration.*
+<p align="center">
+  <strong>Universal Project Health & Static Diagnostics Engine</strong><br />
+  <em>Analyze Node.js, TypeScript, and Python projects for broken dependencies, runtime drift, framework pitfalls, and architectural problems in milliseconds.</em>
+</p>
 
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.3.1-orange.svg)](https://crates.io)
-[![PyPI](https://img.shields.io/badge/pypi-stackvet-blue.svg)](https://pypi.org/project/stackvet/)
-[![npm](https://img.shields.io/badge/npm-@inzamol/stackvet-red.svg)](https://www.npmjs.com/package/@inzamol/stackvet)
-[![VS Code](https://img.shields.io/badge/VS%20Code-StackVet-blueviolet.svg)](https://marketplace.visualstudio.com/items?itemName=inzamrzn918.stackvet-vscode)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<p align="center">
+  <a href="https://www.npmjs.com/package/@inzamol/stackvet"><img src="https://img.shields.io/npm/v/@inzamol/stackvet.svg?style=flat-square&color=cb3837&logo=npm&logoColor=white" alt="npm package" /></a>
+  <a href="https://pypi.org/project/stackvet/"><img src="https://img.shields.io/pypi/v/stackvet.svg?style=flat-square&color=3776AB&logo=pypi&logoColor=white" alt="PyPI package" /></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=inzamrzn918.stackvet-vscode"><img src="https://img.shields.io/badge/VS%20Code-StackVet-blueviolet.svg" alt="VS Code Extension" /></a>
+  <a href="https://github.com/inzamol/stackvet/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/inzamol/stackvet/test.yml?branch=main&style=flat-square&label=CI&logo=githubactions&logoColor=white" alt="CI Status" /></a>
+  <a href="https://inzamol.github.io/stackvet/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-2563EB.svg?style=flat-square&logo=materialformkdocs&logoColor=white" alt="Documentation" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-10B981.svg?style=flat-square" alt="License: MIT" /></a>
+</p>
 
 ---
 
@@ -267,14 +274,13 @@ StackVet computes an objective, deterministic 0–100 health score subtracted fr
 
 | Severity | Deduction | Description |
 |---|---|---|
-| **`CRITICAL`** | **-20 pts** | Blocking synchronous calls in async handlers, critical event loop freezes, exposed client secrets |
-| **`ERROR`** | **-8 pts** | Missing dependencies (`NDEP-001`, `DEP-002`), circular imports (`IMP-001`), conditional hooks (`RCT-002`), unresolved modules |
-| **`WARN`** | **-2 pts** | Lockfile drift (`NDEP-004`, `DEP-005`), unused packages (`NDEP-002`, `DEP-003`), version mismatches |
-| **`INFO` / `HINT`** | **0 pts** | Informational architecture advice and guidance |
+| **CRITICAL** | **-20 pts** | Blocking synchronous calls in async handlers, critical event loop freezes, exposed client secrets |
+| **ERROR** | **-8 pts** | Missing dependencies (`NDEP-001`, `DEP-002`), circular imports (`IMP-001`), conditional hooks (`RCT-002`), unresolved modules |
+| **WARN** | **-2 pts** | Lockfile drift (`NDEP-004`, `DEP-005`), unused packages (`NDEP-002`, `DEP-003`), version mismatches |
+| **INFO / HINT** | **0 pts** | Informational architecture advice and guidance |
 
 - **Letter Grades**: **A (90–100, Healthy)** | **B (75–89, Fair)** | **C (50–74, Degraded)** | **F (0–49, Critical Issues)**
 - **Deduplication Safety**: Duplicate findings across identical files and lines are suppressed so redundant occurrences never distort the score.
-
 
 ---
 

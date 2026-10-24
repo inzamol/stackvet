@@ -26,3 +26,7 @@ patterns = [
 
 [cache]
 enabled = true
+
+[rules]
+SEC-001 = "info"
+SEC-002 = "info"

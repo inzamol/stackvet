@@ -127,8 +127,8 @@ impl Analyzer for SecurityAnalyzer {
             }
         };
 
-        // Handle refresh_cache flag: if requested and not offline, fetch fresh advisories from OSV
-        if self.refresh_cache && !self.offline {
+        // If refresh requested or if cache is missing and not offline, fetch fresh advisories from OSV
+        if (self.refresh_cache || cache_opt.is_none()) && !self.offline {
             match fetch_advisories_from_osv(&packages_to_audit) {
                 Ok(new_entries) => {
                     let mut cache =

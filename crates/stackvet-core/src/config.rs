@@ -41,6 +41,8 @@ pub struct StackvetConfig {
     pub custom_rules: Vec<CustomRuleDefinition>,
     #[serde(default)]
     pub architecture: ArchitectureConfig,
+    #[serde(skip)]
+    pub config_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -304,9 +306,10 @@ impl StackvetConfig {
         let content = fs::read_to_string(path)
             .map_err(|e| ConfigError::IoError(format!("{}: {}", path.display(), e)))?;
 
-        let config: StackvetConfig = toml::from_str(&content)
+        let mut config: StackvetConfig = toml::from_str(&content)
             .map_err(|e| ConfigError::ParseError(format!("{}: {}", path.display(), e)))?;
 
+        config.config_dir = path.parent().map(|p| p.to_path_buf());
         config.validate()?;
         Ok(config)
     }
@@ -339,6 +342,7 @@ impl StackvetConfig {
                 let mut config: StackvetConfig = tool.clone().try_into().map_err(|e| {
                     ConfigError::ParseError(format!("pyproject.toml [tool.stackvet]: {}", e))
                 })?;
+                config.config_dir = Some(root.to_path_buf());
                 // If min_severity is configured in [tool.stackvet], map it to fail_on if not explicitly set
                 if config.thresholds.fail_on.is_none() {
                     if let Some(min_sev) = tool.get("min_severity").and_then(|v| v.as_str()) {
@@ -348,6 +352,33 @@ impl StackvetConfig {
                 config.validate()?;
                 return Ok(Some(config));
             }
+        }
+
+        Ok(None)
+    }
+
+    /// Discovers configuration by checking `root` first, and if not found,
+    /// traversing up parent directories until a configuration file or a repository root (`.git`) is reached.
+    pub fn discover(root: &Path) -> Result<Option<Self>, ConfigError> {
+        let abs_root = if root.is_absolute() {
+            root.to_path_buf()
+        } else {
+            std::env::current_dir().unwrap_or_default().join(root)
+        };
+
+        if let Some(cfg) = Self::discover_in_dir(&abs_root)? {
+            return Ok(Some(cfg));
+        }
+
+        let mut curr = abs_root.parent();
+        while let Some(parent) = curr {
+            if let Some(cfg) = Self::discover_in_dir(parent)? {
+                return Ok(Some(cfg));
+            }
+            if parent.join(".git").exists() {
+                break;
+            }
+            curr = parent.parent();
         }
 
         Ok(None)
@@ -432,6 +463,24 @@ impl StackvetConfig {
             return cli_baseline;
         }
         self.ci.baseline.clone()
+    }
+
+    /// Resolves a baseline path to an existing file path, checking `project_root` first,
+    /// then falling back to `config_dir` where the configuration was discovered.
+    pub fn resolve_baseline_file(&self, b_path: &Path, project_root: &Path) -> PathBuf {
+        if b_path.is_absolute() {
+            b_path.to_path_buf()
+        } else if project_root.join(b_path).is_file() {
+            project_root.join(b_path)
+        } else if let Some(ref dir) = self.config_dir {
+            if dir.join(b_path).is_file() {
+                dir.join(b_path)
+            } else {
+                project_root.join(b_path)
+            }
+        } else {
+            project_root.join(b_path)
+        }
     }
 }
 

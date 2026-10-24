@@ -1411,7 +1411,7 @@ async fn main() -> Result<()> {
             }
         }
     } else {
-        match StackvetConfig::discover_in_dir(&project_root) {
+        match StackvetConfig::discover(&project_root) {
             Ok(Some(cfg)) => cfg,
             Ok(None) => StackvetConfig::default(),
             Err(ConfigError::ParseError(e)) | Err(ConfigError::ValidationError(e)) => {
@@ -1601,11 +1601,7 @@ async fn main() -> Result<()> {
 
             let mut baseline_diff = None;
             if let Some(b_path) = &baseline_path {
-                let baseline_file = if b_path.is_absolute() {
-                    b_path.clone()
-                } else {
-                    project_root.join(b_path)
-                };
+                let baseline_file = config.resolve_baseline_file(b_path, &project_root);
                 if !baseline_file.is_file() {
                     eprintln!(
                         "{}",
@@ -1749,11 +1745,7 @@ async fn main() -> Result<()> {
             let baseline_path = config.resolve_baseline(baseline.clone());
 
             if let Some(b_path) = &baseline_path {
-                let baseline_file = if b_path.is_absolute() {
-                    b_path.clone()
-                } else {
-                    project_root.join(b_path)
-                };
+                let baseline_file = config.resolve_baseline_file(b_path, &project_root);
                 if !baseline_file.is_file() {
                     eprintln!(
                         "{}",
@@ -2406,11 +2398,7 @@ async fn main() -> Result<()> {
                         .resolve_baseline(baseline.clone())
                         .unwrap_or_else(|| PathBuf::from(".stackvet-baseline.json"));
                     let baseline_file =
-                        if resolved_baseline.is_absolute() || resolved_baseline.is_file() {
-                            resolved_baseline
-                        } else {
-                            project_root.join(resolved_baseline)
-                        };
+                        config.resolve_baseline_file(&resolved_baseline, &project_root);
                     if !baseline_file.is_file() {
                         eprintln!(
                             "{}",

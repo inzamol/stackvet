@@ -1,17 +1,38 @@
-# stackvet Documentation
+<p align="center">
+  <a href="https://inzamol.github.io/stackvet/">
+    <img src="assets/logo.svg" alt="StackVet Logo" width="128" height="128" />
+  </a>
+</p>
 
-<div align="center" markdown>
+<h1 align="center">StackVet</h1>
 
-**Universal Project Health & Static Diagnostics Engine for Node.js, TypeScript, Python, Docker & CI Stacks**
+<p align="center">
+  <strong>Universal Project Health & Static Diagnostics Engine</strong><br />
+  <em>Analyze Node.js, TypeScript, and Python projects for broken dependencies, runtime drift, framework pitfalls, and architectural problems in milliseconds.</em>
+</p>
 
-[![PyPI Version](https://img.shields.io/pypi/v/stackvet.svg?color=blue)](https://pypi.org/project/stackvet/)
-[![npm Version](https://img.shields.io/npm/v/@inzamol/stackvet.svg?color=cb3837)](https://www.npmjs.com/package/@inzamol/stackvet)
-[![VS Code](https://img.shields.io/badge/VS%20Code-StackVet-blueviolet.svg)](https://marketplace.visualstudio.com/items?itemName=inzamrzn918.stackvet-vscode)
-[![Node Versions](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg)](https://www.npmjs.com/package/@inzamol/stackvet)
-[![Python Versions](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://pypi.org/project/stackvet/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  <a href="https://www.npmjs.com/package/@inzamol/stackvet"><img src="https://img.shields.io/npm/v/@inzamol/stackvet.svg?style=flat-square&color=cb3837&logo=npm&logoColor=white" alt="npm package" /></a>
+  <a href="https://pypi.org/project/stackvet/"><img src="https://img.shields.io/pypi/v/stackvet.svg?style=flat-square&color=3776AB&logo=pypi&logoColor=white" alt="PyPI package" /></a>
+  <a href="https://crates.io/crates/stackvet"><img src="https://img.shields.io/crates/v/stackvet.svg?style=flat-square&color=DEA584&logo=rust&logoColor=black" alt="Crates.io" /></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=inzamrzn918.stackvet-vscode"><img src="https://img.shields.io/visual-studio-marketplace/v/inzamrzn918.stackvet-vscode?style=flat-square&label=VS%20Code&color=blueviolet&logo=visualstudiocode&logoColor=white" alt="VS Code Extension" /></a>
+  <a href="https://github.com/inzamol/stackvet/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/inzamol/stackvet/test.yml?branch=main&style=flat-square&label=CI&logo=githubactions&logoColor=white" alt="CI Status" /></a>
+  <a href="https://inzamol.github.io/stackvet/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-2563EB.svg?style=flat-square&logo=materialformkdocs&logoColor=white" alt="Documentation" /></a>
+  <a href="https://github.com/inzamol/stackvet/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-10B981.svg?style=flat-square" alt="License: MIT" /></a>
+</p>
 
-</div>
+<p align="center">
+  <img src="https://img.shields.io/badge/Node.js-%3E%3D18-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/React-18%2F19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" />
+  <img src="https://img.shields.io/badge/Next.js-App%20Router-000000?style=flat-square&logo=nextdotjs&logoColor=white" alt="Next.js" />
+  <img src="https://img.shields.io/badge/FastAPI-Async-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/Docker-Containers-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/Engine-Rust%20Native-000000?style=flat-square&logo=rust&logoColor=white" alt="Rust Native" />
+</p>
+
+---
 
 `stackvet` is a high-performance, polyglot diagnostic and project health engine for modern stacks (Node.js/TypeScript, Python, Docker, and CI/CD). It inspects your project manifests (`package.json`, `pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `pyproject.toml`, `requirements.txt`, `uv.lock`), active runtime environments, source code ASTs, and infrastructure definitions in milliseconds to uncover broken dependencies, undeclared packages, circular import loops, and runtime drift.
 
@@ -275,7 +296,7 @@ Run `stackvet doctor` or `stackvet scan` directly in any Node.js, TypeScript, Py
 
     ---
 
-    Configure severities, ignore rules, and exclude path patterns in `pyproject.toml`.
+    Configure severities, ignore rules, and exclude path patterns in `stackvet.toml` or `pyproject.toml`.
 
     [:material-arrow-right: View Configuration](configuration.md)
 
