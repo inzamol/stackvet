@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#stackvet-documentation" class="md-skip">
+        <a href="#1-overview-architecture" class="md-skip">
           Skip to content
         </a>
       
@@ -416,8 +416,6 @@
       <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
       
       
-        
-      
       
         <label class="md-nav__link md-nav__link--active" for="__toc">
           
@@ -459,8 +457,6 @@
 <nav class="md-nav md-nav--secondary" aria-label="Table of contents">
   
   
-  
-    
   
   
     <label class="md-nav__title" for="__toc">
@@ -1183,8 +1179,6 @@
   
   
   
-    
-  
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
@@ -1303,16 +1297,41 @@
   
 
 
-<h1 id="stackvet-documentation">stackvet Documentation</h1>
-<div align="center">
-<p><strong>Universal Project Health &amp; Static Diagnostics Engine for Node.js, TypeScript, Python, Docker &amp; CI Stacks</strong></p>
-<p><a href="https://pypi.org/project/stackvet/"><img alt="PyPI Version" src="https://img.shields.io/pypi/v/stackvet.svg?color=blue" /></a>
-<a href="https://www.npmjs.com/package/@inzamol/stackvet"><img alt="npm Version" src="https://img.shields.io/npm/v/@inzamol/stackvet.svg?color=cb3837" /></a>
-<a href="https://marketplace.visualstudio.com/items?itemName=inzamrzn918.stackvet-vscode"><img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-StackVet-blueviolet.svg" /></a>
-<a href="https://www.npmjs.com/package/@inzamol/stackvet"><img alt="Node Versions" src="https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg" /></a>
-<a href="https://pypi.org/project/stackvet/"><img alt="Python Versions" src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue" /></a>
-<a href="https://opensource.org/licenses/MIT"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green.svg" /></a></p>
-</div>
+<p align="center">
+  <a href="https://inzamol.github.io/stackvet/">
+    <img src="assets/logo.svg" alt="StackVet Logo" width="128" height="128" />
+  </a>
+</p>
+
+<h1 align="center">StackVet</h1>
+
+<p align="center">
+  <strong>Universal Project Health & Static Diagnostics Engine</strong><br />
+  <em>Analyze Node.js, TypeScript, and Python projects for broken dependencies, runtime drift, framework pitfalls, and architectural problems in milliseconds.</em>
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@inzamol/stackvet"><img src="https://img.shields.io/npm/v/@inzamol/stackvet.svg?style=flat-square&color=cb3837&logo=npm&logoColor=white" alt="npm package" /></a>
+  <a href="https://pypi.org/project/stackvet/"><img src="https://img.shields.io/pypi/v/stackvet.svg?style=flat-square&color=3776AB&logo=pypi&logoColor=white" alt="PyPI package" /></a>
+  <a href="https://crates.io/crates/stackvet"><img src="https://img.shields.io/crates/v/stackvet.svg?style=flat-square&color=DEA584&logo=rust&logoColor=black" alt="Crates.io" /></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=inzamrzn918.stackvet-vscode"><img src="https://img.shields.io/visual-studio-marketplace/v/inzamrzn918.stackvet-vscode?style=flat-square&label=VS%20Code&color=blueviolet&logo=visualstudiocode&logoColor=white" alt="VS Code Extension" /></a>
+  <a href="https://github.com/inzamol/stackvet/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/inzamol/stackvet/test.yml?branch=main&style=flat-square&label=CI&logo=githubactions&logoColor=white" alt="CI Status" /></a>
+  <a href="https://inzamol.github.io/stackvet/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-2563EB.svg?style=flat-square&logo=materialformkdocs&logoColor=white" alt="Documentation" /></a>
+  <a href="https://github.com/inzamol/stackvet/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-10B981.svg?style=flat-square" alt="License: MIT" /></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Node.js-%3E%3D18-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/React-18%2F19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" />
+  <img src="https://img.shields.io/badge/Next.js-App%20Router-000000?style=flat-square&logo=nextdotjs&logoColor=white" alt="Next.js" />
+  <img src="https://img.shields.io/badge/FastAPI-Async-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/Docker-Containers-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/Engine-Rust%20Native-000000?style=flat-square&logo=rust&logoColor=white" alt="Rust Native" />
+</p>
+
+<hr />
 <p><code>stackvet</code> is a high-performance, polyglot diagnostic and project health engine for modern stacks (Node.js/TypeScript, Python, Docker, and CI/CD). It inspects your project manifests (<code>package.json</code>, <code>pnpm-lock.yaml</code>, <code>package-lock.json</code>, <code>yarn.lock</code>, <code>pyproject.toml</code>, <code>requirements.txt</code>, <code>uv.lock</code>), active runtime environments, source code ASTs, and infrastructure definitions in milliseconds to uncover broken dependencies, undeclared packages, circular import loops, and runtime drift.</p>
 <hr />
 <h2 id="1-overview-architecture">1. Overview &amp; Architecture</h2>
@@ -1651,7 +1670,7 @@
 <li>
 <p><strong>Configuration Guide</strong></p>
 <hr />
-<p>Configure severities, ignore rules, and exclude path patterns in <code>pyproject.toml</code>.</p>
+<p>Configure severities, ignore rules, and exclude path patterns in <code>stackvet.toml</code> or <code>pyproject.toml</code>.</p>
 <p><a href="configuration/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg></span> View Configuration</a></p>
 </li>
 <li>
