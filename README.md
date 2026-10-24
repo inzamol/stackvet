@@ -5,7 +5,7 @@
 # StackVet (`stackvet`)
 
 > **Universal Project Health & Static Diagnostics Engine**  
-> *Rigorously examine, inspect, and evaluate modern polyglot application stacks for health, safety, concurrency hazards, and architectural soundness in milliseconds.*
+> *Analyze Python, JavaScript, and TypeScript projects for dependency issues, environment drift, framework pitfalls, and architectural problems—alongside Docker and CI/CD configuration.*
 
 [![Crates.io](https://img.shields.io/badge/crates.io-v0.1.0-orange.svg)](https://crates.io)
 [![PyPI](https://img.shields.io/badge/pypi-stackvet-blue.svg)](https://pypi.org)
