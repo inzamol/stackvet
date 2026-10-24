@@ -1,6 +1,6 @@
 {
   "name": "@inzamol/stackvet",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Universal project health and static diagnostics engine",
   "publishConfig": {
     "access": "public",

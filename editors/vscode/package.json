@@ -2,7 +2,7 @@
   "name": "stackvet-vscode",
   "displayName": "StackVet",
   "description": "Universal project health and static diagnostics engine for VS Code",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "inzamrzn918",
   "license": "MIT",
   "repository": {
