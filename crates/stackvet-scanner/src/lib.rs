@@ -64,6 +64,20 @@ pub struct ScanResult {
     pub skipped_symlinks: Vec<(PathBuf, String)>,
     pub is_truncated: bool,
     pub was_cancelled: bool,
+    pub distinct_files_count: usize,
+}
+
+impl ScanResult {
+    /// Returns the count of distinct classified files across all categories.
+    pub fn total_distinct_files(&self) -> usize {
+        let mut set = std::collections::HashSet::new();
+        set.extend(self.source_files.iter());
+        set.extend(self.manifest_files.iter());
+        set.extend(self.config_files.iter());
+        set.extend(self.dockerfiles.iter());
+        set.extend(self.ci_workflows.iter());
+        set.len()
+    }
 }
 
 impl ProjectScanner {
@@ -125,7 +139,7 @@ impl ProjectScanner {
         self
     }
 
-    /// Configures maximum total files scanned.
+    /// Configures maximum distinct files scanned.
     pub fn with_max_files(mut self, max_files: usize) -> Self {
         self.max_files = max_files;
         self
@@ -222,6 +236,11 @@ impl ProjectScanner {
 
     pub fn scan(&self) -> ScanResult {
         let mut result = ScanResult::default();
+        if self.max_files == 0 {
+            result.is_truncated = true;
+            return result;
+        }
+
         let canonical_root = self
             .root
             .canonicalize()
@@ -277,6 +296,7 @@ impl ProjectScanner {
         });
 
         let walker = builder.build();
+        let mut distinct_scanned_files = std::collections::HashSet::new();
 
         for entry_res in walker {
             if let Some(ref token) = self.cancellation_token {
@@ -330,6 +350,8 @@ impl ProjectScanner {
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_default();
 
+            let mut is_classified = false;
+
             // Manifests & Lockfiles (classified before size check so cache validation tracks and hashes them)
             let is_manifest = file_name == "pyproject.toml"
                 || file_name == "package.json"
@@ -348,12 +370,22 @@ impl ProjectScanner {
 
             if is_manifest {
                 result.manifest_files.push(path_buf.clone());
+                is_classified = true;
             }
 
             // Check file size limits to prevent out-of-memory on huge files
             if let Ok(metadata) = entry.metadata() {
                 if metadata.len() > self.max_file_size {
-                    result.oversized_files.push((path_buf, metadata.len()));
+                    result
+                        .oversized_files
+                        .push((path_buf.clone(), metadata.len()));
+                    if is_classified {
+                        distinct_scanned_files.insert(path_buf);
+                        if distinct_scanned_files.len() >= self.max_files {
+                            result.is_truncated = true;
+                            break;
+                        }
+                    }
                     continue;
                 }
             }
@@ -365,6 +397,7 @@ impl ProjectScanner {
                 || file_name.starts_with("docker-compose")
             {
                 result.dockerfiles.push(path_buf.clone());
+                is_classified = true;
             }
 
             // Check GitHub Actions / CI workflows
@@ -375,33 +408,35 @@ impl ProjectScanner {
                 && (file_name.ends_with(".yml") || file_name.ends_with(".yaml"))
             {
                 result.ci_workflows.push(path_buf.clone());
+                is_classified = true;
             }
 
             // Source files
             if let Some(ext) = path_buf.extension().and_then(|s| s.to_str()) {
                 match ext {
                     "py" | "ts" | "tsx" | "js" | "jsx" => {
-                        result.source_files.push(path_buf);
+                        result.source_files.push(path_buf.clone());
+                        is_classified = true;
                     }
                     "yml" | "yaml" | "toml" | "json" => {
-                        result.config_files.push(path_buf);
+                        result.config_files.push(path_buf.clone());
+                        is_classified = true;
                     }
                     _ => {}
                 }
             }
 
-            // Check max files limit
-            let total_count = result.source_files.len()
-                + result.manifest_files.len()
-                + result.config_files.len()
-                + result.dockerfiles.len()
-                + result.ci_workflows.len();
-            if total_count >= self.max_files {
-                result.is_truncated = true;
-                break;
+            // Check max files limit based on distinct classified files
+            if is_classified {
+                distinct_scanned_files.insert(path_buf);
+                if distinct_scanned_files.len() >= self.max_files {
+                    result.is_truncated = true;
+                    break;
+                }
             }
         }
 
+        result.distinct_files_count = distinct_scanned_files.len();
         result.source_files.sort();
         result.manifest_files.sort();
         result.config_files.sort();
@@ -499,10 +534,10 @@ impl ProjectScanner {
                     stackvet_core::LanguageTarget::General,
                 )
                 .message(format!(
-                    "Scan truncated after reaching maximum file limit ({} files)",
+                    "Scan truncated after reaching maximum file limit ({} distinct files)",
                     self.max_files
                 ))
-                .explanation("The project exceeds the maximum number of files configured for a single scan.")
+                .explanation("The project exceeds the maximum number of distinct files configured for a single scan.")
                 .remediation("Increase max_files in stackvet.toml [scanner] or use .stackvetignore to exclude large subtrees.")
                 .build(),
             );
@@ -647,13 +682,103 @@ mod tests {
         let res = scanner.scan();
 
         assert!(res.is_truncated);
-        assert!(res.source_files.len() <= 4);
+        assert_eq!(res.distinct_files_count, 4);
+        assert_eq!(res.source_files.len(), 4);
+        assert_eq!(res.total_distinct_files(), 4);
 
         let ctx = scanner.build_context().unwrap();
-        assert!(ctx
+        let diag = ctx
             .discovery_diagnostics
             .iter()
-            .any(|d| d.rule_id.0 == "DISC-005" && d.message.contains("truncated")));
+            .find(|d| d.rule_id.0 == "DISC-005" && d.message.contains("truncated"))
+            .expect("Expected DISC-005 truncation diagnostic");
+        assert!(diag.message.contains("4 distinct files"));
+        assert!(diag.explanation.contains("distinct files"));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_scanner_max_files_with_overlapping_classifications() {
+        let temp_dir = make_temp_dir("max_files_overlapping");
+
+        // Overlapping classifications:
+        // 1. pyproject.toml -> manifest + config
+        // 2. package.json   -> manifest + config
+        // 3. docker-compose.yml -> dockerfile + config
+        // 4. app.py         -> source
+        // 5. index.ts       -> source
+        fs::write(temp_dir.join("pyproject.toml"), "[project]\nname='test'\n").unwrap();
+        fs::write(temp_dir.join("package.json"), "{\"name\":\"test\"}").unwrap();
+        fs::write(temp_dir.join("docker-compose.yml"), "version: '3'\n").unwrap();
+        fs::write(temp_dir.join("app.py"), "print('hello')\n").unwrap();
+        fs::write(temp_dir.join("index.ts"), "console.log('hello');\n").unwrap();
+
+        // If max_files = 3:
+        // Under old buggy behavior:
+        // pyproject.toml (+2) + package.json (+2) = 4 >= 3 -> prematurely truncated at only 2 distinct files!
+        // Under fixed behavior:
+        // Truncation occurs only after the configured number of distinct files (3) is reached.
+        let scanner_limit_3 = ProjectScanner::new(&temp_dir).with_max_files(3);
+        let res_3 = scanner_limit_3.scan();
+
+        assert!(
+            res_3.is_truncated,
+            "Scan should be marked as truncated when distinct files reach limit"
+        );
+        assert_eq!(
+            res_3.distinct_files_count, 3,
+            "Exactly 3 distinct files should be scanned"
+        );
+        assert_eq!(
+            res_3.total_distinct_files(),
+            3,
+            "total_distinct_files() must match distinct file count"
+        );
+
+        // Verify the incomplete-scan diagnostic reports the actual limit semantics
+        let ctx_3 = scanner_limit_3.build_context().unwrap();
+        let trunc_diag = ctx_3
+            .discovery_diagnostics
+            .iter()
+            .find(|d| d.rule_id.0 == "DISC-005" && d.message.contains("truncated"))
+            .expect("Expected DISC-005 truncation diagnostic");
+        assert!(trunc_diag.message.contains("3 distinct files"));
+        assert!(trunc_diag.explanation.contains("distinct files"));
+
+        // If max_files = 5:
+        // All 5 distinct files should be scanned.
+        let scanner_limit_5 = ProjectScanner::new(&temp_dir).with_max_files(5);
+        let res_5 = scanner_limit_5.scan();
+        assert!(
+            res_5.is_truncated,
+            "Scan should be marked truncated when reaching exactly 5 distinct files"
+        );
+        assert_eq!(res_5.distinct_files_count, 5);
+        assert_eq!(res_5.total_distinct_files(), 5);
+
+        // If max_files = 6:
+        // No truncation occurs because there are only 5 distinct files in the project.
+        let scanner_limit_6 = ProjectScanner::new(&temp_dir).with_max_files(6);
+        let res_6 = scanner_limit_6.scan();
+        assert!(
+            !res_6.is_truncated,
+            "Scan should NOT be truncated when limit > distinct files count"
+        );
+        assert_eq!(res_6.distinct_files_count, 5);
+        assert_eq!(res_6.total_distinct_files(), 5);
+        assert_eq!(res_6.manifest_files.len(), 2);
+        assert_eq!(res_6.config_files.len(), 3);
+        assert_eq!(res_6.dockerfiles.len(), 1);
+        assert_eq!(res_6.source_files.len(), 2);
+
+        // If max_files = 0:
+        // Immediately truncated with 0 files scanned.
+        let scanner_limit_0 = ProjectScanner::new(&temp_dir).with_max_files(0);
+        let res_0 = scanner_limit_0.scan();
+        assert!(res_0.is_truncated);
+        assert_eq!(res_0.distinct_files_count, 0);
+        assert_eq!(res_0.total_distinct_files(), 0);
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
