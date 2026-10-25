@@ -1,5 +1,5 @@
 use anyhow::Result;
-use ignore::overrides::OverrideBuilder;
+use ignore::gitignore::GitignoreBuilder;
 use ignore::WalkBuilder;
 use stackvet_core::ProjectContext;
 use std::path::{Path, PathBuf};
@@ -151,27 +151,37 @@ impl ProjectScanner {
         self
     }
 
-    /// Checks whether a given path is matched by the scanner's explicit custom ignore rules.
-    pub fn is_explicitly_ignored(&self, path: &Path) -> bool {
+    /// Builds a Gitignore matcher from configured custom ignore rules (from configuration and CLI).
+    pub fn build_custom_gitignore(&self) -> Option<ignore::gitignore::Gitignore> {
         if self.custom_ignores.is_empty() {
-            return false;
+            return None;
         }
-        let mut ov_builder = OverrideBuilder::new(&self.root);
+        let mut builder = GitignoreBuilder::new(&self.root);
         for pattern in &self.custom_ignores {
             let trimmed = pattern.trim();
-            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('!') {
+            if trimmed.is_empty() || trimmed.starts_with('#') {
                 continue;
             }
-            let rule = format!("!{trimmed}");
-            let _ = ov_builder.add(&rule);
-        }
-        match ov_builder.build() {
-            Ok(overrides) => {
-                let is_dir = path.is_dir();
-                matches!(overrides.matched(path, is_dir), ignore::Match::Ignore(_))
+            if let Err(e) = builder.add_line(None, trimmed) {
+                tracing::warn!("Failed to add ignore pattern '{}': {}", trimmed, e);
             }
-            Err(_) => false,
         }
+        match builder.build() {
+            Ok(gi) => Some(gi),
+            Err(e) => {
+                tracing::warn!("Failed to build custom gitignore matcher: {}", e);
+                None
+            }
+        }
+    }
+
+    /// Checks whether a given path is matched by the scanner's explicit custom ignore rules.
+    pub fn is_explicitly_ignored(&self, path: &Path) -> bool {
+        let Some(gi) = self.build_custom_gitignore() else {
+            return false;
+        };
+        let is_dir = path.is_dir();
+        gi.matched_path_or_any_parents(path, is_dir).is_ignore()
     }
 
     /// Checks whether a given path is accepted as a valid source file by the scanner,
@@ -202,8 +212,32 @@ impl ProjectScanner {
             }
         }
 
-        if self.is_explicitly_ignored(path) {
-            return false;
+        // Check custom ignores and .stackvetignore files in parent directories
+        let mut gi_builder = GitignoreBuilder::new(&self.root);
+        for pattern in &self.custom_ignores {
+            let trimmed = pattern.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            let _ = gi_builder.add_line(None, trimmed);
+        }
+        if self.parents {
+            let mut cur = path.parent();
+            while let Some(parent) = cur {
+                let sv_ignore = parent.join(".stackvetignore");
+                if sv_ignore.is_file() {
+                    let _ = gi_builder.add(&sv_ignore);
+                }
+                if parent == self.root {
+                    break;
+                }
+                cur = parent.parent();
+            }
+        }
+        if let Ok(gi) = gi_builder.build() {
+            if gi.matched_path_or_any_parents(path, false).is_ignore() {
+                return false;
+            }
         }
 
         let mut builder = WalkBuilder::new(path);
@@ -211,19 +245,19 @@ impl ProjectScanner {
         builder.parents(self.parents);
         builder.git_ignore(true);
         builder.add_custom_ignore_filename(".stackvetignore");
-        if !self.custom_ignores.is_empty() {
-            let mut ov_builder = OverrideBuilder::new(&self.root);
-            for pattern in &self.custom_ignores {
-                let trimmed = pattern.trim();
-                if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('!') {
-                    continue;
+        let custom_gi = self.build_custom_gitignore();
+        builder.filter_entry(move |entry| {
+            if let Some(ref gi) = custom_gi {
+                let is_dir = entry.file_type().is_some_and(|ft| ft.is_dir());
+                if gi
+                    .matched_path_or_any_parents(entry.path(), is_dir)
+                    .is_ignore()
+                {
+                    return false;
                 }
-                let _ = ov_builder.add(&format!("!{trimmed}"));
             }
-            if let Ok(ov) = ov_builder.build() {
-                builder.overrides(ov);
-            }
-        }
+            true
+        });
         let walker = builder.build();
         let mut count = 0;
         for entry in walker.flatten() {
@@ -256,33 +290,7 @@ impl ProjectScanner {
         // Native .stackvetignore discovery across directory tree
         builder.add_custom_ignore_filename(".stackvetignore");
 
-        // Custom glob overrides from configuration and CLI
-        if !self.custom_ignores.is_empty() {
-            let mut ov_builder = OverrideBuilder::new(&self.root);
-            for pattern in &self.custom_ignores {
-                let trimmed = pattern.trim();
-                if trimmed.is_empty() || trimmed.starts_with('#') {
-                    continue;
-                }
-                if trimmed.starts_with('!') {
-                    tracing::warn!("Ignoring exclusion pattern beginning with '!': {}", trimmed);
-                    continue;
-                }
-                let rule = format!("!{trimmed}");
-                if let Err(e) = ov_builder.add(&rule) {
-                    tracing::warn!("Failed to add ignore override '{}': {}", rule, e);
-                }
-            }
-            match ov_builder.build() {
-                Ok(overrides) => {
-                    builder.overrides(overrides);
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to build ignore overrides: {}", e);
-                }
-            }
-        }
-
+        let custom_gi = self.build_custom_gitignore();
         let use_defaults = self.use_default_exclusions;
         builder.filter_entry(move |entry| {
             if entry.depth() == 0 {
@@ -291,6 +299,15 @@ impl ProjectScanner {
             let name = entry.file_name().to_string_lossy();
             if use_defaults && DEFAULT_EXCLUSIONS.contains(&name.as_ref()) {
                 return false;
+            }
+            if let Some(ref gi) = custom_gi {
+                let is_dir = entry.file_type().is_some_and(|ft| ft.is_dir());
+                if gi
+                    .matched_path_or_any_parents(entry.path(), is_dir)
+                    .is_ignore()
+                {
+                    return false;
+                }
             }
             true
         });
@@ -571,6 +588,97 @@ mod tests {
         ));
         fs::create_dir_all(&temp_dir).unwrap();
         temp_dir
+    }
+
+    #[test]
+    fn test_scanner_custom_ignores_polarity_and_negations() {
+        let temp_dir = make_temp_dir("polarity_and_negations");
+
+        // Ordinary source files that should be scanned
+        let app_file = temp_dir.join("app.py");
+        let src_dir = temp_dir.join("src");
+        fs::create_dir_all(&src_dir).unwrap();
+        let ts_file = src_dir.join("index.ts");
+        fs::write(&app_file, "import sys\n").unwrap();
+        fs::write(&ts_file, "console.log('hello');\n").unwrap();
+
+        // Generated files targeted by custom ignore pattern
+        let gen_dir = temp_dir.join("generated");
+        let gen_nested = gen_dir.join("nested");
+        fs::create_dir_all(&gen_nested).unwrap();
+        let gen1_file = gen_dir.join("gen1.py");
+        let gen2_file = gen_nested.join("gen2.py");
+        let gen_keep_file = gen_dir.join("keep.py");
+        fs::write(&gen1_file, "x = 1\n").unwrap();
+        fs::write(&gen2_file, "y = 2\n").unwrap();
+        fs::write(&gen_keep_file, "z = 3\n").unwrap();
+
+        // Vendor files handled via .stackvetignore with negation
+        let vendor_dir = temp_dir.join("vendor");
+        fs::create_dir_all(&vendor_dir).unwrap();
+        let vendor_ignored = vendor_dir.join("vendored.py");
+        let vendor_keep = vendor_dir.join("keep_vendor.py");
+        fs::write(&vendor_ignored, "v = 1\n").unwrap();
+        fs::write(&vendor_keep, "vk = 2\n").unwrap();
+        fs::write(
+            temp_dir.join(".stackvetignore"),
+            "vendor/**\n!vendor/keep_vendor.py\n",
+        )
+        .unwrap();
+
+        let scanner =
+            ProjectScanner::new(&temp_dir).with_ignores(["generated/**", "!generated/keep.py"]);
+
+        // Acceptance criterion: Correct override polarity in is_explicitly_ignored
+        assert!(scanner.is_explicitly_ignored(&gen1_file));
+        assert!(scanner.is_explicitly_ignored(&gen2_file));
+        assert!(!scanner.is_explicitly_ignored(&gen_keep_file));
+        assert!(!scanner.is_explicitly_ignored(&app_file));
+        assert!(!scanner.is_explicitly_ignored(&ts_file));
+
+        // Acceptance criterion: Correct override polarity in is_accepted_source_file
+        assert!(scanner.is_accepted_source_file(&app_file));
+        assert!(scanner.is_accepted_source_file(&ts_file));
+        assert!(scanner.is_accepted_source_file(&gen_keep_file));
+
+        assert!(scanner.is_accepted_source_file(&vendor_keep));
+        assert!(!scanner.is_accepted_source_file(&gen1_file));
+        assert!(!scanner.is_accepted_source_file(&gen2_file));
+        assert!(!scanner.is_accepted_source_file(&vendor_ignored));
+
+        // Acceptance criterion: scan() excludes matching source files and scans ordinary files
+        let res = scanner.scan();
+
+        assert!(
+            res.source_files.contains(&app_file),
+            "Ordinary source file app.py must be scanned"
+        );
+        assert!(
+            res.source_files.contains(&ts_file),
+            "Ordinary source file index.ts must be scanned"
+        );
+        assert!(
+            res.source_files.contains(&gen_keep_file),
+            "Whitelisted file keep.py must be scanned via negation pattern"
+        );
+        assert!(
+            res.source_files.contains(&vendor_keep),
+            "Whitelisted file keep_vendor.py must be scanned via .stackvetignore negation"
+        );
+        assert!(
+            !res.source_files.contains(&gen1_file),
+            "Excluded file gen1.py must not be scanned"
+        );
+        assert!(
+            !res.source_files.contains(&gen2_file),
+            "Excluded file gen2.py must not be scanned"
+        );
+        assert!(
+            !res.source_files.contains(&vendor_ignored),
+            "Excluded file vendored.py must not be scanned"
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 
     #[test]
