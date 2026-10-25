@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../assets/favicon.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -33,10 +33,10 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -975,6 +975,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="1. Version Synchronization">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-a-automated-version-bumping-recommended" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option A: Automated Version Bumping (Recommended)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-b-manual-synchronization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option B: Manual Synchronization
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1013,21 +1041,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#step-1-configure-github-secret" class="md-nav__link">
+  <a href="#trigger-publication" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Step 1: Configure GitHub Secret
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#step-2-trigger-publication" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Step 2: Trigger Publication
+        Trigger Publication
       
     </span>
   </a>
@@ -1168,10 +1185,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#q-npm-err-403-forbidden-you-do-not-have-permission-to-publish-stackvet" class="md-nav__link">
+  <a href="#q-npm-err-403-forbidden-you-do-not-have-permission-to-publish-inzamolstackvet" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Q: npm ERR! 403 Forbidden - You do not have permission to publish "stackvet"
+        Q: npm ERR! 403 Forbidden - You do not have permission to publish "@inzamol/stackvet"
       
     </span>
   </a>
@@ -1384,6 +1401,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="1. Version Synchronization">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-a-automated-version-bumping-recommended" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option A: Automated Version Bumping (Recommended)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-b-manual-synchronization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option B: Manual Synchronization
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1422,21 +1467,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#step-1-configure-github-secret" class="md-nav__link">
+  <a href="#trigger-publication" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Step 1: Configure GitHub Secret
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#step-2-trigger-publication" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Step 2: Trigger Publication
+        Trigger Publication
       
     </span>
   </a>
@@ -1577,10 +1611,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#q-npm-err-403-forbidden-you-do-not-have-permission-to-publish-stackvet" class="md-nav__link">
+  <a href="#q-npm-err-403-forbidden-you-do-not-have-permission-to-publish-inzamolstackvet" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Q: npm ERR! 403 Forbidden - You do not have permission to publish "stackvet"
+        Q: npm ERR! 403 Forbidden - You do not have permission to publish "@inzamol/stackvet"
       
     </span>
   </a>
@@ -1683,7 +1717,7 @@
 
 
 <h1 id="publishing-guide-npm-pypi">Publishing Guide: npm &amp; PyPI</h1>
-<p>This guide walks you through publishing <strong>StackVet</strong> to both the <strong>npm Registry</strong> (for Node.js / JavaScript users) and <strong>PyPI</strong> (for Python users).</p>
+<p>This guide walks you through publishing <strong>StackVet</strong> to both the <strong>npm Registry</strong> (as <code>@inzamol/stackvet</code> for Node.js / JavaScript users) and <strong>PyPI</strong> (as <code>stackvet</code> for Python users).</p>
 <hr />
 <h2 id="table-of-contents">Table of Contents</h2>
 <ol>
@@ -1702,83 +1736,101 @@
 </ol>
 <hr />
 <h2 id="1-version-synchronization">1. Version Synchronization</h2>
-<p>Before releasing a new version, ensure the version number is synchronized across the project manifests:</p>
-<ol>
-<li><code>crates/stackvet-cli/Cargo.toml</code>: <code>version = "0.1.0"</code></li>
-<li><code>packages/npm/package.json</code>: <code>"version": "0.1.0"</code></li>
-<li><code>pyproject.toml</code>: <code>version = "0.1.0"</code></li>
-</ol>
-<p>Commit your version updates:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>add<span class="w"> </span>.
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"chore: bump version to 0.1.0"</span>
+<p>The single source of truth for the project version is the workspace root <a href="../Cargo.toml"><code>Cargo.toml</code></a> under <code>[workspace.package].version</code> (e.g. <code>0.3.2</code>):</p>
+<ul>
+<li>All Rust crates inherit this version via <code>version.workspace = true</code>.</li>
+<li><code>pyproject.toml</code> declares dynamic versioning (<code>dynamic = ["version"]</code>), delegating version resolution to Maturin from the Cargo workspace.</li>
+<li><code>package.json</code>, <code>packages/npm/package.json</code>, and <code>editors/vscode/package.json</code> are synchronized to match the Cargo workspace version.</li>
+</ul>
+<h3 id="option-a-automated-version-bumping-recommended">Option A: Automated Version Bumping (Recommended)</h3>
+<p>Use the automated helper script to bump the version and synchronize all manifests:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Bump according to SemVer rules:</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>node<span class="w"> </span>scripts/bump_version.js<span class="w"> </span>patch<span class="w">   </span><span class="c1"># Bug fixes (e.g. 0.3.2 -&gt; 0.3.3)</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>node<span class="w"> </span>scripts/bump_version.js<span class="w"> </span>minor<span class="w">   </span><span class="c1"># New features (e.g. 0.3.2 -&gt; 0.4.0)</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>node<span class="w"> </span>scripts/bump_version.js<span class="w"> </span>major<span class="w">   </span><span class="c1"># Breaking changes (e.g. 0.3.2 -&gt; 1.0.0)</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1"># Or bump to an explicit target version:</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>node<span class="w"> </span>scripts/bump_version.js<span class="w"> </span>&lt;VERSION&gt;
+</code></pre></div>
+<p>This updates <code>Cargo.toml</code>, executes <code>node scripts/sync_version.js</code>, and verifies manifest consistency.</p>
+<h3 id="option-b-manual-synchronization">Option B: Manual Synchronization</h3>
+<p>If editing manifests manually, update the root <code>Cargo.toml</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">[workspace.package]</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"&lt;VERSION&gt;"</span><span class="w"> </span><span class="c1"># e.g. "0.3.2"</span>
+</code></pre></div>
+<p>Then synchronize and verify all manifests:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Synchronize root package.json, packages/npm/package.json, and editors/vscode/package.json</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>node<span class="w"> </span>scripts/sync_version.js
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Verify all manifests are strictly in sync</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>node<span class="w"> </span>scripts/sync_version.js<span class="w"> </span>--check
+</code></pre></div>
+<p>Commit your synchronized version updates:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>git<span class="w"> </span>add<span class="w"> </span>Cargo.toml<span class="w"> </span>Cargo.lock<span class="w"> </span>package.json<span class="w"> </span>packages/npm/package.json<span class="w"> </span>editors/vscode/package.json
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"chore(release): bump version to v&lt;VERSION&gt;"</span>
 </code></pre></div></p>
 <hr />
 <h2 id="2-publishing-to-npm">2. Publishing to npm</h2>
-<p>StackVet's npm distribution is located in <code>packages/npm/</code> and ships a cross-platform executable runner (<code>bin/stackvet.js</code>) bundled with the native Rust binary.</p>
+<p>StackVet's npm distribution is located in <code>packages/npm/</code> and ships a cross-platform executable runner (<code>bin/stackvet.js</code>) bundled with the native Rust binary under the scoped package <code>@inzamol/stackvet</code>.</p>
 <h3 id="a-prerequisites-npm">A. Prerequisites (npm)</h3>
 <ol>
 <li>An active account at <a href="https://www.npmjs.com/">npmjs.com</a>.</li>
 <li>Enable Two-Factor Authentication (2FA).</li>
-<li>Generate an <strong>Automation Token</strong>:</li>
-<li>Go to <strong>npmjs.com</strong> -&gt; Click your Profile -&gt; <strong>Access Tokens</strong>.</li>
-<li>Click <strong>Generate New Token</strong> -&gt; Choose <strong>Classic Token</strong> -&gt; Select <strong>Automation</strong>.</li>
-<li>Copy the generated token (starts with <code>npm_...</code>).</li>
+<li>Authentication setup:</li>
+<li><strong>For Automated GitHub Actions (OIDC Trusted Publishing - Recommended)</strong>: Configure npm Trusted Publishing for <code>@inzamol/stackvet</code> on npmjs.com linked to your GitHub repository and the <code>publish-npm.yml</code> workflow under the <code>npm</code> environment.</li>
+<li><strong>For Token-based Publishing / Local CLI</strong>: An npm automation token or active login via <code>npm login</code>.</li>
 </ol>
 <hr />
 <h3 id="b-automated-publishing-via-github-actions">B. Automated Publishing via GitHub Actions</h3>
 <p>The repository includes a ready-to-run workflow at <a href="https://github.com/inzamol/stackvet/blob/main/.github/workflows/publish-npm.yml"><code>.github/workflows/publish-npm.yml</code></a>.</p>
-<h4 id="step-1-configure-github-secret">Step 1: Configure GitHub Secret</h4>
-<ol>
-<li>Open your repository on GitHub.</li>
-<li>Go to <strong>Settings</strong> -&gt; <strong>Secrets and variables</strong> -&gt; <strong>Actions</strong>.</li>
-<li>Click <strong>New repository secret</strong>.</li>
-<li>Set:</li>
-<li><strong>Name</strong>: <code>NPM_TOKEN</code></li>
-<li><strong>Secret</strong>: Paste your npm automation token.</li>
-<li>Click <strong>Add secret</strong>.</li>
-</ol>
-<h4 id="step-2-trigger-publication">Step 2: Trigger Publication</h4>
+<p>The workflow uses npm's modern <strong>Trusted Publishing (OIDC)</strong> with <code>--provenance</code> running under the <code>npm</code> environment.</p>
+<h4 id="trigger-publication">Trigger Publication</h4>
 <p>Create and push a Git release tag:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>git<span class="w"> </span>tag<span class="w"> </span>v0.1.0
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.1.0
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>git<span class="w"> </span>tag<span class="w"> </span>v&lt;VERSION&gt;<span class="w"> </span><span class="c1"># e.g. v0.3.2</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v&lt;VERSION&gt;
 </code></pre></div></p>
 <p>GitHub Actions will automatically:
-1. Compile the optimized native Rust binary.
-2. Bundle the binary into the npm package structure.
+1. Compile the optimized native Rust binary (<code>cargo build -p stackvet --release --locked</code>).
+2. Bundle the binary and package metadata via <code>node scripts/build_npm.js</code>.
 3. Validate that <code>stackvet --version</code> executes cleanly.
-4. Publish <code>stackvet</code> to <code>https://registry.npmjs.org/</code> with public access.</p>
+4. Publish <code>@inzamol/stackvet</code> to <code>https://registry.npmjs.org/</code> with public access and cryptographic provenance.</p>
 <blockquote>
-<p><strong>Tip (Dry Run)</strong>: You can also manually trigger this workflow via the <strong>Actions</strong> tab on GitHub and check the <code>dry_run</code> option to test packaging without publishing.</p>
+<p><strong>Tip (Dry Run)</strong>: You can also manually trigger this workflow via the <strong>Actions</strong> tab on GitHub with <code>workflow_dispatch</code> and check the <code>dry_run</code> option to test packaging without publishing.</p>
 </blockquote>
 <hr />
 <h3 id="c-manual-publishing-via-cli">C. Manual Publishing via CLI</h3>
 <p>To build and publish manually from your local machine:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># 1. Build and package the npm distribution</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>npm<span class="w"> </span>run<span class="w"> </span>build:npm
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># 2. Navigate to the npm package folder</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nb">cd</span><span class="w"> </span>packages/npm
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># 3. Log into npm (if not already logged in)</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>npm<span class="w"> </span>login
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="c1"># 4. Publish to registry</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>npm<span class="w"> </span>publish<span class="w"> </span>--access<span class="w"> </span>public
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># 1. Build and package the npm distribution</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>npm<span class="w"> </span>run<span class="w"> </span>build:npm
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># 2. Navigate to the npm package folder</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="nb">cd</span><span class="w"> </span>packages/npm
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="c1"># 3. Log into npm (if not already logged in)</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>npm<span class="w"> </span>login
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="c1"># 4. Publish to registry with public access</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>npm<span class="w"> </span>publish<span class="w"> </span>--access<span class="w"> </span>public
 </code></pre></div>
 <hr />
 <h3 id="d-verifying-npm-installation">D. Verifying npm Installation</h3>
 <p>After publishing, test running StackVet directly with <code>npx</code> (no prior installation needed):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Run instantly via npx</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>npx<span class="w"> </span>stackvet<span class="w"> </span>doctor
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># Or install globally</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>npm<span class="w"> </span>install<span class="w"> </span>-g<span class="w"> </span>stackvet
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>stackvet<span class="w"> </span>--version
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="c1"># Or install as a project devDependency</span>
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>pnpm<span class="w"> </span>add<span class="w"> </span>-D<span class="w"> </span>stackvet
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="c1"># or</span>
-<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>npm<span class="w"> </span>install<span class="w"> </span>--save-dev<span class="w"> </span>stackvet
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Run instantly via npx without installing</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>npx<span class="w"> </span>@inzamol/stackvet<span class="w"> </span>doctor
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># Or install globally</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>npm<span class="w"> </span>install<span class="w"> </span>-g<span class="w"> </span>@inzamol/stackvet
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>stackvet<span class="w"> </span>--version
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="c1"># Or install as a project devDependency</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>npm<span class="w"> </span>install<span class="w"> </span>--save-dev<span class="w"> </span>@inzamol/stackvet
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="c1"># or</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>pnpm<span class="w"> </span>add<span class="w"> </span>-D<span class="w"> </span>@inzamol/stackvet
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="c1"># Run the locally installed tool</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>npx<span class="w"> </span>stackvet<span class="w"> </span>doctor
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="c1"># or</span>
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>pnpm<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>stackvet<span class="w"> </span>doctor
 </code></pre></div>
 <hr />
 <h2 id="3-publishing-to-pypi">3. Publishing to PyPI</h2>
@@ -1806,13 +1858,13 @@
 </ol>
 <h4 id="triggering-publication">Triggering Publication</h4>
 <p>Push your version tag:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>git<span class="w"> </span>tag<span class="w"> </span>v0.1.0
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.1.0
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>git<span class="w"> </span>tag<span class="w"> </span>v&lt;VERSION&gt;<span class="w"> </span><span class="c1"># e.g. v0.3.2</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v&lt;VERSION&gt;
 </code></pre></div></p>
 <p>GitHub Actions will automatically:
 1. Matrix build wheels for:
    - Linux: <code>x86_64</code> and <code>aarch64</code>
-   - Windows: <code>x86_64</code>
+   - Windows: <code>x64</code>
    - macOS: <code>x86_64</code> and <code>aarch64</code> (Apple Silicon)
 2. Build the source distribution (<code>sdist</code>).
 3. Securely upload all artifacts to PyPI via OIDC.</p>
@@ -1822,42 +1874,42 @@
 <hr />
 <h3 id="c-manual-publishing-via-cli-pypi">C. Manual Publishing via CLI (PyPI)</h3>
 <p>To manually build and upload the current platform's wheel and sdist:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># 1. Install maturin and twine</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>pip<span class="w"> </span>install<span class="w"> </span>maturin<span class="w"> </span>twine
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># 2. Build the wheel and source distribution</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>npm<span class="w"> </span>run<span class="w"> </span>build:pypi
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="c1"># Artifacts are written to dist/pypi/</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="c1"># 3. Verify packages</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>twine<span class="w"> </span>check<span class="w"> </span>dist/pypi/*
-<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>
-<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="c1"># 4. Upload to PyPI</span>
-<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>twine<span class="w"> </span>upload<span class="w"> </span>dist/pypi/*
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># 1. Install maturin and twine</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"maturin&gt;=1.5,&lt;2.0"</span><span class="w"> </span>twine
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># 2. Build the wheel and source distribution</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>npm<span class="w"> </span>run<span class="w"> </span>build:pypi
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="c1"># Artifacts are written to dist/pypi/</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="c1"># 3. Verify packages</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>twine<span class="w"> </span>check<span class="w"> </span>dist/pypi/*
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="c1"># 4. Upload to PyPI</span>
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>twine<span class="w"> </span>upload<span class="w"> </span>dist/pypi/*
 </code></pre></div>
 <hr />
 <h3 id="d-verifying-pypi-installation">D. Verifying PyPI Installation</h3>
 <p>Test running StackVet via Python tooling:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Run instantly with uvx (no install required)</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>uvx<span class="w"> </span>stackvet<span class="w"> </span>doctor
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># Or install with pip / pipx</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>pip<span class="w"> </span>install<span class="w"> </span>stackvet
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="c1"># or</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>pipx<span class="w"> </span>install<span class="w"> </span>stackvet
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>stackvet<span class="w"> </span>--version
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Run instantly with uvx (no install required)</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>uvx<span class="w"> </span>stackvet<span class="w"> </span>doctor
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># Or install with pip / pipx</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>pip<span class="w"> </span>install<span class="w"> </span>stackvet
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="c1"># or</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>pipx<span class="w"> </span>install<span class="w"> </span>stackvet
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>stackvet<span class="w"> </span>--version
 </code></pre></div>
 <hr />
 <h2 id="4-troubleshooting-faqs">4. Troubleshooting &amp; FAQs</h2>
-<h3 id="q-npm-err-403-forbidden-you-do-not-have-permission-to-publish-stackvet">Q: <code>npm ERR! 403 Forbidden - You do not have permission to publish "stackvet"</code></h3>
+<h3 id="q-npm-err-403-forbidden-you-do-not-have-permission-to-publish-inzamolstackvet">Q: <code>npm ERR! 403 Forbidden - You do not have permission to publish "@inzamol/stackvet"</code></h3>
 <ul>
-<li>The package name <code>stackvet</code> may already be registered or reserved by someone else on npm.</li>
-<li>If the name is taken, you can publish under an npm organization scope (e.g. <code>@yourorg/stackvet</code>) by updating <code>"name": "@yourorg/stackvet"</code> in <code>packages/npm/package.json</code>.</li>
+<li>Ensure you are logged in with an npm account that has write access to the <code>@inzamol</code> scope or package.</li>
+<li>If publishing a fork under your own namespace, update <code>"name": "@&lt;your-username&gt;/stackvet"</code> in <code>packages/npm/package.json</code> and root <code>package.json</code>, then run <code>node scripts/sync_version.js</code>.</li>
 </ul>
 <h3 id="q-httperror-400-bad-request-from-pypi-file-already-exists">Q: <code>HTTPError: 400 Bad Request from PyPI - File already exists</code></h3>
 <ul>
-<li>PyPI never allows re-uploading an existing version number. If a build failed or needs changes, increment the patch version (e.g. <code>0.1.1</code>) in <code>pyproject.toml</code> and <code>Cargo.toml</code>.</li>
+<li>PyPI never allows re-uploading an existing version number. If a build failed or needs changes, increment the patch version (e.g. <code>node scripts/bump_version.js patch</code> or update root <code>Cargo.toml</code>), run <code>node scripts/sync_version.js</code>, and push a new tag.</li>
 </ul>
 <h3 id="q-windows-error-os-error-32-file-in-use-during-local-cargo-build">Q: Windows <code>error: os error 32 (file in use)</code> during local cargo build</h3>
 <ul>
@@ -1959,10 +2011,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.top", "navigation.footer", "toc.follow", "content.code.copy", "content.code.annotate", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.top", "navigation.footer", "toc.follow", "content.code.copy", "content.code.annotate", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
   </body>
