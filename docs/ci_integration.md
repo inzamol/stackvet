@@ -229,7 +229,7 @@ Add this to your project's `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/inzamol/stackvet
-    rev: v0.1.0
+    rev: v0.3.2 # Use the latest released tag
     hooks:
       # Block commits if diagnostic errors or warnings are detected
       - id: stackvet-scan
