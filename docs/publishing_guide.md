@@ -1,6 +1,6 @@
 # Publishing Guide: npm & PyPI
 
-This guide walks you through publishing **StackVet** to both the **npm Registry** (for Node.js / JavaScript users) and **PyPI** (for Python users).
+This guide walks you through publishing **StackVet** to both the **npm Registry** (as `@inzamol/stackvet` for Node.js / JavaScript users) and **PyPI** (as `stackvet` for Python users).
 
 ---
 
@@ -23,31 +23,63 @@ This guide walks you through publishing **StackVet** to both the **npm Registry*
 
 ## 1. Version Synchronization
 
-Before releasing a new version, ensure the version number is synchronized across the project manifests:
+The single source of truth for the project version is the workspace root [`Cargo.toml`](../Cargo.toml) under `[workspace.package].version` (e.g. `0.3.2`):
 
-1. `crates/stackvet-cli/Cargo.toml`: `version = "0.1.0"`
-2. `packages/npm/package.json`: `"version": "0.1.0"`
-3. `pyproject.toml`: `version = "0.1.0"`
+- All Rust crates inherit this version via `version.workspace = true`.
+- `pyproject.toml` declares dynamic versioning (`dynamic = ["version"]`), delegating version resolution to Maturin from the Cargo workspace.
+- `package.json`, `packages/npm/package.json`, and `editors/vscode/package.json` are synchronized to match the Cargo workspace version.
 
-Commit your version updates:
+### Option A: Automated Version Bumping (Recommended)
+Use the automated helper script to bump the version and synchronize all manifests:
+
 ```bash
-git add .
-git commit -m "chore: bump version to 0.1.0"
+# Bump according to SemVer rules:
+node scripts/bump_version.js patch   # Bug fixes (e.g. 0.3.2 -> 0.3.3)
+node scripts/bump_version.js minor   # New features (e.g. 0.3.2 -> 0.4.0)
+node scripts/bump_version.js major   # Breaking changes (e.g. 0.3.2 -> 1.0.0)
+
+# Or bump to an explicit target version:
+node scripts/bump_version.js <VERSION>
+```
+
+This updates `Cargo.toml`, executes `node scripts/sync_version.js`, and verifies manifest consistency.
+
+### Option B: Manual Synchronization
+If editing manifests manually, update the root `Cargo.toml`:
+
+```toml
+[workspace.package]
+version = "<VERSION>" # e.g. "0.3.2"
+```
+
+Then synchronize and verify all manifests:
+
+```bash
+# Synchronize root package.json, packages/npm/package.json, and editors/vscode/package.json
+node scripts/sync_version.js
+
+# Verify all manifests are strictly in sync
+node scripts/sync_version.js --check
+```
+
+Commit your synchronized version updates:
+```bash
+git add Cargo.toml Cargo.lock package.json packages/npm/package.json editors/vscode/package.json
+git commit -m "chore(release): bump version to v<VERSION>"
 ```
 
 ---
 
 ## 2. Publishing to npm
 
-StackVet's npm distribution is located in `packages/npm/` and ships a cross-platform executable runner (`bin/stackvet.js`) bundled with the native Rust binary.
+StackVet's npm distribution is located in `packages/npm/` and ships a cross-platform executable runner (`bin/stackvet.js`) bundled with the native Rust binary under the scoped package `@inzamol/stackvet`.
 
 ### A. Prerequisites (npm)
 1. An active account at [npmjs.com](https://www.npmjs.com/).
 2. Enable Two-Factor Authentication (2FA).
-3. Generate an **Automation Token**:
-   - Go to **npmjs.com** -> Click your Profile -> **Access Tokens**.
-   - Click **Generate New Token** -> Choose **Classic Token** -> Select **Automation**.
-   - Copy the generated token (starts with `npm_...`).
+3. Authentication setup:
+   - **For Automated GitHub Actions (OIDC Trusted Publishing - Recommended)**: Configure npm Trusted Publishing for `@inzamol/stackvet` on npmjs.com linked to your GitHub repository and the `publish-npm.yml` workflow under the `npm` environment.
+   - **For Token-based Publishing / Local CLI**: An npm automation token or active login via `npm login`.
 
 ---
 
@@ -55,29 +87,22 @@ StackVet's npm distribution is located in `packages/npm/` and ships a cross-plat
 
 The repository includes a ready-to-run workflow at [`.github/workflows/publish-npm.yml`](https://github.com/inzamol/stackvet/blob/main/.github/workflows/publish-npm.yml).
 
-#### Step 1: Configure GitHub Secret
-1. Open your repository on GitHub.
-2. Go to **Settings** -> **Secrets and variables** -> **Actions**.
-3. Click **New repository secret**.
-4. Set:
-   - **Name**: `NPM_TOKEN`
-   - **Secret**: Paste your npm automation token.
-5. Click **Add secret**.
+The workflow uses npm's modern **Trusted Publishing (OIDC)** with `--provenance` running under the `npm` environment.
 
-#### Step 2: Trigger Publication
+#### Trigger Publication
 Create and push a Git release tag:
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v<VERSION> # e.g. v0.3.2
+git push origin v<VERSION>
 ```
 
 GitHub Actions will automatically:
-1. Compile the optimized native Rust binary.
-2. Bundle the binary into the npm package structure.
+1. Compile the optimized native Rust binary (`cargo build -p stackvet --release --locked`).
+2. Bundle the binary and package metadata via `node scripts/build_npm.js`.
 3. Validate that `stackvet --version` executes cleanly.
-4. Publish `stackvet` to `https://registry.npmjs.org/` with public access.
+4. Publish `@inzamol/stackvet` to `https://registry.npmjs.org/` with public access and cryptographic provenance.
 
-> **Tip (Dry Run)**: You can also manually trigger this workflow via the **Actions** tab on GitHub and check the `dry_run` option to test packaging without publishing.
+> **Tip (Dry Run)**: You can also manually trigger this workflow via the **Actions** tab on GitHub with `workflow_dispatch` and check the `dry_run` option to test packaging without publishing.
 
 ---
 
@@ -95,7 +120,7 @@ cd packages/npm
 # 3. Log into npm (if not already logged in)
 npm login
 
-# 4. Publish to registry
+# 4. Publish to registry with public access
 npm publish --access public
 ```
 
@@ -106,17 +131,22 @@ npm publish --access public
 After publishing, test running StackVet directly with `npx` (no prior installation needed):
 
 ```bash
-# Run instantly via npx
-npx stackvet doctor
+# Run instantly via npx without installing
+npx @inzamol/stackvet doctor
 
 # Or install globally
-npm install -g stackvet
+npm install -g @inzamol/stackvet
 stackvet --version
 
 # Or install as a project devDependency
-pnpm add -D stackvet
+npm install --save-dev @inzamol/stackvet
 # or
-npm install --save-dev stackvet
+pnpm add -D @inzamol/stackvet
+
+# Run the locally installed tool
+npx stackvet doctor
+# or
+pnpm exec stackvet doctor
 ```
 
 ---
@@ -151,14 +181,14 @@ It uses PyPI's modern **Trusted Publishing (OIDC)**, eliminating the need to sto
 #### Triggering Publication
 Push your version tag:
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v<VERSION> # e.g. v0.3.2
+git push origin v<VERSION>
 ```
 
 GitHub Actions will automatically:
 1. Matrix build wheels for:
    - Linux: `x86_64` and `aarch64`
-   - Windows: `x86_64`
+   - Windows: `x64`
    - macOS: `x86_64` and `aarch64` (Apple Silicon)
 2. Build the source distribution (`sdist`).
 3. Securely upload all artifacts to PyPI via OIDC.
@@ -173,7 +203,7 @@ To manually build and upload the current platform's wheel and sdist:
 
 ```bash
 # 1. Install maturin and twine
-pip install maturin twine
+pip install "maturin>=1.5,<2.0" twine
 
 # 2. Build the wheel and source distribution
 npm run build:pypi
@@ -208,12 +238,12 @@ stackvet --version
 
 ## 4. Troubleshooting & FAQs
 
-### Q: `npm ERR! 403 Forbidden - You do not have permission to publish "stackvet"`
-- The package name `stackvet` may already be registered or reserved by someone else on npm.
-- If the name is taken, you can publish under an npm organization scope (e.g. `@yourorg/stackvet`) by updating `"name": "@yourorg/stackvet"` in `packages/npm/package.json`.
+### Q: `npm ERR! 403 Forbidden - You do not have permission to publish "@inzamol/stackvet"`
+- Ensure you are logged in with an npm account that has write access to the `@inzamol` scope or package.
+- If publishing a fork under your own namespace, update `"name": "@<your-username>/stackvet"` in `packages/npm/package.json` and root `package.json`, then run `node scripts/sync_version.js`.
 
 ### Q: `HTTPError: 400 Bad Request from PyPI - File already exists`
-- PyPI never allows re-uploading an existing version number. If a build failed or needs changes, increment the patch version (e.g. `0.1.1`) in `pyproject.toml` and `Cargo.toml`.
+- PyPI never allows re-uploading an existing version number. If a build failed or needs changes, increment the patch version (e.g. `node scripts/bump_version.js patch` or update root `Cargo.toml`), run `node scripts/sync_version.js`, and push a new tag.
 
 ### Q: Windows `error: os error 32 (file in use)` during local cargo build
 - This occurs if Windows Defender or a file indexer holds a temporary `.rcgu.o` lock on the build directory.

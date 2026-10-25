@@ -11,7 +11,7 @@ Add the following to your project's `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/inzamol/stackvet
-    rev: v0.1.0
+    rev: v0.3.2 # Use the latest released tag
     hooks:
       # 1. Diagnostic scan (blocking on warnings & errors)
       - id: stackvet-scan
