@@ -175,8 +175,27 @@ impl ProjectScanner {
         }
     }
 
+    fn is_under_root(&self, path: &Path) -> bool {
+        if !path.has_root() {
+            return true;
+        }
+        if path.starts_with(&self.root) {
+            return true;
+        }
+        let Ok(canonical_path) = path.canonicalize() else {
+            return false;
+        };
+        let Ok(canonical_root) = self.root.canonicalize() else {
+            return false;
+        };
+        canonical_path.starts_with(canonical_root)
+    }
+
     /// Checks whether a given path is matched by the scanner's explicit custom ignore rules.
     pub fn is_explicitly_ignored(&self, path: &Path) -> bool {
+        if path.has_root() && !self.is_under_root(path) {
+            return false;
+        }
         let Some(gi) = self.build_custom_gitignore() else {
             return false;
         };
@@ -212,31 +231,40 @@ impl ProjectScanner {
             }
         }
 
-        // Check custom ignores and .stackvetignore files in parent directories
-        let mut gi_builder = GitignoreBuilder::new(&self.root);
-        for pattern in &self.custom_ignores {
-            let trimmed = pattern.trim();
-            if trimmed.is_empty() || trimmed.starts_with('#') {
-                continue;
-            }
-            let _ = gi_builder.add_line(None, trimmed);
-        }
-        if self.parents {
-            let mut cur = path.parent();
-            while let Some(parent) = cur {
-                let sv_ignore = parent.join(".stackvetignore");
-                if sv_ignore.is_file() {
-                    let _ = gi_builder.add(&sv_ignore);
+        let under_root = !path.has_root() || self.is_under_root(path);
+
+        if under_root {
+            // Check custom ignores first (highest priority)
+            if let Some(gi) = self.build_custom_gitignore() {
+                if gi.matched_path_or_any_parents(path, false).is_ignore() {
+                    return false;
                 }
-                if parent == self.root {
+            }
+
+            // Check .stackvetignore files from nearest directory outward
+            let mut matchers = Vec::new();
+            if self.parents {
+                let mut cur = path.parent();
+                while let Some(parent) = cur {
+                    let sv_ignore = parent.join(".stackvetignore");
+                    if sv_ignore.is_file() {
+                        let (gi, _err) = ignore::gitignore::Gitignore::new(&sv_ignore);
+                        matchers.push(gi);
+                    }
+                    if parent == self.root {
+                        break;
+                    }
+                    cur = parent.parent();
+                }
+            }
+            for gi in &matchers {
+                let matched = gi.matched_path_or_any_parents(path, false);
+                if matched.is_ignore() {
+                    return false;
+                }
+                if matched.is_whitelist() {
                     break;
                 }
-                cur = parent.parent();
-            }
-        }
-        if let Ok(gi) = gi_builder.build() {
-            if gi.matched_path_or_any_parents(path, false).is_ignore() {
-                return false;
             }
         }
 
@@ -245,7 +273,11 @@ impl ProjectScanner {
         builder.parents(self.parents);
         builder.git_ignore(true);
         builder.add_custom_ignore_filename(".stackvetignore");
-        let custom_gi = self.build_custom_gitignore();
+        let custom_gi = if under_root {
+            self.build_custom_gitignore()
+        } else {
+            None
+        };
         builder.filter_entry(move |entry| {
             if let Some(ref gi) = custom_gi {
                 let is_dir = entry.file_type().is_some_and(|ft| ft.is_dir());
@@ -626,6 +658,15 @@ mod tests {
         )
         .unwrap();
 
+        // Nested subpackage with its own .stackvetignore containing ignore rule and negation
+        let nested_pkg = temp_dir.join("subpkg");
+        fs::create_dir_all(&nested_pkg).unwrap();
+        let nested_ignored = nested_pkg.join("temp.py");
+        let nested_keep = nested_pkg.join("keep.py");
+        fs::write(&nested_ignored, "t = 1\n").unwrap();
+        fs::write(&nested_keep, "k = 2\n").unwrap();
+        fs::write(nested_pkg.join(".stackvetignore"), "*.py\n!keep.py\n").unwrap();
+
         let scanner =
             ProjectScanner::new(&temp_dir).with_ignores(["generated/**", "!generated/keep.py"]);
 
@@ -645,6 +686,9 @@ mod tests {
         assert!(!scanner.is_accepted_source_file(&gen1_file));
         assert!(!scanner.is_accepted_source_file(&gen2_file));
         assert!(!scanner.is_accepted_source_file(&vendor_ignored));
+
+        assert!(scanner.is_accepted_source_file(&nested_keep));
+        assert!(!scanner.is_accepted_source_file(&nested_ignored));
 
         // Acceptance criterion: scan() excludes matching source files and scans ordinary files
         let res = scanner.scan();
@@ -666,6 +710,14 @@ mod tests {
             "Whitelisted file keep_vendor.py must be scanned via .stackvetignore negation"
         );
         assert!(
+            res.source_files.contains(&nested_keep),
+            "Nested whitelisted file keep.py must be scanned"
+        );
+        assert!(
+            !res.source_files.contains(&nested_ignored),
+            "Nested ignored file temp.py must not be scanned"
+        );
+        assert!(
             !res.source_files.contains(&gen1_file),
             "Excluded file gen1.py must not be scanned"
         );
@@ -679,6 +731,24 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_scanner_outside_root_paths_not_falsely_ignored() {
+        let temp_dir = make_temp_dir("outside_root_main");
+        let outside_dir = make_temp_dir("outside_root_other");
+
+        let outside_file = outside_dir.join("generated_outside.py");
+        fs::write(&outside_file, "print('outside')\n").unwrap();
+
+        let scanner = ProjectScanner::new(&temp_dir).with_ignores(["generated*/**", "generated*"]);
+
+        // Absolute path outside the scanner root should not be falsely ignored by custom ignores
+        assert!(!scanner.is_explicitly_ignored(&outside_file));
+        assert!(scanner.is_accepted_source_file(&outside_file));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+        let _ = fs::remove_dir_all(&outside_dir);
     }
 
     #[test]
