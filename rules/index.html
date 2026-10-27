@@ -793,6 +793,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#23-sec-003-vulnerability-advisory-database-refresh-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 SEC-003: Vulnerability Advisory Database Refresh Failed
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3021,6 +3032,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#23-sec-003-vulnerability-advisory-database-refresh-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 SEC-003: Vulnerability Advisory Database Refresh Failed
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -4799,6 +4821,12 @@
 <li><strong>Default Severity:</strong> <code>WARNING</code></li>
 <li><strong>Description:</strong> Vulnerability analysis was performed using a local cache that has exceeded its configured time-to-live (TTL).</li>
 <li><strong>Remediation:</strong> Run with '--refresh-vuln-cache' or verify internet access to update the local advisory database.</li>
+</ul>
+<h3 id="23-sec-003-vulnerability-advisory-database-refresh-failed">2.3 SEC-003: Vulnerability Advisory Database Refresh Failed</h3>
+<ul>
+<li><strong>Default Severity:</strong> <code>WARNING</code></li>
+<li><strong>Description:</strong> A refresh of the vulnerability advisory database was requested or attempted, but failed due to a network or service error. StackVet will continue using cached advisory data.</li>
+<li><strong>Remediation:</strong> Check your internet connection, verify proxy settings, or run without '--refresh-vuln-cache' to use cached advisories.</li>
 </ul>
 <hr />
 <h2 id="3-environment-drift-rules-env-xxx">3. Environment &amp; Drift Rules (<code>ENV-xxx</code>)</h2>
