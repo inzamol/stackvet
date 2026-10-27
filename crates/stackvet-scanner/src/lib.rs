@@ -36,6 +36,7 @@ pub const DEFAULT_EXCLUSIONS: &[&str] = &[
     ".nuxt",
     ".turbo",
     ".output",
+    ".stackvet",
 ];
 
 pub struct ProjectScanner {
@@ -789,11 +790,76 @@ mod tests {
         fs::create_dir_all(&target).unwrap();
         fs::write(target.join("output.js"), "pass").unwrap();
 
+        let stackvet_cache = temp_dir.join(".stackvet").join("cache");
+        fs::create_dir_all(&stackvet_cache).unwrap();
+        fs::write(
+            stackvet_cache.join("scan_cache.json"),
+            "{\"data\":\"test\"}",
+        )
+        .unwrap();
+        fs::write(stackvet_cache.join("vulnerabilities.json"), "[]").unwrap();
+
         let scanner = ProjectScanner::new(&temp_dir);
         let res = scanner.scan();
 
         assert_eq!(res.source_files.len(), 1);
         assert_eq!(res.source_files[0], temp_dir.join("app.py"));
+        assert!(
+            res.config_files.is_empty(),
+            "Generated cache in .stackvet must not be classified as config files: {:?}",
+            res.config_files
+        );
+        assert_eq!(res.total_distinct_files(), 1);
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_populated_stackvet_cache_excluded_from_limits_and_oversized_diagnostics() {
+        let temp_dir = make_temp_dir("stackvet_cache_exclusion");
+
+        fs::write(temp_dir.join("main.py"), "print('hello')\n").unwrap();
+        fs::write(temp_dir.join("pyproject.toml"), "[project]\nname='test'\n").unwrap();
+
+        // Create a large 50KB cache file in .stackvet/cache/scan_cache.json
+        let cache_dir = temp_dir.join(".stackvet").join("cache");
+        fs::create_dir_all(&cache_dir).unwrap();
+        let large_cache_data = "x".repeat(50_000);
+        let cache_file = cache_dir.join("scan_cache.json");
+        fs::write(
+            &cache_file,
+            format!("{{\"cache\": \"{}\"}}", large_cache_data),
+        )
+        .unwrap();
+
+        // 1. Scanner configured with tiny 500-byte max_file_size limit
+        // Cache file (50KB) must NOT be reported as oversized file
+        let scanner = ProjectScanner::new(&temp_dir).with_max_file_size(500);
+        let res = scanner.scan();
+
+        assert!(
+            res.oversized_files.is_empty(),
+            "Generated cache files in .stackvet must not trigger oversized_files diagnostics: {:?}",
+            res.oversized_files
+        );
+
+        // 2. Scanner configured with max_files = 3
+        // Only main.py and pyproject.toml should be counted (2 files); if cache files were counted (4 files),
+        // it would hit max_files = 3 and trigger truncation.
+        let scanner_max_files = ProjectScanner::new(&temp_dir).with_max_files(3);
+        let res_max = scanner_max_files.scan();
+        assert_eq!(res_max.distinct_files_count, 2);
+        assert!(
+            !res_max.is_truncated,
+            "Scan should not be truncated because cache files are excluded"
+        );
+
+        // 3. build_context should not include cache files anywhere
+        let ctx = scanner.build_context().expect("build context");
+        assert_eq!(ctx.source_files.len(), 1);
+        assert_eq!(ctx.manifest_files.len(), 1);
+        assert!(!ctx.source_files.contains(&cache_file));
+        assert!(!ctx.manifest_files.contains(&cache_file));
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

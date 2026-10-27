@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -305,6 +306,111 @@ fn test_incremental_cache_preserves_and_restores_vulnerability_check_status() {
     let content = fs::read_to_string(cache_mgr.cache_file_path()).expect("read cache file");
     let loaded: ScanCacheData = serde_json::from_str(&content).expect("deserialize cache");
     assert_eq!(loaded.vulnerability_check, Some(vuln_summary));
+
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn test_cli_scan_excludes_stackvet_cache_and_custom_cache_dir() {
+    let repo = make_temp_repo("cli_cache_exclusion");
+    let manifest = repo.join("pyproject.toml");
+    let main_file = repo.join("main.py");
+
+    fs::write(
+        &manifest,
+        "[project]\nname = 'clean-test-app'\nversion = '0.1.0'\n",
+    )
+    .unwrap();
+    fs::write(&main_file, "print('hello world')\n").unwrap();
+
+    // Set scanner max_file_size to 1000 bytes via .stackvet.toml
+    fs::write(
+        repo.join(".stackvet.toml"),
+        "[scanner]\nmax_file_size = 1000\n",
+    )
+    .unwrap();
+
+    // 1. Populate standard .stackvet/cache/scan_cache.json with 50KB data
+    let default_cache_dir = repo.join(".stackvet").join("cache");
+    fs::create_dir_all(&default_cache_dir).unwrap();
+    let large_json = format!("{{\"data\": \"{}\"}}", "x".repeat(50_000));
+    fs::write(default_cache_dir.join("scan_cache.json"), &large_json).unwrap();
+    fs::write(default_cache_dir.join("vulnerabilities.json"), "[]").unwrap();
+
+    let exe = env!("CARGO_BIN_EXE_stackvet");
+
+    // Scan with tiny max-file-size 1000 bytes (configured via .stackvet.toml) and offline mode
+    let output = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run stackvet scan json");
+
+    assert!(
+        output.status.success(),
+        "Scan should exit with success: code={:?}, stdout={}, stderr={}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let val: serde_json::Value = serde_json::from_str(&stdout).expect("parse json");
+
+    let diagnostics = val["diagnostics"].as_array().expect("diagnostics array");
+    let disc_005_diags: Vec<_> = diagnostics
+        .iter()
+        .filter(|d| d["rule_id"].as_str() == Some("DISC-005"))
+        .collect();
+    assert!(
+        disc_005_diags.is_empty(),
+        "Expected no DISC-005 diagnostics for .stackvet cache, found: {:?}",
+        disc_005_diags
+    );
+
+    // 2. Populate custom cache dir and pass --cache-dir custom_cache
+    let custom_cache_dir = repo.join("custom_cache");
+    fs::create_dir_all(&custom_cache_dir).unwrap();
+    fs::write(custom_cache_dir.join("scan_cache.json"), &large_json).unwrap();
+
+    let output_custom = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--cache-dir")
+        .arg("custom_cache")
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run stackvet scan with custom cache dir");
+
+    assert!(
+        output_custom.status.success(),
+        "Scan with custom cache-dir should succeed: code={:?}, stdout={}, stderr={}",
+        output_custom.status.code(),
+        String::from_utf8_lossy(&output_custom.stdout),
+        String::from_utf8_lossy(&output_custom.stderr)
+    );
+    let stdout_custom = String::from_utf8_lossy(&output_custom.stdout);
+    let val_custom: serde_json::Value =
+        serde_json::from_str(&stdout_custom).expect("parse json custom");
+
+    let custom_diagnostics = val_custom["diagnostics"]
+        .as_array()
+        .expect("diagnostics array");
+    let disc_005_custom: Vec<_> = custom_diagnostics
+        .iter()
+        .filter(|d| d["rule_id"].as_str() == Some("DISC-005"))
+        .collect();
+    assert!(
+        disc_005_custom.is_empty(),
+        "Expected no DISC-005 diagnostics for custom cache dir, found: {:?}",
+        disc_005_custom
+    );
 
     let _ = fs::remove_dir_all(&repo);
 }

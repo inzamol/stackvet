@@ -486,6 +486,24 @@ fn build_full_context(
         .with_max_files(config.scanner.max_files)
         .with_follow_symlinks(config.scanner.follow_symlinks)
         .with_verbose(verbose);
+
+    if let Some(ref cd) = config.cache.dir {
+        let rel_cache = if cd.is_absolute() {
+            cd.strip_prefix(project_root).ok()
+        } else {
+            Some(cd.as_path())
+        };
+        if let Some(rel) = rel_cache {
+            let rel_str = rel.to_string_lossy().replace('\\', "/");
+            let pattern = if rel_str.ends_with('/') {
+                format!("{}**", rel_str)
+            } else {
+                format!("{}/**", rel_str)
+            };
+            scanner = scanner.with_ignores([pattern]);
+        }
+    }
+
     if let Some(token) = cancellation_token {
         scanner = scanner.with_cancellation_token(token);
     }
@@ -1463,6 +1481,22 @@ async fn main() -> Result<()> {
         Some(Commands::Check { ignore, .. }) => all_cli_ignores.extend(ignore.clone()),
         Some(Commands::Inspect { ignore, .. }) => all_cli_ignores.extend(ignore.clone()),
         _ => {}
+    }
+    if let Some(ref cd) = cli.cache_dir {
+        let rel_cache = if cd.is_absolute() {
+            cd.strip_prefix(&project_root).ok()
+        } else {
+            Some(cd.as_path())
+        };
+        if let Some(rel) = rel_cache {
+            let rel_str = rel.to_string_lossy().replace('\\', "/");
+            let pattern = if rel_str.ends_with('/') {
+                format!("{}**", rel_str)
+            } else {
+                format!("{}/**", rel_str)
+            };
+            all_cli_ignores.push(pattern);
+        }
     }
 
     let cancellation_token = stackvet_core::CancellationToken::new();
