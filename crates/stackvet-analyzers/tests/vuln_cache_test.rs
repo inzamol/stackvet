@@ -267,3 +267,436 @@ fn test_corrupt_cache_is_repaired_on_refresh() {
         "Repaired cache has fresh OSV entries"
     );
 }
+
+#[test]
+fn test_network_failure_with_missing_cache_emits_sec001_with_actionable_error() {
+    let dir = temp_test_dir("network_failure_missing_cache");
+    let ctx = create_dummy_python_context(&dir, &[("requests", "2.25.0")]);
+    let cache_path = dir.join("nonexistent_cache.json");
+
+    // Point to non-routable port to simulate immediate connection failure
+    let analyzer = SecurityAnalyzer::with_endpoint(false, false, cache_path, "http://127.0.0.1:9");
+    let diags = analyzer.analyze(&ctx).expect("analyze must succeed");
+
+    assert_eq!(diags.len(), 1);
+    assert_eq!(diags[0].rule_id.0, "SEC-001");
+    assert!(
+        diags[0]
+            .message
+            .contains("unavailable and no local cache was found"),
+        "Diagnostic message should indicate unavailable advisory database: {}",
+        diags[0].message
+    );
+    assert!(
+        diags[0]
+            .message
+            .contains("Network error connecting to OSV.dev"),
+        "Diagnostic message should include actionable network error: {}",
+        diags[0].message
+    );
+}
+
+#[test]
+fn test_network_refresh_failure_with_existing_cache_emits_sec003_and_uses_cache() {
+    let dir = temp_test_dir("network_refresh_failure_existing_cache");
+    let ctx = create_dummy_python_context(&dir, &[("requests", "2.25.0")]);
+    let cache_path = dir.join("vulnerabilities.json");
+    let mgr = VulnCacheManager::with_custom_path(cache_path.clone());
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let cache = VulnDatabaseCache {
+        schema_version: "1.0.0".to_string(),
+        source: "osv.dev".to_string(),
+        last_updated: now,
+        ttl_seconds: 604800,
+        entries: vec![VulnCacheEntry {
+            package: "requests".to_string(),
+            ecosystem: "PyPI".to_string(),
+            version: "2.25.0".to_string(),
+            vulnerabilities: vec![CachedVulnerability {
+                id: "GHSA-j8r2-6x86-q33q".to_string(),
+                summary: "Requests Proxy-Authorization leak".to_string(),
+                severity: "HIGH".to_string(),
+                fixed_in: Some("2.31.0".to_string()),
+            }],
+        }],
+    };
+    mgr.save_cache(&cache).expect("save cache");
+
+    let analyzer = SecurityAnalyzer::with_endpoint(false, true, cache_path, "http://127.0.0.1:9");
+    let diags = analyzer.analyze(&ctx).expect("analyze must succeed");
+
+    // SEC-003 must be emitted for refresh failure
+    let sec003 = diags.iter().find(|d| d.rule_id.0 == "SEC-003");
+    assert!(
+        sec003.is_some(),
+        "SEC-003 must be emitted when refresh fails but cache is present"
+    );
+    assert!(
+        sec003
+            .unwrap()
+            .message
+            .contains("Falling back to existing local cache"),
+        "SEC-003 should explain fallback: {}",
+        sec003.unwrap().message
+    );
+
+    // SEC-001 must NOT be emitted because local cache was available
+    let has_sec001 = diags.iter().any(|d| d.rule_id.0 == "SEC-001");
+    assert!(!has_sec001, "SEC-001 must not be emitted when cache exists");
+
+    // DEP-006 should still be emitted using the fallback cache
+    let has_dep006 = diags.iter().any(|d| d.rule_id.0 == "DEP-006");
+    assert!(
+        has_dep006,
+        "DEP-006 should be detected using the fallback cache"
+    );
+}
+
+#[test]
+fn test_fresh_cache_clean_result_has_no_sec_and_no_dep006() {
+    let dir = temp_test_dir("clean_cache");
+    let ctx = create_dummy_python_context(&dir, &[("safe-package", "1.0.0")]);
+    let cache_path = dir.join("vulnerabilities.json");
+    let mgr = VulnCacheManager::with_custom_path(cache_path.clone());
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let cache = VulnDatabaseCache {
+        schema_version: "1.0.0".to_string(),
+        source: "osv.dev".to_string(),
+        last_updated: now,
+        ttl_seconds: 604800,
+        entries: vec![VulnCacheEntry {
+            package: "safe-package".to_string(),
+            ecosystem: "PyPI".to_string(),
+            version: "1.0.0".to_string(),
+            vulnerabilities: vec![],
+        }],
+    };
+    mgr.save_cache(&cache).expect("save cache");
+
+    let analyzer = SecurityAnalyzer::with_cache_path(true, false, cache_path);
+    let diags = analyzer.analyze(&ctx).expect("analyze must succeed");
+
+    assert!(
+        diags.is_empty(),
+        "Clean scan must produce zero diagnostics, found: {:?}",
+        diags
+    );
+}
+
+#[test]
+fn test_http_error_response_with_missing_cache_triggers_all_failures_path() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+    let port = listener.local_addr().unwrap().port();
+    let server_handle = std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            use std::io::{Read, Write};
+            let mut buf = [0u8; 1024];
+            let _ = stream.read(&mut buf);
+            let response = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.flush();
+        }
+    });
+
+    let dir = temp_test_dir("http_500_missing_cache");
+    let ctx = create_dummy_python_context(&dir, &[("requests", "2.25.0")]);
+    let cache_path = dir.join("vulnerabilities.json");
+
+    let analyzer = SecurityAnalyzer::with_endpoint(
+        false,
+        false,
+        cache_path,
+        format!("http://127.0.0.1:{port}"),
+    );
+    let (diags, vuln_summary) = analyzer.scan_with_status(&ctx).expect("scan_with_status");
+
+    let sec001 = diags.iter().find(|d| d.rule_id.0 == "SEC-001");
+    assert!(
+        sec001.is_some(),
+        "SEC-001 must be emitted when HTTP returns 500"
+    );
+    assert!(
+        sec001.unwrap().message.contains("HTTP status 500"),
+        "Message should include HTTP status: {}",
+        sec001.unwrap().message
+    );
+    assert_eq!(
+        vuln_summary.as_ref().unwrap().status,
+        stackvet_core::VulnerabilityCheckStatus::Failed
+    );
+
+    let _ = server_handle.join();
+}
+
+#[test]
+fn test_partial_failure_with_existing_cache_falls_back_and_does_not_save_partial_entries() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+    let port = listener.local_addr().unwrap().port();
+    let server_handle = std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        // Handle first request (success)
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut buf = [0u8; 1024];
+            let _ = stream.read(&mut buf);
+            let body = "{\"vulns\":[]}";
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.flush();
+        }
+        // Handle second request (failure)
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut buf = [0u8; 1024];
+            let _ = stream.read(&mut buf);
+            let response = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.flush();
+        }
+    });
+
+    let dir = temp_test_dir("partial_failure_existing_cache");
+    let ctx = create_dummy_python_context(&dir, &[("pkg-a", "1.0.0"), ("pkg-b", "2.0.0")]);
+    let cache_path = dir.join("vulnerabilities.json");
+    let mgr = VulnCacheManager::with_custom_path(cache_path.clone());
+
+    let original_timestamp = 100_000u64;
+    let initial_cache = VulnDatabaseCache {
+        schema_version: "1.0.0".to_string(),
+        source: "osv.dev".to_string(),
+        last_updated: original_timestamp,
+        ttl_seconds: 604800,
+        entries: vec![
+            VulnCacheEntry {
+                package: "pkg-a".to_string(),
+                ecosystem: "PyPI".to_string(),
+                version: "1.0.0".to_string(),
+                vulnerabilities: vec![],
+            },
+            VulnCacheEntry {
+                package: "pkg-b".to_string(),
+                ecosystem: "PyPI".to_string(),
+                version: "2.0.0".to_string(),
+                vulnerabilities: vec![CachedVulnerability {
+                    id: "TEST-VULN-001".to_string(),
+                    summary: "Known issue in pkg-b".to_string(),
+                    severity: "HIGH".to_string(),
+                    fixed_in: Some("2.1.0".to_string()),
+                }],
+            },
+        ],
+    };
+    mgr.save_cache(&initial_cache).expect("save initial cache");
+
+    let analyzer = SecurityAnalyzer::with_endpoint(
+        false,
+        true, // refresh_cache = true
+        cache_path.clone(),
+        format!("http://127.0.0.1:{port}"),
+    );
+
+    let (diags, vuln_summary) = analyzer.scan_with_status(&ctx).expect("scan_with_status");
+
+    // SEC-003 must be emitted because refresh failed and fell back to cache
+    let sec003 = diags.iter().find(|d| d.rule_id.0 == "SEC-003");
+    assert!(
+        sec003.is_some(),
+        "SEC-003 must be emitted when one package fails during refresh: {:?}",
+        diags
+    );
+    assert!(
+        sec003.unwrap().message.contains("HTTP status 500"),
+        "SEC-003 message should contain error detail: {}",
+        sec003.unwrap().message
+    );
+
+    // Existing cache must still detect DEP-006 for pkg-b
+    let dep006 = diags.iter().find(|d| d.rule_id.0 == "DEP-006");
+    assert!(
+        dep006.is_some(),
+        "Fallback cache vulnerabilities must be detected: {:?}",
+        diags
+    );
+
+    // Cache file on disk must NOT have been updated or partially overwritten
+    let reloaded_cache = mgr.load_cache().expect("load cache").expect("cache exists");
+    assert_eq!(
+        reloaded_cache.last_updated, original_timestamp,
+        "Cache timestamp must not be bumped on partial refresh failure"
+    );
+    assert_eq!(reloaded_cache.entries.len(), 2);
+
+    assert_eq!(
+        vuln_summary.as_ref().unwrap().status,
+        stackvet_core::VulnerabilityCheckStatus::CompletedWithWarnings
+    );
+
+    let _ = server_handle.join();
+}
+
+#[test]
+fn test_invalid_json_response_triggers_refresh_failure_and_cache_fallback() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+    let port = listener.local_addr().unwrap().port();
+    let server_handle = std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut buf = [0u8; 1024];
+            let _ = stream.read(&mut buf);
+            let body = "<html><body>Not JSON</body></html>";
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.flush();
+        }
+    });
+
+    let dir = temp_test_dir("invalid_json_cache_fallback");
+    let ctx = create_dummy_python_context(&dir, &[("requests", "2.25.0")]);
+    let cache_path = dir.join("vulnerabilities.json");
+    let mgr = VulnCacheManager::with_custom_path(cache_path.clone());
+
+    let original_timestamp = 200_000u64;
+    let initial_cache = VulnDatabaseCache {
+        schema_version: "1.0.0".to_string(),
+        source: "osv.dev".to_string(),
+        last_updated: original_timestamp,
+        ttl_seconds: 604800,
+        entries: vec![VulnCacheEntry {
+            package: "requests".to_string(),
+            ecosystem: "PyPI".to_string(),
+            version: "2.25.0".to_string(),
+            vulnerabilities: vec![],
+        }],
+    };
+    mgr.save_cache(&initial_cache).expect("save initial cache");
+
+    let analyzer = SecurityAnalyzer::with_endpoint(
+        false,
+        true, // refresh_cache = true
+        cache_path.clone(),
+        format!("http://127.0.0.1:{port}"),
+    );
+
+    let (diags, vuln_summary) = analyzer.scan_with_status(&ctx).expect("scan_with_status");
+
+    let sec003 = diags.iter().find(|d| d.rule_id.0 == "SEC-003");
+    assert!(
+        sec003.is_some(),
+        "SEC-003 must be emitted on invalid JSON response: {:?}",
+        diags
+    );
+    assert!(
+        sec003
+            .unwrap()
+            .message
+            .contains("Failed to parse OSV advisory response"),
+        "SEC-003 message should explain JSON parse error: {}",
+        sec003.unwrap().message
+    );
+
+    // Cache on disk should NOT be modified
+    let reloaded_cache = mgr.load_cache().expect("load cache").expect("cache exists");
+    assert_eq!(
+        reloaded_cache.last_updated, original_timestamp,
+        "Cache timestamp must not be bumped on parse failure"
+    );
+
+    assert_eq!(
+        vuln_summary.as_ref().unwrap().status,
+        stackvet_core::VulnerabilityCheckStatus::CompletedWithWarnings
+    );
+
+    let _ = server_handle.join();
+}
+
+#[test]
+fn test_stale_cache_refresh_failure_retains_stale_status_and_emits_sec003_and_sec002() {
+    let dir = temp_test_dir("stale_cache_refresh_failure");
+    let ctx = create_dummy_python_context(&dir, &[("requests", "2.25.0")]);
+    let cache_path = dir.join("vulnerabilities.json");
+    let mgr = VulnCacheManager::with_custom_path(cache_path.clone());
+
+    // 10 days old with a 7 day TTL -> Stale
+    let stale_time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        - (10 * 86400);
+
+    let initial_cache = VulnDatabaseCache {
+        schema_version: "1.0.0".to_string(),
+        source: "osv.dev".to_string(),
+        last_updated: stale_time,
+        ttl_seconds: 604800,
+        entries: vec![VulnCacheEntry {
+            package: "requests".to_string(),
+            ecosystem: "PyPI".to_string(),
+            version: "2.25.0".to_string(),
+            vulnerabilities: vec![CachedVulnerability {
+                id: "GHSA-j8r2-6x86-q33q".to_string(),
+                summary: "Requests Proxy-Authorization leak".to_string(),
+                severity: "HIGH".to_string(),
+                fixed_in: Some("2.31.0".to_string()),
+            }],
+        }],
+    };
+    mgr.save_cache(&initial_cache).expect("save initial cache");
+
+    // Point to non-routable port to force immediate network failure during refresh
+    let analyzer = SecurityAnalyzer::with_endpoint(
+        false,
+        true, // refresh_cache = true
+        cache_path,
+        "http://127.0.0.1:9",
+    );
+
+    let (diags, vuln_summary) = analyzer.scan_with_status(&ctx).expect("scan_with_status");
+
+    // SEC-002 (stale cache) AND SEC-003 (refresh failure) must both be present
+    let sec002 = diags.iter().find(|d| d.rule_id.0 == "SEC-002");
+    assert!(
+        sec002.is_some(),
+        "SEC-002 must be emitted for expired cache: {:?}",
+        diags
+    );
+
+    let sec003 = diags.iter().find(|d| d.rule_id.0 == "SEC-003");
+    assert!(
+        sec003.is_some(),
+        "SEC-003 must be emitted for refresh failure: {:?}",
+        diags
+    );
+
+    let summary = vuln_summary.expect("summary should be present");
+    assert_eq!(
+        summary.status,
+        stackvet_core::VulnerabilityCheckStatus::CompletedWithWarnings
+    );
+    // Cache status must remain "stale", NOT overwritten to "cached"
+    assert_eq!(
+        summary.cache_status.as_deref(),
+        Some("stale"),
+        "Expired cache must retain 'stale' status even on refresh failure"
+    );
+    assert!(
+        summary.message.contains("refresh failed"),
+        "Summary message should mention refresh failure: {}",
+        summary.message
+    );
+}

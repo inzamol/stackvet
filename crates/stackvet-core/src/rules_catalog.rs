@@ -868,6 +868,14 @@ pub static ALL_RULES: &[RuleMeta] = &[
         description: "Vulnerability analysis was performed using a local cache that has exceeded its configured time-to-live (TTL).",
         remediation: "Run with '--refresh-vuln-cache' or verify internet access to update the local advisory database.",
     },
+    RuleMeta {
+        id: "SEC-003",
+        category: "security",
+        title: "Vulnerability advisory database refresh failed",
+        severity: "WARNING",
+        description: "A refresh of the vulnerability advisory database was requested or attempted, but failed due to a network or service error. StackVet will continue using cached advisory data.",
+        remediation: "Check your internet connection, verify proxy settings, or run without '--refresh-vuln-cache' to use cached advisories.",
+    },
 
     RuleMeta {
         id: "SQL-001",

@@ -251,3 +251,53 @@ fn test_oversized_manifest_tracked_in_manifest_files_for_cache() {
 
     let _ = fs::remove_dir_all(&repo);
 }
+
+#[test]
+fn test_cli_fail_on_incomplete_exits_code_4_when_sec001_disabled_in_config() {
+    let repo = make_temp_repo("sec001_disabled_incomplete");
+
+    // Valid python dependencies, but offline and no cache -> vulnerability check skipped
+    fs::write(repo.join("requirements.txt"), "requests==2.25.0\n").unwrap();
+    // Disable SEC-001 in configuration
+    fs::write(
+        repo.join(".stackvet.toml"),
+        "[rules.SEC-001]\nenabled = false\n",
+    )
+    .unwrap();
+
+    let exe = env!("CARGO_BIN_EXE_stackvet");
+
+    // 1. Check with --fail-on-incomplete and --offline: must exit with code 4 even though SEC-001 is disabled
+    let output = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--offline")
+        .arg("check")
+        .arg("--fail-on-incomplete")
+        .output()
+        .expect("Run stackvet check");
+
+    assert_eq!(
+        output.status.code(),
+        Some(ExitCode::IncompleteAnalysis.as_i32()),
+        "Expected exit code 4 (IncompleteAnalysis) when vulnerability check skipped"
+    );
+
+    // 2. Scan with --format json: summary is_complete must be false
+    let json_output = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run stackvet scan json");
+
+    let stdout = String::from_utf8_lossy(&json_output.stdout);
+    let val: serde_json::Value = serde_json::from_str(&stdout).expect("parse json");
+    assert_eq!(val["summary"]["is_complete"], false);
+    assert_eq!(val["summary"]["vulnerability_check"]["status"], "skipped");
+
+    let _ = fs::remove_dir_all(&repo);
+}

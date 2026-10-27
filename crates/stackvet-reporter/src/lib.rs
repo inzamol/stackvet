@@ -32,6 +32,8 @@ fn default_true() -> bool {
     true
 }
 
+pub use stackvet_core::{VulnerabilityCheckStatus, VulnerabilityCheckSummary};
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReportSummary {
     pub total_issues: usize,
@@ -45,6 +47,8 @@ pub struct ReportSummary {
     pub is_complete: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub incomplete_reasons: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vulnerability_check: Option<VulnerabilityCheckSummary>,
 }
 
 impl Default for ReportSummary {
@@ -59,6 +63,7 @@ impl Default for ReportSummary {
             fixable_count: 0,
             is_complete: true,
             incomplete_reasons: Vec::new(),
+            vulnerability_check: None,
         }
     }
 }
@@ -89,7 +94,90 @@ impl ReportSummary {
                 }
             }
         }
+
+        // Evaluate vulnerability scan status from diagnostics
+        let sec_001 = diagnostics.iter().find(|d| d.rule_id.0 == "SEC-001");
+        let sec_002 = diagnostics.iter().find(|d| d.rule_id.0 == "SEC-002");
+        let sec_003 = diagnostics.iter().find(|d| d.rule_id.0 == "SEC-003");
+        let dep_006_count = diagnostics
+            .iter()
+            .filter(|d| d.rule_id.0 == "DEP-006")
+            .count();
+
+        if let Some(d) = sec_001 {
+            summary.is_complete = false;
+            let reason = format!("{}: {}", d.rule_id.0, d.message);
+            if !summary.incomplete_reasons.contains(&reason) {
+                summary.incomplete_reasons.push(reason);
+            }
+            let is_offline = d.message.to_lowercase().contains("offline mode");
+            let is_corrupted = d.message.to_lowercase().contains("corrupt");
+            let (status, cache_status) = if is_offline {
+                (VulnerabilityCheckStatus::Skipped, "missing")
+            } else if is_corrupted {
+                (VulnerabilityCheckStatus::Failed, "corrupted")
+            } else {
+                (VulnerabilityCheckStatus::Failed, "missing")
+            };
+            summary.vulnerability_check = Some(VulnerabilityCheckSummary {
+                status,
+                message: d.message.clone(),
+                advisory_database: Some("OSV.dev".to_string()),
+                cache_status: Some(cache_status.to_string()),
+                vulnerabilities_found: None,
+            });
+        } else if sec_003.is_some() || sec_002.is_some() {
+            let cache_status = if sec_002.is_some() { "stale" } else { "cached" };
+            let msg = if let Some(s3) = sec_003 {
+                s3.message.clone()
+            } else {
+                sec_002.unwrap().message.clone()
+            };
+            summary.vulnerability_check = Some(VulnerabilityCheckSummary {
+                status: VulnerabilityCheckStatus::CompletedWithWarnings,
+                message: msg,
+                advisory_database: Some("OSV.dev".to_string()),
+                cache_status: Some(cache_status.to_string()),
+                vulnerabilities_found: Some(dep_006_count),
+            });
+        } else if dep_006_count > 0 {
+            // DEP-006 findings are present without SEC- warnings
+            summary.vulnerability_check = Some(VulnerabilityCheckSummary {
+                status: VulnerabilityCheckStatus::Completed,
+                message: format!(
+                    "Vulnerability check completed: {} finding(s) detected via OSV.dev",
+                    dep_006_count
+                ),
+                advisory_database: Some("OSV.dev".to_string()),
+                cache_status: None,
+                vulnerabilities_found: Some(dep_006_count),
+            });
+        } else {
+            // Do NOT infer a completed fresh vulnerability check simply from the absence of SEC-* diagnostics.
+            // Scans that were not run or without observed outcome remain None here.
+            summary.vulnerability_check = None;
+        }
+
         summary
+    }
+
+    pub fn with_vulnerability_check(mut self, check: VulnerabilityCheckSummary) -> Self {
+        if matches!(
+            check.status,
+            VulnerabilityCheckStatus::Failed | VulnerabilityCheckStatus::Skipped
+        ) {
+            self.is_complete = false;
+            let reason = if check.message.starts_with("SEC-") {
+                check.message.clone()
+            } else {
+                format!("SEC-001: {}", check.message)
+            };
+            if !self.incomplete_reasons.contains(&reason) {
+                self.incomplete_reasons.push(reason);
+            }
+        }
+        self.vulnerability_check = Some(check);
+        self
     }
 
     pub fn mark_incomplete(&mut self, reason: impl Into<String>) {
@@ -124,17 +212,27 @@ fn default_schema_version() -> String {
 #[derive(Debug, Clone, Default)]
 pub struct Reporter {
     scan_root: Option<std::path::PathBuf>,
+    vulnerability_check: Option<VulnerabilityCheckSummary>,
 }
 
 impl Reporter {
     pub fn new() -> Self {
-        Self { scan_root: None }
+        Self {
+            scan_root: None,
+            vulnerability_check: None,
+        }
     }
 
     pub fn with_root(scan_root: impl Into<std::path::PathBuf>) -> Self {
         Self {
             scan_root: Some(scan_root.into()),
+            vulnerability_check: None,
         }
+    }
+
+    pub fn with_vulnerability_check(mut self, check: VulnerabilityCheckSummary) -> Self {
+        self.vulnerability_check = Some(check);
+        self
     }
 
     /// Renders text report with scorecard, deduction breakdown, root causes, and diagnostics table
@@ -255,13 +353,58 @@ impl Reporter {
         };
 
         out.push_str(&format!(
-            "  Metrics:       {}  │  {}  │  {}  │  {}\n\n",
+            "  Metrics:       {}  │  {}  │  {}  │  {}\n",
             crit_str, err_str, warn_str, info_str
         ));
 
+        let summary_model = ReportSummary::from_diagnostics(diagnostics);
+        let v_check_opt = self
+            .vulnerability_check
+            .as_ref()
+            .or(summary_model.vulnerability_check.as_ref());
+        if let Some(v_check) = v_check_opt {
+            let sec_str = match v_check.status {
+                VulnerabilityCheckStatus::Completed => {
+                    let count = v_check.vulnerabilities_found.unwrap_or(0);
+                    if count == 0 {
+                        "✓ Clean (0 known vulnerabilities via OSV.dev)"
+                            .green()
+                            .to_string()
+                    } else {
+                        format!(
+                            "✗ {} known vulnerability finding(s) detected via OSV.dev",
+                            count
+                        )
+                        .red()
+                        .bold()
+                        .to_string()
+                    }
+                }
+                VulnerabilityCheckStatus::CompletedWithWarnings => {
+                    format!("▲ Completed with fallback ({})", v_check.message)
+                        .yellow()
+                        .bold()
+                        .to_string()
+                }
+                VulnerabilityCheckStatus::Skipped => format!("⚠ Skipped ({})", v_check.message)
+                    .yellow()
+                    .bold()
+                    .to_string(),
+                VulnerabilityCheckStatus::Failed => format!("✗ Unavailable ({})", v_check.message)
+                    .red()
+                    .bold()
+                    .to_string(),
+                VulnerabilityCheckStatus::NotRun => format!("- Not run ({})", v_check.message)
+                    .dimmed()
+                    .to_string(),
+            };
+            out.push_str(&format!("  Security:      {}\n", sec_str));
+        }
+        out.push('\n');
+
         let disc_diags: Vec<_> = diagnostics
             .iter()
-            .filter(|d| d.rule_id.0.starts_with("DISC-"))
+            .filter(|d| d.rule_id.0.starts_with("DISC-") || d.rule_id.0 == "SEC-001")
             .collect();
         if !disc_diags.is_empty() {
             out.push_str(
@@ -465,10 +608,14 @@ impl Reporter {
         diagnostics: &[Diagnostic],
         explanation: Option<&HealthScoreExplanation>,
     ) -> Result<String> {
+        let mut summary = ReportSummary::from_diagnostics(diagnostics);
+        if let Some(ref vc) = self.vulnerability_check {
+            summary = summary.with_vulnerability_check(vc.clone());
+        }
         let report = FullReport {
             schema_version: SCHEMA_VERSION.to_string(),
             tool: ToolInfo::default(),
-            summary: ReportSummary::from_diagnostics(diagnostics),
+            summary,
             health_score: score,
             grade: grade.to_string(),
             root_causes: root_causes.to_vec(),
@@ -669,13 +816,52 @@ impl Reporter {
             driver_obj["rules"] = serde_json::Value::Array(driver_rules);
         }
 
+        let execution_successful = !diagnostics
+            .iter()
+            .any(|d| d.rule_id.0 == "SEC-001" || d.rule_id.0.starts_with("DISC-"));
+        let mut notifications = Vec::new();
+        for d in diagnostics
+            .iter()
+            .filter(|d| d.rule_id.0 == "SEC-001" || d.rule_id.0.starts_with("DISC-"))
+        {
+            notifications.push(serde_json::json!({
+                "descriptor": { "id": d.rule_id.0 },
+                "level": match d.severity {
+                    Severity::Critical | Severity::Error => "error",
+                    _ => "warning",
+                },
+                "message": { "text": d.message }
+            }));
+        }
+        let mut invocation_obj = serde_json::json!({
+            "executionSuccessful": execution_successful,
+        });
+        if !notifications.is_empty() {
+            invocation_obj["toolExecutionNotifications"] = serde_json::Value::Array(notifications);
+        }
+
+        let summary_model = ReportSummary::from_diagnostics(diagnostics);
+        let v_check_opt = self
+            .vulnerability_check
+            .as_ref()
+            .or(summary_model.vulnerability_check.as_ref());
+
         let mut run_obj = serde_json::json!({
             "tool": {
                 "driver": driver_obj
             },
+            "invocations": [invocation_obj],
             "columnKind": "unicodeCodePoints",
             "results": results
         });
+
+        if let Some(v_check) = v_check_opt {
+            let v_val = serde_json::to_value(v_check)?;
+            run_obj["properties"] = serde_json::json!({
+                "vulnerability_check": v_val.clone(),
+                "vulnerabilityCheck": v_val
+            });
+        }
 
         let effective_root = scan_root
             .map(|r| r.to_path_buf())

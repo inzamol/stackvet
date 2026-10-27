@@ -53,6 +53,8 @@ pub struct ScanCacheData {
     pub files: BTreeMap<String, FileCacheEntry>,
     #[serde(default)]
     pub project_diagnostics: Vec<Diagnostic>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vulnerability_check: Option<stackvet_core::VulnerabilityCheckSummary>,
 }
 
 impl ScanCacheData {
@@ -69,6 +71,7 @@ impl ScanCacheData {
             manifest_hashes: BTreeMap::new(),
             files: BTreeMap::new(),
             project_diagnostics: Vec::new(),
+            vulnerability_check: None,
         }
     }
 }
@@ -128,6 +131,7 @@ impl ScanChanges {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
 pub enum CacheValidationResult {
     Valid {
         cached_data: ScanCacheData,
