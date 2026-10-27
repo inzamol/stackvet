@@ -826,6 +826,12 @@ impl Reporter {
             invocation_obj["toolExecutionNotifications"] = serde_json::Value::Array(notifications);
         }
 
+        let summary_model = ReportSummary::from_diagnostics(diagnostics);
+        let v_check_opt = self
+            .vulnerability_check
+            .as_ref()
+            .or(summary_model.vulnerability_check.as_ref());
+
         let mut run_obj = serde_json::json!({
             "tool": {
                 "driver": driver_obj
@@ -834,6 +840,14 @@ impl Reporter {
             "columnKind": "unicodeCodePoints",
             "results": results
         });
+
+        if let Some(v_check) = v_check_opt {
+            let v_val = serde_json::to_value(v_check)?;
+            run_obj["properties"] = serde_json::json!({
+                "vulnerability_check": v_val.clone(),
+                "vulnerabilityCheck": v_val
+            });
+        }
 
         let effective_root = scan_root
             .map(|r| r.to_path_buf())

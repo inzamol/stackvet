@@ -676,6 +676,9 @@ fn test_text_and_sarif_vulnerability_status_consistency() {
         .as_array()
         .expect("notifications");
     assert_eq!(notifications[0]["descriptor"]["id"], "SEC-001");
+    let run_props = &sarif_val["runs"][0]["properties"];
+    assert_eq!(run_props["vulnerability_check"]["status"], "failed");
+    assert_eq!(run_props["vulnerabilityCheck"]["status"], "failed");
 
     // Case B: Clean scan
     let clean_reporter = Reporter::new().with_vulnerability_check(VulnerabilityCheckSummary {
@@ -698,6 +701,16 @@ fn test_text_and_sarif_vulnerability_status_consistency() {
         .as_array()
         .expect("clean invocations array");
     assert_eq!(clean_invocations[0]["executionSuccessful"], true);
+    let clean_run_props = &clean_sarif["runs"][0]["properties"];
+    assert_eq!(
+        clean_run_props["vulnerability_check"]["status"],
+        "completed"
+    );
+    assert_eq!(
+        clean_run_props["vulnerability_check"]["vulnerabilities_found"],
+        0
+    );
+    assert_eq!(clean_run_props["vulnerabilityCheck"]["status"], "completed");
 
     colored::control::unset_override();
 }
