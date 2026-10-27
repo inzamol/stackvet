@@ -624,3 +624,79 @@ fn test_invalid_json_response_triggers_refresh_failure_and_cache_fallback() {
 
     let _ = server_handle.join();
 }
+
+#[test]
+fn test_stale_cache_refresh_failure_retains_stale_status_and_emits_sec003_and_sec002() {
+    let dir = temp_test_dir("stale_cache_refresh_failure");
+    let ctx = create_dummy_python_context(&dir, &[("requests", "2.25.0")]);
+    let cache_path = dir.join("vulnerabilities.json");
+    let mgr = VulnCacheManager::with_custom_path(cache_path.clone());
+
+    // 10 days old with a 7 day TTL -> Stale
+    let stale_time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        - (10 * 86400);
+
+    let initial_cache = VulnDatabaseCache {
+        schema_version: "1.0.0".to_string(),
+        source: "osv.dev".to_string(),
+        last_updated: stale_time,
+        ttl_seconds: 604800,
+        entries: vec![VulnCacheEntry {
+            package: "requests".to_string(),
+            ecosystem: "PyPI".to_string(),
+            version: "2.25.0".to_string(),
+            vulnerabilities: vec![CachedVulnerability {
+                id: "GHSA-j8r2-6x86-q33q".to_string(),
+                summary: "Requests Proxy-Authorization leak".to_string(),
+                severity: "HIGH".to_string(),
+                fixed_in: Some("2.31.0".to_string()),
+            }],
+        }],
+    };
+    mgr.save_cache(&initial_cache).expect("save initial cache");
+
+    // Point to non-routable port to force immediate network failure during refresh
+    let analyzer = SecurityAnalyzer::with_endpoint(
+        false,
+        true, // refresh_cache = true
+        cache_path,
+        "http://127.0.0.1:9",
+    );
+
+    let (diags, vuln_summary) = analyzer.scan_with_status(&ctx).expect("scan_with_status");
+
+    // SEC-002 (stale cache) AND SEC-003 (refresh failure) must both be present
+    let sec002 = diags.iter().find(|d| d.rule_id.0 == "SEC-002");
+    assert!(
+        sec002.is_some(),
+        "SEC-002 must be emitted for expired cache: {:?}",
+        diags
+    );
+
+    let sec003 = diags.iter().find(|d| d.rule_id.0 == "SEC-003");
+    assert!(
+        sec003.is_some(),
+        "SEC-003 must be emitted for refresh failure: {:?}",
+        diags
+    );
+
+    let summary = vuln_summary.expect("summary should be present");
+    assert_eq!(
+        summary.status,
+        stackvet_core::VulnerabilityCheckStatus::CompletedWithWarnings
+    );
+    // Cache status must remain "stale", NOT overwritten to "cached"
+    assert_eq!(
+        summary.cache_status.as_deref(),
+        Some("stale"),
+        "Expired cache must retain 'stale' status even on refresh failure"
+    );
+    assert!(
+        summary.message.contains("refresh failed"),
+        "Summary message should mention refresh failure: {}",
+        summary.message
+    );
+}

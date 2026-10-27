@@ -307,7 +307,7 @@ impl SecurityAnalyzer {
                     .count();
                 let (cache_status_str, message) = if let Some(ref err) = refresh_failure_err {
                     (
-                        "cached",
+                        "stale",
                         format!("Vulnerability advisory database refresh failed: {err}. Falling back to existing local cache."),
                     )
                 } else {
