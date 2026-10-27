@@ -267,3 +267,128 @@ fn test_corrupt_cache_is_repaired_on_refresh() {
         "Repaired cache has fresh OSV entries"
     );
 }
+
+#[test]
+fn test_network_failure_with_missing_cache_emits_sec001_with_actionable_error() {
+    let dir = temp_test_dir("network_failure_missing_cache");
+    let ctx = create_dummy_python_context(&dir, &[("requests", "2.25.0")]);
+    let cache_path = dir.join("nonexistent_cache.json");
+
+    // Point to non-routable port to simulate immediate connection failure
+    let analyzer = SecurityAnalyzer::with_endpoint(false, false, cache_path, "http://127.0.0.1:9");
+    let diags = analyzer.analyze(&ctx).expect("analyze must succeed");
+
+    assert_eq!(diags.len(), 1);
+    assert_eq!(diags[0].rule_id.0, "SEC-001");
+    assert!(
+        diags[0]
+            .message
+            .contains("unavailable and no local cache was found"),
+        "Diagnostic message should indicate unavailable advisory database: {}",
+        diags[0].message
+    );
+    assert!(
+        diags[0]
+            .message
+            .contains("Network error connecting to OSV.dev"),
+        "Diagnostic message should include actionable network error: {}",
+        diags[0].message
+    );
+}
+
+#[test]
+fn test_network_refresh_failure_with_existing_cache_emits_sec003_and_uses_cache() {
+    let dir = temp_test_dir("network_refresh_failure_existing_cache");
+    let ctx = create_dummy_python_context(&dir, &[("requests", "2.25.0")]);
+    let cache_path = dir.join("vulnerabilities.json");
+    let mgr = VulnCacheManager::with_custom_path(cache_path.clone());
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let cache = VulnDatabaseCache {
+        schema_version: "1.0.0".to_string(),
+        source: "osv.dev".to_string(),
+        last_updated: now,
+        ttl_seconds: 604800,
+        entries: vec![VulnCacheEntry {
+            package: "requests".to_string(),
+            ecosystem: "PyPI".to_string(),
+            version: "2.25.0".to_string(),
+            vulnerabilities: vec![CachedVulnerability {
+                id: "GHSA-j8r2-6x86-q33q".to_string(),
+                summary: "Requests Proxy-Authorization leak".to_string(),
+                severity: "HIGH".to_string(),
+                fixed_in: Some("2.31.0".to_string()),
+            }],
+        }],
+    };
+    mgr.save_cache(&cache).expect("save cache");
+
+    let analyzer = SecurityAnalyzer::with_endpoint(false, true, cache_path, "http://127.0.0.1:9");
+    let diags = analyzer.analyze(&ctx).expect("analyze must succeed");
+
+    // SEC-003 must be emitted for refresh failure
+    let sec003 = diags.iter().find(|d| d.rule_id.0 == "SEC-003");
+    assert!(
+        sec003.is_some(),
+        "SEC-003 must be emitted when refresh fails but cache is present"
+    );
+    assert!(
+        sec003
+            .unwrap()
+            .message
+            .contains("Falling back to existing local cache"),
+        "SEC-003 should explain fallback: {}",
+        sec003.unwrap().message
+    );
+
+    // SEC-001 must NOT be emitted because local cache was available
+    let has_sec001 = diags.iter().any(|d| d.rule_id.0 == "SEC-001");
+    assert!(!has_sec001, "SEC-001 must not be emitted when cache exists");
+
+    // DEP-006 should still be emitted using the fallback cache
+    let has_dep006 = diags.iter().any(|d| d.rule_id.0 == "DEP-006");
+    assert!(
+        has_dep006,
+        "DEP-006 should be detected using the fallback cache"
+    );
+}
+
+#[test]
+fn test_fresh_cache_clean_result_has_no_sec_and_no_dep006() {
+    let dir = temp_test_dir("clean_cache");
+    let ctx = create_dummy_python_context(&dir, &[("safe-package", "1.0.0")]);
+    let cache_path = dir.join("vulnerabilities.json");
+    let mgr = VulnCacheManager::with_custom_path(cache_path.clone());
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let cache = VulnDatabaseCache {
+        schema_version: "1.0.0".to_string(),
+        source: "osv.dev".to_string(),
+        last_updated: now,
+        ttl_seconds: 604800,
+        entries: vec![VulnCacheEntry {
+            package: "safe-package".to_string(),
+            ecosystem: "PyPI".to_string(),
+            version: "1.0.0".to_string(),
+            vulnerabilities: vec![],
+        }],
+    };
+    mgr.save_cache(&cache).expect("save cache");
+
+    let analyzer = SecurityAnalyzer::with_cache_path(true, false, cache_path);
+    let diags = analyzer.analyze(&ctx).expect("analyze must succeed");
+
+    assert!(
+        diags.is_empty(),
+        "Clean scan must produce zero diagnostics, found: {:?}",
+        diags
+    );
+}

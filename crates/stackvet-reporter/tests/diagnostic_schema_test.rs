@@ -1,7 +1,10 @@
 use stackvet_core::{
     Confidence, Diagnostic, DiagnosticLocation, FixAction, LanguageTarget, Severity, TextSpan,
 };
-use stackvet_reporter::{FullReport, ReportSummary, Reporter, ToolInfo, SCHEMA_VERSION};
+use stackvet_reporter::{
+    FullReport, ReportSummary, Reporter, ToolInfo, VulnerabilityCheckStatus,
+    VulnerabilityCheckSummary, SCHEMA_VERSION,
+};
 
 #[test]
 fn test_schema_version_and_metadata() {
@@ -89,6 +92,8 @@ fn test_json_report_serialization_and_deserialization() {
     // Deserialize into typed FullReport
     let report: FullReport = serde_json::from_str(&json_str).expect("deserialize FullReport");
     assert_eq!(report.schema_version, "1.0.0");
+    let check: &VulnerabilityCheckSummary = report.summary.vulnerability_check.as_ref().unwrap();
+    assert_eq!(check.status, VulnerabilityCheckStatus::Completed);
     assert_eq!(report.diagnostics.len(), 1);
     assert_eq!(report.diagnostics[0].rule_id.as_str(), "IMP-001");
     assert_eq!(report.diagnostics[0].related_locations.len(), 1);
@@ -551,4 +556,119 @@ fn test_sarif_multiline_spans_and_severities() {
 
     // Hint maps to note
     assert_eq!(results[3]["level"], "note");
+}
+
+#[test]
+fn test_vulnerability_check_status_distinguishes_clean_from_skipped_and_failed() {
+    // 1. Clean scan (0 vulnerabilities detected)
+    let clean_diags: Vec<Diagnostic> = vec![];
+    let clean_summary = ReportSummary::from_diagnostics(&clean_diags);
+    assert!(clean_summary.is_complete);
+    let v_clean = clean_summary
+        .vulnerability_check
+        .expect("vulnerability_check present");
+    assert_eq!(v_clean.status, VulnerabilityCheckStatus::Completed);
+    assert_eq!(v_clean.cache_status.as_deref(), Some("fresh"));
+    assert_eq!(v_clean.advisory_database.as_deref(), Some("OSV.dev"));
+    assert_eq!(v_clean.vulnerabilities_found, Some(0));
+
+    // 2. Offline skipped check
+    let skipped_diag = Diagnostic::builder("SEC-001", Severity::Warning, LanguageTarget::General)
+        .message("Vulnerability checks skipped: offline mode is active and no local vulnerability cache was found")
+        .build();
+    let skipped_summary = ReportSummary::from_diagnostics(&[skipped_diag]);
+    assert!(!skipped_summary.is_complete);
+    assert!(skipped_summary
+        .incomplete_reasons
+        .iter()
+        .any(|r| r.contains("SEC-001")));
+    let v_skipped = skipped_summary
+        .vulnerability_check
+        .expect("vulnerability_check present");
+    assert_eq!(v_skipped.status, VulnerabilityCheckStatus::Skipped);
+    assert_eq!(v_skipped.cache_status.as_deref(), Some("missing"));
+    assert_eq!(v_skipped.vulnerabilities_found, None);
+
+    // 3. Failed check due to network failure
+    let failed_diag = Diagnostic::builder("SEC-001", Severity::Warning, LanguageTarget::General)
+        .message("The vulnerability advisory database (OSV.dev) is unavailable and no local cache was found: Network error connecting to OSV.dev advisory database: connection timed out")
+        .build();
+    let failed_summary = ReportSummary::from_diagnostics(&[failed_diag]);
+    assert!(!failed_summary.is_complete);
+    let v_failed = failed_summary
+        .vulnerability_check
+        .expect("vulnerability_check present");
+    assert_eq!(v_failed.status, VulnerabilityCheckStatus::Failed);
+    assert_eq!(v_failed.cache_status.as_deref(), Some("missing"));
+    assert_eq!(v_failed.vulnerabilities_found, None);
+    assert!(v_failed.message.contains("connection timed out"));
+
+    // 4. Completed with warnings due to refresh failure fallback (SEC-003)
+    let sec003_diag = Diagnostic::builder("SEC-003", Severity::Warning, LanguageTarget::General)
+        .message("Vulnerability advisory database refresh failed: network error. Falling back to existing local cache.")
+        .build();
+    let warn_summary = ReportSummary::from_diagnostics(&[sec003_diag]);
+    assert!(warn_summary.is_complete);
+    let v_warn = warn_summary
+        .vulnerability_check
+        .expect("vulnerability_check present");
+    assert_eq!(
+        v_warn.status,
+        VulnerabilityCheckStatus::CompletedWithWarnings
+    );
+    assert_eq!(v_warn.cache_status.as_deref(), Some("cached"));
+    assert_eq!(v_warn.vulnerabilities_found, Some(0));
+
+    // 5. Completed with findings (DEP-006)
+    let dep006_diag = Diagnostic::builder("DEP-006", Severity::Error, LanguageTarget::General)
+        .message("Vulnerable dependency 'requests==2.25.0' (GHSA-j8r2-6x86-q33q)")
+        .build();
+    let finding_summary = ReportSummary::from_diagnostics(&[dep006_diag]);
+    assert!(finding_summary.is_complete);
+    let v_finding = finding_summary
+        .vulnerability_check
+        .expect("vulnerability_check present");
+    assert_eq!(v_finding.status, VulnerabilityCheckStatus::Completed);
+    assert_eq!(v_finding.vulnerabilities_found, Some(1));
+}
+
+#[test]
+fn test_text_and_sarif_vulnerability_status_consistency() {
+    let reporter = Reporter::new();
+
+    // Case A: Unavailable security checks
+    let unavailable_diag = Diagnostic::builder("SEC-001", Severity::Warning, LanguageTarget::General)
+        .message("The vulnerability advisory database (OSV.dev) is unavailable and no local cache was found: Network error")
+        .build();
+
+    let text_output =
+        reporter.render_text(80, "B", &[], std::slice::from_ref(&unavailable_diag), None);
+    assert!(text_output.contains("Security:      ✗ Unavailable"));
+    assert!(text_output.contains("Incomplete Analysis / Scanner Hardening Notices"));
+    assert!(text_output.contains("SEC-001"));
+
+    let sarif_output = reporter
+        .render_sarif(&[unavailable_diag])
+        .expect("render sarif");
+    let sarif_val: serde_json::Value = serde_json::from_str(&sarif_output).expect("parse sarif");
+    let invocations = sarif_val["runs"][0]["invocations"]
+        .as_array()
+        .expect("invocations array");
+    assert_eq!(invocations[0]["executionSuccessful"], false);
+    let notifications = invocations[0]["toolExecutionNotifications"]
+        .as_array()
+        .expect("notifications");
+    assert_eq!(notifications[0]["descriptor"]["id"], "SEC-001");
+
+    // Case B: Clean scan
+    let clean_text = reporter.render_text(100, "A+", &[], &[], None);
+    assert!(clean_text.contains("Security:      ✓ Clean (0 known vulnerabilities via OSV.dev)"));
+
+    let clean_sarif_output = reporter.render_sarif(&[]).expect("render clean sarif");
+    let clean_sarif: serde_json::Value =
+        serde_json::from_str(&clean_sarif_output).expect("parse clean sarif");
+    let clean_invocations = clean_sarif["runs"][0]["invocations"]
+        .as_array()
+        .expect("clean invocations array");
+    assert_eq!(clean_invocations[0]["executionSuccessful"], true);
 }

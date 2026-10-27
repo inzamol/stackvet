@@ -56,6 +56,11 @@
 - **Description:** Vulnerability analysis was performed using a local cache that has exceeded its configured time-to-live (TTL).
 - **Remediation:** Run with '--refresh-vuln-cache' or verify internet access to update the local advisory database.
 
+### 2.3 SEC-003: Vulnerability Advisory Database Refresh Failed
+- **Default Severity:** `WARNING`
+- **Description:** A refresh of the vulnerability advisory database was requested or attempted, but failed due to a network or service error. StackVet will continue using cached advisory data.
+- **Remediation:** Check your internet connection, verify proxy settings, or run without '--refresh-vuln-cache' to use cached advisories.
+
 
 ---
 

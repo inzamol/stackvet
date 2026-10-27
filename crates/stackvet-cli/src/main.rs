@@ -1220,7 +1220,7 @@ fn scan_and_collect_diagnostics(
             } else {
                 p.clone()
             };
-            if d.rule_id.0.starts_with("DISC-")
+            if (d.rule_id.0.starts_with("DISC-") || d.rule_id.0.starts_with("SEC-"))
                 && (p.as_os_str().is_empty() || full_p == project_root)
             {
                 return true;
@@ -1560,7 +1560,7 @@ async fn main() -> Result<()> {
             } else {
                 p.clone()
             };
-            if d.rule_id.0.starts_with("DISC-")
+            if (d.rule_id.0.starts_with("DISC-") || d.rule_id.0.starts_with("SEC-"))
                 && (p.as_os_str().is_empty() || full_p == project_root)
             {
                 return true;
@@ -1716,7 +1716,9 @@ async fn main() -> Result<()> {
             }
 
             if (cli.fail_on_incomplete || config.scanner.fail_on_incomplete)
-                && diagnostics.iter().any(|d| d.rule_id.0.starts_with("DISC-"))
+                && diagnostics
+                    .iter()
+                    .any(|d| d.rule_id.0.starts_with("DISC-") || d.rule_id.0 == "SEC-001")
             {
                 ExitCode::IncompleteAnalysis.exit();
             }
@@ -1733,7 +1735,9 @@ async fn main() -> Result<()> {
         }) => {
             let should_fail_incomplete =
                 *fail_on_incomplete || cli.fail_on_incomplete || config.scanner.fail_on_incomplete;
-            let has_incomplete = diagnostics.iter().any(|d| d.rule_id.0.starts_with("DISC-"));
+            let has_incomplete = diagnostics
+                .iter()
+                .any(|d| d.rule_id.0.starts_with("DISC-") || d.rule_id.0 == "SEC-001");
             let cli_fail_on = match fail_on.as_deref().map(parse_severity).transpose() {
                 Ok(sev) => sev,
                 Err(e) => {
@@ -1807,7 +1811,7 @@ async fn main() -> Result<()> {
                         if should_fail_incomplete && has_incomplete {
                             eprintln!(
                                 "{}",
-                                "✗ Baseline CI Check Incomplete: Malformed files, syntax errors, or scanner limit exhaustion detected."
+                                "✗ Baseline CI Check Incomplete: Malformed files, syntax errors, scanner limit exhaustion, or unavailable security checks detected."
                                     .red()
                                     .bold()
                             );
@@ -1952,7 +1956,7 @@ async fn main() -> Result<()> {
                         if should_fail_incomplete && has_incomplete {
                             eprintln!(
                                 "{}",
-                                "✗ CI Check Incomplete: Malformed files, syntax errors, or scanner limit exhaustion detected."
+                                "✗ CI Check Incomplete: Malformed files, syntax errors, scanner limit exhaustion, or unavailable security checks detected."
                                     .red()
                                     .bold()
                             );

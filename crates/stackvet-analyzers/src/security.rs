@@ -9,6 +9,7 @@ pub struct SecurityAnalyzer {
     pub offline: bool,
     pub refresh_cache: bool,
     pub custom_cache_path: Option<PathBuf>,
+    pub custom_osv_url: Option<String>,
 }
 
 impl SecurityAnalyzer {
@@ -17,6 +18,7 @@ impl SecurityAnalyzer {
             offline,
             refresh_cache,
             custom_cache_path: None,
+            custom_osv_url: None,
         }
     }
 
@@ -25,6 +27,21 @@ impl SecurityAnalyzer {
             offline,
             refresh_cache,
             custom_cache_path: Some(cache_path),
+            custom_osv_url: None,
+        }
+    }
+
+    pub fn with_endpoint(
+        offline: bool,
+        refresh_cache: bool,
+        cache_path: PathBuf,
+        osv_url: impl Into<String>,
+    ) -> Self {
+        Self {
+            offline,
+            refresh_cache,
+            custom_cache_path: Some(cache_path),
+            custom_osv_url: Some(osv_url.into()),
         }
     }
 
@@ -127,9 +144,11 @@ impl Analyzer for SecurityAnalyzer {
             }
         };
 
+        let mut refresh_failure_err: Option<String> = None;
+
         // If refresh requested or if cache is missing and not offline, fetch fresh advisories from OSV
         if (self.refresh_cache || cache_opt.is_none()) && !self.offline {
-            match fetch_advisories_from_osv(&packages_to_audit) {
+            match fetch_advisories_from_osv(&packages_to_audit, self.custom_osv_url.as_deref()) {
                 Ok(new_entries) => {
                     let mut cache =
                         cache_opt.unwrap_or_else(|| VulnDatabaseCache::new(mgr.ttl_seconds()));
@@ -157,8 +176,30 @@ impl Analyzer for SecurityAnalyzer {
                 }
                 Err(err) => {
                     tracing::warn!("Failed to refresh vulnerability cache from OSV.dev: {err}");
+                    refresh_failure_err = Some(err.to_string());
                     // Do NOT bump last_updated if network fetch failed
                 }
+            }
+        }
+
+        if let Some(ref err) = refresh_failure_err {
+            if cache_opt.is_some() && self.refresh_cache {
+                let primary_manifest = packages_to_audit[0].3.clone();
+                diagnostics.push(
+                    Diagnostic::builder("SEC-003", Severity::Warning, LanguageTarget::General)
+                        .message(format!(
+                            "Vulnerability advisory database refresh failed: {err}. Falling back to existing local cache."
+                        ))
+                        .file(&primary_manifest)
+                        .explanation(
+                            "A refresh of the vulnerability advisory database was requested or attempted, but failed due to a network or service error. StackVet will continue using cached advisory data, which may be outdated.",
+                        )
+                        .remediation(
+                            "Check your internet connection, verify proxy settings, or run without '--refresh-vuln-cache' to use cached advisories.",
+                        )
+                        .confidence(Confidence::High)
+                        .build(),
+                );
             }
         }
 
@@ -174,20 +215,28 @@ impl Analyzer for SecurityAnalyzer {
                     )
                 } else if self.offline {
                     "Vulnerability checks skipped: offline mode is active and no local vulnerability cache was found at .stackvet/cache/vulnerabilities.json".to_string()
+                } else if let Some(ref err) = refresh_failure_err {
+                    format!(
+                        "The vulnerability advisory database (OSV.dev) is unavailable and no local cache was found: {err}"
+                    )
                 } else {
                     "The vulnerability advisory database (OSV.dev) is unavailable and no local cache was found".to_string()
                 };
 
                 let explanation = if cache_corrupted {
                     "The vulnerability database cache file contains invalid JSON or an incompatible schema. Vulnerability scanning cannot be performed with corrupted advisory data."
+                } else if self.offline {
+                    "Offline mode was specified, but no local vulnerability cache is available. Vulnerability checks cannot be performed."
                 } else {
                     "StackVet requires a vulnerability database to detect known CVEs in project dependencies. Without a connection or local cache, vulnerability scanning cannot be performed."
                 };
 
                 let remediation = if cache_corrupted {
                     "Run 'stackvet scan --refresh-vuln-cache' to overwrite and repair the local advisory database cache, or delete the corrupted cache file."
+                } else if self.offline {
+                    "Disable offline mode or run 'stackvet scan --refresh-vuln-cache' while connected to the internet to pre-populate the vulnerability database."
                 } else {
-                    "Connect to the internet and run 'stackvet scan --refresh-vuln-cache' to populate the local vulnerability database."
+                    "Check your internet connection, verify firewall or proxy settings, and run 'stackvet scan --refresh-vuln-cache' to populate the local vulnerability database."
                 };
 
                 diagnostics.push(
@@ -350,6 +399,7 @@ where
 
 async fn fetch_advisories_from_osv_async(
     packages: &[(String, String, String, PathBuf)],
+    custom_url: Option<&str>,
 ) -> Result<Vec<VulnCacheEntry>> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
@@ -359,6 +409,7 @@ async fn fetch_advisories_from_osv_async(
     let mut entries = Vec::new();
     let mut any_network_error = false;
     let mut any_success = false;
+    let mut last_error_msg = None;
 
     for (pkg, eco, ver, _) in packages {
         let payload = serde_json::json!({
@@ -369,12 +420,10 @@ async fn fetch_advisories_from_osv_async(
             "version": ver,
         });
 
-        let resp = match client
-            .post("https://api.osv.dev/v1/query")
-            .json(&payload)
-            .send()
-            .await
-        {
+        let default_url = "https://api.osv.dev/v1/query";
+        let osv_endpoint = custom_url.unwrap_or(default_url);
+
+        let resp = match client.post(osv_endpoint).json(&payload).send().await {
             Ok(r) => {
                 any_success = true;
                 r
@@ -382,11 +431,16 @@ async fn fetch_advisories_from_osv_async(
             Err(e) => {
                 tracing::warn!("Failed to query OSV for {pkg}@{ver}: {e}");
                 any_network_error = true;
+                last_error_msg = Some(e.to_string());
                 continue;
             }
         };
 
         if !resp.status().is_success() {
+            let status = resp.status();
+            tracing::warn!("OSV query for {pkg}@{ver} returned HTTP status {status}");
+            any_network_error = true;
+            last_error_msg = Some(format!("HTTP status {status}"));
             continue;
         }
 
@@ -432,7 +486,11 @@ async fn fetch_advisories_from_osv_async(
     }
 
     if any_network_error && !any_success {
-        anyhow::bail!("Network error: could not connect to OSV.dev advisory database");
+        if let Some(err) = last_error_msg {
+            anyhow::bail!("Network error connecting to OSV.dev advisory database: {err}");
+        } else {
+            anyhow::bail!("Network error: could not connect to OSV.dev advisory database");
+        }
     }
 
     Ok(entries)
@@ -440,6 +498,7 @@ async fn fetch_advisories_from_osv_async(
 
 fn fetch_advisories_from_osv(
     packages: &[(String, String, String, PathBuf)],
+    custom_url: Option<&str>,
 ) -> Result<Vec<VulnCacheEntry>> {
-    run_async_future(fetch_advisories_from_osv_async(packages))
+    run_async_future(fetch_advisories_from_osv_async(packages, custom_url))
 }
