@@ -538,9 +538,17 @@ fn collect_all_diagnostics(
     config: &StackvetConfig,
     offline: bool,
     refresh_vuln_cache: bool,
-) -> Result<(Vec<stackvet_core::Diagnostic>, usize)> {
-    let mut diagnostics =
-        stackvet_analyzers::run_all_analyzers_with_options(ctx, offline, refresh_vuln_cache)?;
+) -> Result<(
+    Vec<stackvet_core::Diagnostic>,
+    usize,
+    Option<stackvet_core::VulnerabilityCheckSummary>,
+)> {
+    let (mut diagnostics, vuln_summary) =
+        stackvet_analyzers::run_all_analyzers_with_options_and_status(
+            ctx,
+            offline,
+            refresh_vuln_cache,
+        )?;
     let mut fw_diags = run_all_framework_analyzers(ctx)?;
     diagnostics.append(&mut fw_diags);
 
@@ -556,7 +564,7 @@ fn collect_all_diagnostics(
     let (mut deduped, duplicates_count) = deduplicate_diagnostics(&diagnostics);
     sort_diagnostics_deterministic(&mut deduped);
 
-    Ok((deduped, duplicates_count))
+    Ok((deduped, duplicates_count, vuln_summary))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -569,7 +577,12 @@ fn collect_diagnostics_incremental(
     refresh_vuln_cache: bool,
     verbose: bool,
     custom_cache_dir: Option<&Path>,
-) -> Result<(Vec<stackvet_core::Diagnostic>, usize, bool)> {
+) -> Result<(
+    Vec<stackvet_core::Diagnostic>,
+    usize,
+    Option<stackvet_core::VulnerabilityCheckSummary>,
+    bool,
+)> {
     let resolve_cache_dir = |dir: &Path| -> PathBuf {
         if dir.is_absolute() {
             dir.to_path_buf()
@@ -602,7 +615,7 @@ fn collect_diagnostics_incremental(
             mut cached_data,
             changes,
         } => {
-            if !changes.has_changes() {
+            if !changes.has_changes() && !refresh_vuln_cache {
                 if verbose {
                     println!(
                         "{}",
@@ -622,7 +635,12 @@ fn collect_diagnostics_incremental(
 
                 let (mut deduped, duplicates_count) = deduplicate_diagnostics(&all_diags);
                 sort_diagnostics_deterministic(&mut deduped);
-                return Ok((deduped, duplicates_count, true));
+                return Ok((
+                    deduped,
+                    duplicates_count,
+                    cached_data.vulnerability_check,
+                    true,
+                ));
             }
 
             if verbose {
@@ -666,11 +684,12 @@ fn collect_diagnostics_incremental(
 
             // 3. Project-wide analyzers receive the full ctx.source_files so rules inspecting
             // full sets (unused deps, lockfile drift, import graph cycles) remain sound.
-            let mut project_wide_diags = stackvet_analyzers::run_all_analyzers_with_options(
-                ctx,
-                offline,
-                refresh_vuln_cache,
-            )?;
+            let (mut project_wide_diags, vuln_summary) =
+                stackvet_analyzers::run_all_analyzers_with_options_and_status(
+                    ctx,
+                    offline,
+                    refresh_vuln_cache,
+                )?;
             let custom_diags = stackvet_core::config::evaluate_custom_rules(
                 &ctx.root,
                 &ctx.source_files,
@@ -706,6 +725,7 @@ fn collect_diagnostics_incremental(
 
             // Replace cached project diagnostics with fresh results
             cached_data.project_diagnostics = fresh_project_diags;
+            cached_data.vulnerability_check = vuln_summary.clone();
             all_diags.extend(cached_data.project_diagnostics.clone());
 
             // Remove deleted files from cache
@@ -747,7 +767,7 @@ fn collect_diagnostics_incremental(
 
             let (mut deduped, duplicates_count) = deduplicate_diagnostics(&all_diags);
             sort_diagnostics_deterministic(&mut deduped);
-            Ok((deduped, duplicates_count, false))
+            Ok((deduped, duplicates_count, vuln_summary, false))
         }
         CacheValidationResult::Invalid(reason) => {
             if verbose {
@@ -758,10 +778,11 @@ fn collect_diagnostics_incremental(
                 );
             }
 
-            let (all_diags, duplicates_count) =
+            let (all_diags, duplicates_count, vuln_summary) =
                 collect_all_diagnostics(ctx, config, offline, refresh_vuln_cache)?;
 
             let mut new_cache = ScanCacheData::new(config_hash);
+            new_cache.vulnerability_check = vuln_summary.clone();
             for m in &ctx.manifest_files {
                 let rel = normalize_rel_path(root, m);
                 if let Ok(h) = hash_file_content(m) {
@@ -817,7 +838,7 @@ fn collect_diagnostics_incremental(
 
             let _ = cache_mgr.save(&new_cache);
 
-            Ok((all_diags, duplicates_count, false))
+            Ok((all_diags, duplicates_count, vuln_summary, false))
         }
     }
 }
@@ -1207,7 +1228,7 @@ fn scan_and_collect_diagnostics(
         root.to_path_buf()
     };
     let ctx = build_full_context(root, &project_root, config, cli_ignore, false, None)?;
-    let (raw, _) = collect_all_diagnostics(&ctx, config, offline, false)?;
+    let (raw, _, _) = collect_all_diagnostics(&ctx, config, offline, false)?;
     let after_rules = config.apply_rule_overrides(raw)?;
     let outcome = apply_suppressions(&project_root, &config.suppressions, after_rules, None);
     let mut diagnostics = outcome.active_diagnostics;
@@ -1220,7 +1241,10 @@ fn scan_and_collect_diagnostics(
             } else {
                 p.clone()
             };
-            if (d.rule_id.0.starts_with("DISC-") || d.rule_id.0.starts_with("SEC-"))
+            if d.rule_id.0.starts_with("SEC-") {
+                return true;
+            }
+            if d.rule_id.0.starts_with("DISC-")
                 && (p.as_os_str().is_empty() || full_p == project_root)
             {
                 return true;
@@ -1492,7 +1516,7 @@ async fn main() -> Result<()> {
     }
 
     let use_incremental = (cli.incremental || config.cache.enabled) && !cli.no_cache;
-    let (raw_diagnostics, duplicates_ignored) = if use_incremental {
+    let (raw_diagnostics, duplicates_ignored, vuln_check_summary) = if use_incremental {
         match collect_diagnostics_incremental(
             &project_root,
             &ctx,
@@ -1503,7 +1527,7 @@ async fn main() -> Result<()> {
             cli.verbose,
             cli.cache_dir.as_deref(),
         ) {
-            Ok((diags, dupes, _)) => (diags, dupes),
+            Ok((diags, dupes, v_sum, _)) => (diags, dupes, v_sum),
             Err(e) => {
                 if cli.verbose {
                     eprintln!("{}", format!("Incremental scan fallback: {e}").yellow());
@@ -1560,7 +1584,10 @@ async fn main() -> Result<()> {
             } else {
                 p.clone()
             };
-            if (d.rule_id.0.starts_with("DISC-") || d.rule_id.0.starts_with("SEC-"))
+            if d.rule_id.0.starts_with("SEC-") {
+                return true;
+            }
+            if d.rule_id.0.starts_with("DISC-")
                 && (p.as_os_str().is_empty() || full_p == project_root)
             {
                 return true;
@@ -1582,7 +1609,10 @@ async fn main() -> Result<()> {
 
     let correlator = CorrelationEngine::new();
     let root_causes = correlator.correlate(diagnostics.clone());
-    let reporter = Reporter::with_root(&project_root);
+    let mut reporter = Reporter::with_root(&project_root);
+    if let Some(vc) = vuln_check_summary {
+        reporter = reporter.with_vulnerability_check(vc);
+    }
 
     match &cli.command {
         None | Some(Commands::Doctor { .. }) => {

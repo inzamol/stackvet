@@ -752,6 +752,52 @@ pub struct RootCause {
     pub remediation_plan: Vec<RemediationStep>,
 }
 
+/// Execution status of dependency vulnerability security analysis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VulnerabilityCheckStatus {
+    /// Vulnerability check completed successfully against advisory database or cache.
+    Completed,
+    /// Vulnerability check completed using fallback data (e.g. stale cache or refresh failed).
+    CompletedWithWarnings,
+    /// Vulnerability check was skipped (e.g. offline execution without local cache).
+    Skipped,
+    /// Vulnerability check failed (e.g. network failure with no cache, or corrupted cache).
+    Failed,
+    /// Vulnerability check was not run (e.g. no dependency packages detected).
+    NotRun,
+}
+
+impl VulnerabilityCheckStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Completed => "completed",
+            Self::CompletedWithWarnings => "completed_with_warnings",
+            Self::Skipped => "skipped",
+            Self::Failed => "failed",
+            Self::NotRun => "not_run",
+        }
+    }
+}
+
+/// Explicit status and metadata for dependency vulnerability scanning.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VulnerabilityCheckSummary {
+    /// Execution status of vulnerability analysis.
+    pub status: VulnerabilityCheckStatus,
+    /// Human-readable explanation of check status or failure cause.
+    pub message: String,
+    /// Advisory database queried (e.g., "OSV.dev").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advisory_database: Option<String>,
+    /// Cache freshness indicator: "fresh", "stale", "cached", "missing", or "corrupted".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_status: Option<String>,
+    /// Number of distinct known security vulnerabilities identified (None if check did not run).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vulnerabilities_found: Option<usize>,
+}
+
 pub trait Analyzer: Send + Sync {
     fn name(&self) -> &'static str;
     fn language(&self) -> LanguageTarget;

@@ -32,48 +32,7 @@ fn default_true() -> bool {
     true
 }
 
-/// Execution status of dependency vulnerability security analysis.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum VulnerabilityCheckStatus {
-    /// Vulnerability check completed successfully against advisory database or cache.
-    Completed,
-    /// Vulnerability check completed using fallback data (e.g. stale cache or refresh failed).
-    CompletedWithWarnings,
-    /// Vulnerability check was skipped (e.g. offline execution without local cache).
-    Skipped,
-    /// Vulnerability check failed (e.g. network failure with no cache, or corrupted cache).
-    Failed,
-}
-
-impl VulnerabilityCheckStatus {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Completed => "completed",
-            Self::CompletedWithWarnings => "completed_with_warnings",
-            Self::Skipped => "skipped",
-            Self::Failed => "failed",
-        }
-    }
-}
-
-/// Explicit status and metadata for dependency vulnerability scanning.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VulnerabilityCheckSummary {
-    /// Execution status of vulnerability analysis.
-    pub status: VulnerabilityCheckStatus,
-    /// Human-readable explanation of check status or failure cause.
-    pub message: String,
-    /// Advisory database queried (e.g., "OSV.dev").
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub advisory_database: Option<String>,
-    /// Cache freshness indicator: "fresh", "stale", "cached", "missing", or "corrupted".
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cache_status: Option<String>,
-    /// Number of distinct known security vulnerabilities identified (None if check did not run).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub vulnerabilities_found: Option<usize>,
-}
+pub use stackvet_core::{VulnerabilityCheckStatus, VulnerabilityCheckSummary};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReportSummary {
@@ -181,23 +140,22 @@ impl ReportSummary {
                 cache_status: Some(cache_status.to_string()),
                 vulnerabilities_found: Some(dep_006_count),
             });
-        } else {
-            // Check completed without advisory warnings
+        } else if dep_006_count > 0 {
+            // DEP-006 findings are present without SEC- warnings
             summary.vulnerability_check = Some(VulnerabilityCheckSummary {
                 status: VulnerabilityCheckStatus::Completed,
-                message: if dep_006_count > 0 {
-                    format!(
-                        "Vulnerability check completed: {} finding(s) detected via OSV.dev",
-                        dep_006_count
-                    )
-                } else {
-                    "Vulnerability check completed: 0 known vulnerabilities detected (OSV.dev)"
-                        .to_string()
-                },
+                message: format!(
+                    "Vulnerability check completed: {} finding(s) detected via OSV.dev",
+                    dep_006_count
+                ),
                 advisory_database: Some("OSV.dev".to_string()),
-                cache_status: Some("fresh".to_string()),
+                cache_status: None,
                 vulnerabilities_found: Some(dep_006_count),
             });
+        } else {
+            // Do NOT infer a completed fresh vulnerability check simply from the absence of SEC-* diagnostics.
+            // Scans that were not run or without observed outcome remain None here.
+            summary.vulnerability_check = None;
         }
 
         summary
@@ -240,17 +198,27 @@ fn default_schema_version() -> String {
 #[derive(Debug, Clone, Default)]
 pub struct Reporter {
     scan_root: Option<std::path::PathBuf>,
+    vulnerability_check: Option<VulnerabilityCheckSummary>,
 }
 
 impl Reporter {
     pub fn new() -> Self {
-        Self { scan_root: None }
+        Self {
+            scan_root: None,
+            vulnerability_check: None,
+        }
     }
 
     pub fn with_root(scan_root: impl Into<std::path::PathBuf>) -> Self {
         Self {
             scan_root: Some(scan_root.into()),
+            vulnerability_check: None,
         }
+    }
+
+    pub fn with_vulnerability_check(mut self, check: VulnerabilityCheckSummary) -> Self {
+        self.vulnerability_check = Some(check);
+        self
     }
 
     /// Renders text report with scorecard, deduction breakdown, root causes, and diagnostics table
@@ -376,7 +344,11 @@ impl Reporter {
         ));
 
         let summary_model = ReportSummary::from_diagnostics(diagnostics);
-        if let Some(ref v_check) = summary_model.vulnerability_check {
+        let v_check_opt = self
+            .vulnerability_check
+            .as_ref()
+            .or(summary_model.vulnerability_check.as_ref());
+        if let Some(v_check) = v_check_opt {
             let sec_str = match v_check.status {
                 VulnerabilityCheckStatus::Completed => {
                     let count = v_check.vulnerabilities_found.unwrap_or(0);
@@ -407,6 +379,9 @@ impl Reporter {
                 VulnerabilityCheckStatus::Failed => format!("✗ Unavailable ({})", v_check.message)
                     .red()
                     .bold()
+                    .to_string(),
+                VulnerabilityCheckStatus::NotRun => format!("- Not run ({})", v_check.message)
+                    .dimmed()
                     .to_string(),
             };
             out.push_str(&format!("  Security:      {}\n", sec_str));
@@ -619,10 +594,14 @@ impl Reporter {
         diagnostics: &[Diagnostic],
         explanation: Option<&HealthScoreExplanation>,
     ) -> Result<String> {
+        let mut summary = ReportSummary::from_diagnostics(diagnostics);
+        if let Some(ref vc) = self.vulnerability_check {
+            summary.vulnerability_check = Some(vc.clone());
+        }
         let report = FullReport {
             schema_version: SCHEMA_VERSION.to_string(),
             tool: ToolInfo::default(),
-            summary: ReportSummary::from_diagnostics(diagnostics),
+            summary,
             health_score: score,
             grade: grade.to_string(),
             root_causes: root_causes.to_vec(),

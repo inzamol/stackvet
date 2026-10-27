@@ -392,3 +392,48 @@ fn test_fresh_cache_clean_result_has_no_sec_and_no_dep006() {
         diags
     );
 }
+
+#[test]
+fn test_http_error_response_with_missing_cache_triggers_all_failures_path() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+    let port = listener.local_addr().unwrap().port();
+    let server_handle = std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            use std::io::{Read, Write};
+            let mut buf = [0u8; 1024];
+            let _ = stream.read(&mut buf);
+            let response = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.flush();
+        }
+    });
+
+    let dir = temp_test_dir("http_500_missing_cache");
+    let ctx = create_dummy_python_context(&dir, &[("requests", "2.25.0")]);
+    let cache_path = dir.join("vulnerabilities.json");
+
+    let analyzer = SecurityAnalyzer::with_endpoint(
+        false,
+        false,
+        cache_path,
+        format!("http://127.0.0.1:{port}"),
+    );
+    let (diags, vuln_summary) = analyzer.scan_with_status(&ctx).expect("scan_with_status");
+
+    let sec001 = diags.iter().find(|d| d.rule_id.0 == "SEC-001");
+    assert!(
+        sec001.is_some(),
+        "SEC-001 must be emitted when HTTP returns 500"
+    );
+    assert!(
+        sec001.unwrap().message.contains("HTTP status 500"),
+        "Message should include HTTP status: {}",
+        sec001.unwrap().message
+    );
+    assert_eq!(
+        vuln_summary.as_ref().unwrap().status,
+        stackvet_core::VulnerabilityCheckStatus::Failed
+    );
+
+    let _ = server_handle.join();
+}

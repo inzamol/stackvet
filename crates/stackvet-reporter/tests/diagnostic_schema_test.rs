@@ -49,10 +49,16 @@ fn test_report_summary_from_diagnostics() {
     assert_eq!(summary.hint_count, 1);
     assert_eq!(summary.fixable_count, 1);
 }
-
 #[test]
 fn test_json_report_serialization_and_deserialization() {
-    let reporter = Reporter::new();
+    let reporter = Reporter::new().with_vulnerability_check(VulnerabilityCheckSummary {
+        status: VulnerabilityCheckStatus::Completed,
+        message: "Vulnerability check completed: 0 known vulnerabilities detected (OSV.dev)"
+            .to_string(),
+        advisory_database: Some("OSV.dev".to_string()),
+        cache_status: Some("fresh".to_string()),
+        vulnerabilities_found: Some(0),
+    });
 
     let diag = Diagnostic::builder("IMP-001", Severity::Error, LanguageTarget::Python)
         .message("Circular import cycle: a.py -> b.py -> a.py")
@@ -560,11 +566,21 @@ fn test_sarif_multiline_spans_and_severities() {
 
 #[test]
 fn test_vulnerability_check_status_distinguishes_clean_from_skipped_and_failed() {
-    // 1. Clean scan (0 vulnerabilities detected)
+    // 1. Clean scan (empty diagnostics do not infer a completed check)
     let clean_diags: Vec<Diagnostic> = vec![];
     let clean_summary = ReportSummary::from_diagnostics(&clean_diags);
     assert!(clean_summary.is_complete);
-    let v_clean = clean_summary
+    assert_eq!(clean_summary.vulnerability_check, None);
+
+    let explicit_clean = clean_summary.with_vulnerability_check(VulnerabilityCheckSummary {
+        status: VulnerabilityCheckStatus::Completed,
+        message: "Vulnerability check completed: 0 known vulnerabilities detected (OSV.dev)"
+            .to_string(),
+        advisory_database: Some("OSV.dev".to_string()),
+        cache_status: Some("fresh".to_string()),
+        vulnerabilities_found: Some(0),
+    });
+    let v_clean = explicit_clean
         .vulnerability_check
         .expect("vulnerability_check present");
     assert_eq!(v_clean.status, VulnerabilityCheckStatus::Completed);
@@ -634,6 +650,7 @@ fn test_vulnerability_check_status_distinguishes_clean_from_skipped_and_failed()
 
 #[test]
 fn test_text_and_sarif_vulnerability_status_consistency() {
+    colored::control::set_override(false);
     let reporter = Reporter::new();
 
     // Case A: Unavailable security checks
@@ -661,14 +678,26 @@ fn test_text_and_sarif_vulnerability_status_consistency() {
     assert_eq!(notifications[0]["descriptor"]["id"], "SEC-001");
 
     // Case B: Clean scan
-    let clean_text = reporter.render_text(100, "A+", &[], &[], None);
+    let clean_reporter = Reporter::new().with_vulnerability_check(VulnerabilityCheckSummary {
+        status: VulnerabilityCheckStatus::Completed,
+        message: "Vulnerability check completed: 0 known vulnerabilities detected (OSV.dev)"
+            .to_string(),
+        advisory_database: Some("OSV.dev".to_string()),
+        cache_status: Some("fresh".to_string()),
+        vulnerabilities_found: Some(0),
+    });
+    let clean_text = clean_reporter.render_text(100, "A+", &[], &[], None);
     assert!(clean_text.contains("Security:      ✓ Clean (0 known vulnerabilities via OSV.dev)"));
 
-    let clean_sarif_output = reporter.render_sarif(&[]).expect("render clean sarif");
+    let clean_sarif_output = clean_reporter
+        .render_sarif(&[])
+        .expect("render clean sarif");
     let clean_sarif: serde_json::Value =
         serde_json::from_str(&clean_sarif_output).expect("parse clean sarif");
     let clean_invocations = clean_sarif["runs"][0]["invocations"]
         .as_array()
         .expect("clean invocations array");
     assert_eq!(clean_invocations[0]["executionSuccessful"], true);
+
+    colored::control::unset_override();
 }
