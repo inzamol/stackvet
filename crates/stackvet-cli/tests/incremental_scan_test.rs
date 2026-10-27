@@ -284,3 +284,27 @@ fn test_incremental_cache_handles_corruption_safely() {
 
     let _ = fs::remove_dir_all(&repo);
 }
+
+#[test]
+fn test_incremental_cache_preserves_and_restores_vulnerability_check_status() {
+    let repo = make_temp_repo("vuln_status_cache");
+    let cache_mgr = IncrementalCacheManager::new(&repo);
+    let config_hash = hash_bytes(b"test_conf");
+
+    let mut cache_data = ScanCacheData::new(config_hash.clone());
+    let vuln_summary = stackvet_core::VulnerabilityCheckSummary {
+        status: stackvet_core::VulnerabilityCheckStatus::CompletedWithWarnings,
+        message: "Vulnerability scan performed using expired local advisory cache".to_string(),
+        advisory_database: Some("OSV.dev".to_string()),
+        cache_status: Some("stale".to_string()),
+        vulnerabilities_found: Some(1),
+    };
+    cache_data.vulnerability_check = Some(vuln_summary.clone());
+
+    cache_mgr.save(&cache_data).expect("save cache");
+    let content = fs::read_to_string(cache_mgr.cache_file_path()).expect("read cache file");
+    let loaded: ScanCacheData = serde_json::from_str(&content).expect("deserialize cache");
+    assert_eq!(loaded.vulnerability_check, Some(vuln_summary));
+
+    let _ = fs::remove_dir_all(&repo);
+}
