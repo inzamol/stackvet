@@ -678,7 +678,7 @@ fn collect_diagnostics_incremental(
     }
     let config_hash = hash_bytes(&config_bytes);
 
-    let validation = cache_mgr.validate(&ctx.manifest_files, &ctx.source_files, &config_hash);
+    let validation = cache_mgr.validate_project_context(ctx, &config_hash);
 
     match validation {
         CacheValidationResult::Valid {
@@ -833,6 +833,19 @@ fn collect_diagnostics_incremental(
                 }
             }
 
+            for d in &ctx.dockerfiles {
+                let rel = normalize_rel_path(root, d);
+                if let Ok(h) = hash_file_content(d) {
+                    cached_data.dockerfile_hashes.insert(rel, h);
+                }
+            }
+            for w in &ctx.ci_workflows {
+                let rel = normalize_rel_path(root, w);
+                if let Ok(h) = hash_file_content(w) {
+                    cached_data.ci_workflow_hashes.insert(rel, h);
+                }
+            }
+
             let _ = cache_mgr.save(&cached_data);
 
             let (mut deduped, duplicates_count) = deduplicate_diagnostics(&all_diags);
@@ -857,6 +870,18 @@ fn collect_diagnostics_incremental(
                 let rel = normalize_rel_path(root, m);
                 if let Ok(h) = hash_file_content(m) {
                     new_cache.manifest_hashes.insert(rel, h);
+                }
+            }
+            for d in &ctx.dockerfiles {
+                let rel = normalize_rel_path(root, d);
+                if let Ok(h) = hash_file_content(d) {
+                    new_cache.dockerfile_hashes.insert(rel, h);
+                }
+            }
+            for w in &ctx.ci_workflows {
+                let rel = normalize_rel_path(root, w);
+                if let Ok(h) = hash_file_content(w) {
+                    new_cache.ci_workflow_hashes.insert(rel, h);
                 }
             }
 
