@@ -507,9 +507,6 @@ async fn fetch_advisories_from_osv_async(
         .build()?;
 
     let mut entries = Vec::new();
-    let mut any_network_error = false;
-    let mut any_success = false;
-    let mut last_error_msg = None;
 
     for (pkg, eco, ver, _) in packages {
         let payload = serde_json::json!({
@@ -527,27 +524,23 @@ async fn fetch_advisories_from_osv_async(
             Ok(r) => r,
             Err(e) => {
                 tracing::warn!("Failed to query OSV for {pkg}@{ver}: {e}");
-                any_network_error = true;
-                last_error_msg = Some(e.to_string());
-                continue;
+                anyhow::bail!("Network error connecting to OSV.dev advisory database: {e}");
             }
         };
 
         if !resp.status().is_success() {
             let status = resp.status();
             tracing::warn!("OSV query for {pkg}@{ver} returned HTTP status {status}");
-            any_network_error = true;
-            last_error_msg = Some(format!("HTTP status {status}"));
-            continue;
+            anyhow::bail!(
+                "Network error connecting to OSV.dev advisory database: HTTP status {status}"
+            );
         }
-
-        any_success = true;
 
         let data: OsvQueryResponse = match resp.json().await {
             Ok(d) => d,
             Err(e) => {
                 tracing::warn!("Failed to parse OSV response for {pkg}@{ver}: {e}");
-                continue;
+                anyhow::bail!("Failed to parse OSV advisory response for {pkg}@{ver}: {e}");
             }
         };
 
@@ -582,14 +575,6 @@ async fn fetch_advisories_from_osv_async(
             version: ver.clone(),
             vulnerabilities: vulns,
         });
-    }
-
-    if any_network_error && !any_success {
-        if let Some(err) = last_error_msg {
-            anyhow::bail!("Network error connecting to OSV.dev advisory database: {err}");
-        } else {
-            anyhow::bail!("Network error: could not connect to OSV.dev advisory database");
-        }
     }
 
     Ok(entries)
