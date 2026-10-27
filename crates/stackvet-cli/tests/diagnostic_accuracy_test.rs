@@ -5,7 +5,7 @@ use stackvet_node::detect_node_project;
 use stackvet_python::detect_python_project;
 use stackvet_scanner::ProjectScanner;
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn analyze_fixture(rel_path: &str) -> Vec<Diagnostic> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -87,11 +87,7 @@ fn test_fastapi_positive_findings_and_severity() {
     assert_eq!(fap006.severity, Severity::Error);
 
     // Verify locations
-    assert!(fap001
-        .location
-        .file_path
-        .to_string_lossy()
-        .contains("main.py"));
+    assert!(fap001.location.file_path.ends_with("main.py"));
     assert!(fap001.location.span.is_some());
 }
 
@@ -458,19 +454,11 @@ fn test_python_deps_positive_findings_and_severity() {
 
     let dep002 = diags.iter().find(|d| d.rule_id.0 == "DEP-002").unwrap();
     assert_eq!(dep002.severity, Severity::Error);
-    assert!(dep002
-        .location
-        .file_path
-        .to_string_lossy()
-        .contains("app.py"));
+    assert!(dep002.location.file_path.ends_with("app.py"));
 
     let dep003 = diags.iter().find(|d| d.rule_id.0 == "DEP-003").unwrap();
     assert_eq!(dep003.severity, Severity::Warning);
-    assert!(dep003
-        .location
-        .file_path
-        .to_string_lossy()
-        .contains("pyproject.toml"));
+    assert!(dep003.location.file_path.ends_with("pyproject.toml"));
 }
 
 #[test]
@@ -506,16 +494,11 @@ fn test_node_deps_positive_findings_and_severity() {
     assert!(ndep001
         .location
         .file_path
-        .to_string_lossy()
-        .contains("index.ts"));
+        .ends_with(Path::new("src").join("index.ts")));
 
     let ndep002 = diags.iter().find(|d| d.rule_id.0 == "NDEP-002").unwrap();
     assert_eq!(ndep002.severity, Severity::Warning);
-    assert!(ndep002
-        .location
-        .file_path
-        .to_string_lossy()
-        .contains("package.json"));
+    assert!(ndep002.location.file_path.ends_with("package.json"));
 }
 
 #[test]
