@@ -372,6 +372,7 @@ fn test_cli_scan_excludes_stackvet_cache_and_custom_cache_dir() {
     );
 
     // 2. Populate custom cache dir and pass --cache-dir custom_cache
+    // 2. Populate custom cache dir with leading './' and pass --cache-dir ./custom_cache
     let custom_cache_dir = repo.join("custom_cache");
     fs::create_dir_all(&custom_cache_dir).unwrap();
     fs::write(custom_cache_dir.join("scan_cache.json"), &large_json).unwrap();
@@ -380,7 +381,7 @@ fn test_cli_scan_excludes_stackvet_cache_and_custom_cache_dir() {
         .arg("--path")
         .arg(&repo)
         .arg("--cache-dir")
-        .arg("custom_cache")
+        .arg("./custom_cache")
         .arg("--offline")
         .arg("--format")
         .arg("json")
@@ -410,6 +411,105 @@ fn test_cli_scan_excludes_stackvet_cache_and_custom_cache_dir() {
         disc_005_custom.is_empty(),
         "Expected no DISC-005 diagnostics for custom cache dir, found: {:?}",
         disc_005_custom
+    );
+    fs::remove_dir_all(&custom_cache_dir).unwrap();
+
+    // 3. Cache directory with glob metacharacters: cache[1]
+    let glob_cache_dir = repo.join("cache[1]");
+    fs::create_dir_all(&glob_cache_dir).unwrap();
+    fs::write(glob_cache_dir.join("scan_cache.json"), &large_json).unwrap();
+
+    let output_glob = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--cache-dir")
+        .arg("cache[1]")
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run stackvet scan with glob cache dir");
+
+    assert!(output_glob.status.success());
+    let stdout_glob = String::from_utf8_lossy(&output_glob.stdout);
+    let val_glob: serde_json::Value = serde_json::from_str(&stdout_glob).expect("parse json glob");
+    let disc_005_glob: Vec<_> = val_glob["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|d| d["rule_id"].as_str() == Some("DISC-005"))
+        .collect();
+    assert!(
+        disc_005_glob.is_empty(),
+        "Expected no DISC-005 for cache[1] cache dir: {:?}",
+        disc_005_glob
+    );
+    fs::remove_dir_all(&glob_cache_dir).unwrap();
+
+    // 4. Overriding config.cache.dir via --cache-dir leaves config.cache.dir scannable
+    fs::write(
+        repo.join(".stackvet.toml"),
+        "[scanner]\nmax_file_size = 1000\n[cache]\ndir = 'configured_dir'\n",
+    )
+    .unwrap();
+    let configured_dir = repo.join("configured_dir");
+    fs::create_dir_all(&configured_dir).unwrap();
+    fs::write(configured_dir.join("helper.py"), "import requests\n").unwrap();
+
+    let custom_cache_dir = repo.join("custom_cache");
+    fs::create_dir_all(&custom_cache_dir).unwrap();
+    fs::write(custom_cache_dir.join("scan_cache.json"), &large_json).unwrap();
+
+    let output_override = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--cache-dir")
+        .arg("custom_cache")
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run scan with cache override");
+
+    assert!(
+        output_override.status.code() == Some(0) || output_override.status.code() == Some(1),
+        "Scan output_override failed: code={:?}, stderr={}",
+        output_override.status.code(),
+        String::from_utf8_lossy(&output_override.stderr)
+    );
+    let stdout_override = String::from_utf8_lossy(&output_override.stdout);
+    let val_override: serde_json::Value =
+        serde_json::from_str(&stdout_override).expect("parse json override");
+
+    // helper.py in configured_dir should NOT be excluded because --cache-dir custom_cache was active
+    let dep_002_found = val_override["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|d| {
+            d["rule_id"].as_str() == Some("DEP-002")
+                && d["location"]["file_path"]
+                    .as_str()
+                    .is_some_and(|p| p.contains("helper.py"))
+        });
+    assert!(
+        dep_002_found,
+        "configured_dir/helper.py must remain scannable when overridden by --cache-dir: {:?}",
+        val_override["diagnostics"]
+    );
+
+    let disc_005_override: Vec<_> = val_override["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|d| d["rule_id"].as_str() == Some("DISC-005"))
+        .collect();
+    assert!(
+        disc_005_override.is_empty(),
+        "Active custom_cache must be excluded from DISC-005: {:?}",
+        disc_005_override
     );
 
     let _ = fs::remove_dir_all(&repo);
