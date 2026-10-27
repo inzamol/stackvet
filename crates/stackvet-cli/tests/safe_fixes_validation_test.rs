@@ -436,6 +436,7 @@ def run():
     let out = Command::new(exe)
         .arg("--path")
         .arg(root)
+        .arg("--offline")
         .arg("fix")
         .arg("--yes")
         .output()
