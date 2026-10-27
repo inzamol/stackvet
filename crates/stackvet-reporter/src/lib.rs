@@ -162,6 +162,20 @@ impl ReportSummary {
     }
 
     pub fn with_vulnerability_check(mut self, check: VulnerabilityCheckSummary) -> Self {
+        if matches!(
+            check.status,
+            VulnerabilityCheckStatus::Failed | VulnerabilityCheckStatus::Skipped
+        ) {
+            self.is_complete = false;
+            let reason = if check.message.starts_with("SEC-") {
+                check.message.clone()
+            } else {
+                format!("SEC-001: {}", check.message)
+            };
+            if !self.incomplete_reasons.contains(&reason) {
+                self.incomplete_reasons.push(reason);
+            }
+        }
         self.vulnerability_check = Some(check);
         self
     }
@@ -596,7 +610,7 @@ impl Reporter {
     ) -> Result<String> {
         let mut summary = ReportSummary::from_diagnostics(diagnostics);
         if let Some(ref vc) = self.vulnerability_check {
-            summary.vulnerability_check = Some(vc.clone());
+            summary = summary.with_vulnerability_check(vc.clone());
         }
         let report = FullReport {
             schema_version: SCHEMA_VERSION.to_string(),

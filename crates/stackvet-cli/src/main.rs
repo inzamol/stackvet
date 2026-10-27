@@ -8,7 +8,8 @@ use comfy_table::{
 };
 use stackvet_core::{
     apply_suppressions, config::parse_severity, get_rule_meta, BaselineData, ConfigError, ExitCode,
-    HealthScoreExplanation, ProjectContext, Severity, StackvetConfig, ALL_RULES,
+    HealthScoreExplanation, ProjectContext, Severity, StackvetConfig, VulnerabilityCheckStatus,
+    ALL_RULES,
 };
 use stackvet_correlation::{
     calculate_health_score_explained, deduplicate_diagnostics, score_grade, CorrelationEngine,
@@ -1610,8 +1611,8 @@ async fn main() -> Result<()> {
     let correlator = CorrelationEngine::new();
     let root_causes = correlator.correlate(diagnostics.clone());
     let mut reporter = Reporter::with_root(&project_root);
-    if let Some(vc) = vuln_check_summary {
-        reporter = reporter.with_vulnerability_check(vc);
+    if let Some(ref vc) = vuln_check_summary {
+        reporter = reporter.with_vulnerability_check(vc.clone());
     }
 
     match &cli.command {
@@ -1745,10 +1746,18 @@ async fn main() -> Result<()> {
                 }
             }
 
+            let is_vuln_incomplete = vuln_check_summary.as_ref().is_some_and(|vc| {
+                matches!(
+                    vc.status,
+                    VulnerabilityCheckStatus::Failed | VulnerabilityCheckStatus::Skipped
+                )
+            });
+
             if (cli.fail_on_incomplete || config.scanner.fail_on_incomplete)
-                && diagnostics
-                    .iter()
-                    .any(|d| d.rule_id.0.starts_with("DISC-") || d.rule_id.0 == "SEC-001")
+                && (is_vuln_incomplete
+                    || diagnostics
+                        .iter()
+                        .any(|d| d.rule_id.0.starts_with("DISC-") || d.rule_id.0 == "SEC-001"))
             {
                 ExitCode::IncompleteAnalysis.exit();
             }
@@ -1765,9 +1774,16 @@ async fn main() -> Result<()> {
         }) => {
             let should_fail_incomplete =
                 *fail_on_incomplete || cli.fail_on_incomplete || config.scanner.fail_on_incomplete;
-            let has_incomplete = diagnostics
-                .iter()
-                .any(|d| d.rule_id.0.starts_with("DISC-") || d.rule_id.0 == "SEC-001");
+            let is_vuln_incomplete = vuln_check_summary.as_ref().is_some_and(|vc| {
+                matches!(
+                    vc.status,
+                    VulnerabilityCheckStatus::Failed | VulnerabilityCheckStatus::Skipped
+                )
+            });
+            let has_incomplete = is_vuln_incomplete
+                || diagnostics
+                    .iter()
+                    .any(|d| d.rule_id.0.starts_with("DISC-") || d.rule_id.0 == "SEC-001");
             let cli_fail_on = match fail_on.as_deref().map(parse_severity).transpose() {
                 Ok(sev) => sev,
                 Err(e) => {

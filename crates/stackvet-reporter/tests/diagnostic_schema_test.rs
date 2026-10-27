@@ -572,14 +572,18 @@ fn test_vulnerability_check_status_distinguishes_clean_from_skipped_and_failed()
     assert!(clean_summary.is_complete);
     assert_eq!(clean_summary.vulnerability_check, None);
 
-    let explicit_clean = clean_summary.with_vulnerability_check(VulnerabilityCheckSummary {
-        status: VulnerabilityCheckStatus::Completed,
-        message: "Vulnerability check completed: 0 known vulnerabilities detected (OSV.dev)"
-            .to_string(),
-        advisory_database: Some("OSV.dev".to_string()),
-        cache_status: Some("fresh".to_string()),
-        vulnerabilities_found: Some(0),
-    });
+    let explicit_clean =
+        clean_summary
+            .clone()
+            .with_vulnerability_check(VulnerabilityCheckSummary {
+                status: VulnerabilityCheckStatus::Completed,
+                message:
+                    "Vulnerability check completed: 0 known vulnerabilities detected (OSV.dev)"
+                        .to_string(),
+                advisory_database: Some("OSV.dev".to_string()),
+                cache_status: Some("fresh".to_string()),
+                vulnerabilities_found: Some(0),
+            });
     let v_clean = explicit_clean
         .vulnerability_check
         .expect("vulnerability_check present");
@@ -646,6 +650,41 @@ fn test_vulnerability_check_status_distinguishes_clean_from_skipped_and_failed()
         .expect("vulnerability_check present");
     assert_eq!(v_finding.status, VulnerabilityCheckStatus::Completed);
     assert_eq!(v_finding.vulnerabilities_found, Some(1));
+
+    // 6. Explicit Failed/Skipped via with_vulnerability_check marks is_complete = false even when SEC-001 absent
+    let failed_override_summary =
+        clean_summary
+            .clone()
+            .with_vulnerability_check(VulnerabilityCheckSummary {
+                status: VulnerabilityCheckStatus::Failed,
+                message: "Network failure querying OSV.dev".to_string(),
+                advisory_database: Some("OSV.dev".to_string()),
+                cache_status: Some("missing".to_string()),
+                vulnerabilities_found: None,
+            });
+    assert!(!failed_override_summary.is_complete);
+    assert!(failed_override_summary
+        .incomplete_reasons
+        .iter()
+        .any(|r| r.contains("Network failure")));
+
+    let reporter = Reporter::new().with_vulnerability_check(VulnerabilityCheckSummary {
+        status: VulnerabilityCheckStatus::Skipped,
+        message: "Offline mode active".to_string(),
+        advisory_database: Some("OSV.dev".to_string()),
+        cache_status: Some("missing".to_string()),
+        vulnerabilities_found: None,
+    });
+    let json_out = reporter
+        .render_json(100, "A+", &[], &[], None)
+        .expect("render json");
+    let json_val: serde_json::Value = serde_json::from_str(&json_out).expect("parse json");
+    assert_eq!(json_val["summary"]["is_complete"], false);
+    assert!(json_val["summary"]["incomplete_reasons"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r.as_str().unwrap().contains("Offline mode active")));
 }
 
 #[test]
