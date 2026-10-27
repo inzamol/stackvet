@@ -462,6 +462,64 @@ fn find_enclosing_project_root(path: &Path) -> PathBuf {
     start.to_path_buf()
 }
 
+/// Escapes special glob and gitignore metacharacters in a path component.
+fn escape_glob_pattern(s: &str) -> String {
+    let mut escaped = String::with_capacity(s.len());
+    for (i, c) in s.chars().enumerate() {
+        match c {
+            '*' | '?' | '[' | ']' | '{' | '}' | '\\' => {
+                escaped.push('\\');
+                escaped.push(c);
+            }
+            '!' | '#' if i == 0 => {
+                escaped.push('\\');
+                escaped.push(c);
+            }
+            _ => escaped.push(c),
+        }
+    }
+    escaped
+}
+
+/// Constructs a normalized and escaped recursive glob pattern for a cache directory
+/// if it resides within the project root.
+fn cache_dir_ignore_pattern(project_root: &Path, cache_dir: &Path) -> Option<String> {
+    let rel = if cache_dir.is_absolute() {
+        if let Ok(stripped) = cache_dir.strip_prefix(project_root) {
+            stripped.to_path_buf()
+        } else {
+            let abs_root = project_root.canonicalize().ok();
+            let abs_dir = cache_dir.canonicalize().ok();
+            match (abs_root, abs_dir) {
+                (Some(r), Some(d)) => d.strip_prefix(&r).ok()?.to_path_buf(),
+                _ => return None,
+            }
+        }
+    } else {
+        cache_dir.to_path_buf()
+    };
+
+    let mut components = Vec::new();
+    for comp in rel.components() {
+        match comp {
+            std::path::Component::Normal(c) => {
+                components.push(escape_glob_pattern(&c.to_string_lossy()));
+            }
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                components.pop()?;
+            }
+            _ => return None,
+        }
+    }
+
+    if components.is_empty() {
+        return None;
+    }
+    let rel_str = components.join("/");
+    Some(format!("{}/**", rel_str))
+}
+
 fn build_full_context(
     target: &Path,
     project_root: &Path,
@@ -469,6 +527,7 @@ fn build_full_context(
     cli_ignores: &[String],
     verbose: bool,
     cancellation_token: Option<stackvet_core::CancellationToken>,
+    custom_cache_dir: Option<&Path>,
 ) -> Result<ProjectContext> {
     let scan_root = if target.is_file() {
         project_root
@@ -486,6 +545,16 @@ fn build_full_context(
         .with_max_files(config.scanner.max_files)
         .with_follow_symlinks(config.scanner.follow_symlinks)
         .with_verbose(verbose);
+
+    let effective_cache_dir = custom_cache_dir.or(config.cache.dir.as_deref());
+    if let Some(cd) = effective_cache_dir {
+        if let Some(pattern) = cache_dir_ignore_pattern(project_root, cd) {
+            if !cli_ignores.iter().any(|i| i == &pattern) {
+                scanner = scanner.with_ignores([pattern]);
+            }
+        }
+    }
+
     if let Some(token) = cancellation_token {
         scanner = scanner.with_cancellation_token(token);
     }
@@ -1228,7 +1297,7 @@ fn scan_and_collect_diagnostics(
     } else {
         root.to_path_buf()
     };
-    let ctx = build_full_context(root, &project_root, config, cli_ignore, false, None)?;
+    let ctx = build_full_context(root, &project_root, config, cli_ignore, false, None, None)?;
     let (raw, _, _) = collect_all_diagnostics(&ctx, config, offline, false)?;
     let after_rules = config.apply_rule_overrides(raw)?;
     let outcome = apply_suppressions(&project_root, &config.suppressions, after_rules, None);
@@ -1464,6 +1533,12 @@ async fn main() -> Result<()> {
         Some(Commands::Inspect { ignore, .. }) => all_cli_ignores.extend(ignore.clone()),
         _ => {}
     }
+    let effective_cache_dir = cli.cache_dir.as_deref().or(config.cache.dir.as_deref());
+    if let Some(cd) = effective_cache_dir {
+        if let Some(pattern) = cache_dir_ignore_pattern(&project_root, cd) {
+            all_cli_ignores.push(pattern);
+        }
+    }
 
     let cancellation_token = stackvet_core::CancellationToken::new();
 
@@ -1493,6 +1568,7 @@ async fn main() -> Result<()> {
         &all_cli_ignores,
         cli.verbose,
         Some(cancellation_token.clone()),
+        cli.cache_dir.as_deref(),
     ) {
         Ok(c) => c,
         Err(e) => {
@@ -2815,4 +2891,59 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_escape_glob_pattern() {
+        assert_eq!(escape_glob_pattern("simple"), "simple");
+        assert_eq!(escape_glob_pattern("cache[1]"), "cache\\[1\\]");
+        assert_eq!(escape_glob_pattern("cache*"), "cache\\*");
+        assert_eq!(escape_glob_pattern("cache?"), "cache\\?");
+        assert_eq!(escape_glob_pattern("{a,b}"), "\\{a,b\\}");
+        assert_eq!(escape_glob_pattern("!cache"), "\\!cache");
+        assert_eq!(escape_glob_pattern("#cache"), "\\#cache");
+    }
+
+    #[test]
+    fn test_cache_dir_ignore_pattern_relative_and_normalization() {
+        let root = Path::new("/workspace/project");
+
+        // Simple relative
+        assert_eq!(
+            cache_dir_ignore_pattern(root, Path::new("cache")),
+            Some("cache/**".to_string())
+        );
+
+        // Leading ./ normalized
+        assert_eq!(
+            cache_dir_ignore_pattern(root, Path::new("./custom_cache")),
+            Some("custom_cache/**".to_string())
+        );
+
+        // Nested relative with .
+        assert_eq!(
+            cache_dir_ignore_pattern(root, Path::new("nested/./dir/cache")),
+            Some("nested/dir/cache/**".to_string())
+        );
+
+        // Glob metacharacters in directory name
+        assert_eq!(
+            cache_dir_ignore_pattern(root, Path::new("cache[1]")),
+            Some("cache\\[1\\]/**".to_string())
+        );
+
+        // Outside root with parent components
+        assert_eq!(
+            cache_dir_ignore_pattern(root, Path::new("../outside")),
+            None
+        );
+
+        // Current directory (must not ignore whole project)
+        assert_eq!(cache_dir_ignore_pattern(root, Path::new(".")), None);
+    }
 }
