@@ -818,3 +818,253 @@ fn test_cli_incremental_scan_refreshes_ci_workflow_diagnostics() {
 
     let _ = fs::remove_dir_all(&repo);
 }
+
+#[test]
+fn test_incremental_cache_detects_content_change_when_mtime_and_size_preserved() {
+    let repo = make_temp_repo("cli_mtime_size_preserved");
+    let manifest = repo.join("pyproject.toml");
+    let main_file = repo.join("main.py");
+
+    fs::write(
+        &manifest,
+        "[project]\nname = 'mtime-app'\nversion = '0.1.0'\n",
+    )
+    .unwrap();
+    fs::write(&main_file, "x = 100\n").unwrap();
+
+    let exe = env!("CARGO_BIN_EXE_stackvet");
+
+    // 1. First scan in incremental mode
+    let out1 = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--incremental")
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run first incremental scan");
+    assert!(out1.status.success());
+
+    let initial_meta = fs::metadata(&main_file).unwrap();
+    let initial_mtime = initial_meta.modified().unwrap();
+    let initial_len = initial_meta.len();
+
+    // 2. Modify main.py keeping exact same byte length
+    fs::write(&main_file, "x = 200\n").unwrap();
+    assert_eq!(fs::metadata(&main_file).unwrap().len(), initial_len);
+
+    // 3. Restore original mtime
+    let file = fs::File::options().write(true).open(&main_file).unwrap();
+    file.set_modified(initial_mtime).unwrap();
+    drop(file);
+
+    assert_eq!(
+        fs::metadata(&main_file).unwrap().modified().unwrap(),
+        initial_mtime
+    );
+
+    // 4. Second incremental scan with --verbose to verify file was re-analyzed
+    let out2 = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--incremental")
+        .arg("--offline")
+        .arg("--verbose")
+        .arg("scan")
+        .output()
+        .expect("Run second incremental scan");
+    assert!(out2.status.success());
+
+    let stderr2 = String::from_utf8_lossy(&out2.stderr);
+    let stdout2 = String::from_utf8_lossy(&out2.stdout);
+    let combined = format!("{stdout2}\n{stderr2}");
+    assert!(
+        combined.contains("1 file(s) re-analyzed"),
+        "Cache must detect content change and re-analyze main.py even when size and mtime match: {}",
+        combined
+    );
+
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn test_incremental_scan_removes_broken_import_cycle_on_unchanged_file() {
+    let repo = make_temp_repo("cli_cycle_broken");
+    let manifest = repo.join("pyproject.toml");
+    let file_a = repo.join("a.py");
+    let file_b = repo.join("b.py");
+
+    fs::write(
+        &manifest,
+        "[project]\nname = 'cycle-app'\nversion = '0.1.0'\n",
+    )
+    .unwrap();
+    fs::write(&file_a, "import b\n").unwrap();
+    fs::write(&file_b, "import a\n").unwrap();
+
+    let exe = env!("CARGO_BIN_EXE_stackvet");
+
+    // 1. First scan in incremental mode: IMP-001 (import cycle) should be detected
+    let out1 = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--incremental")
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run first incremental scan");
+
+    let stdout1 = String::from_utf8_lossy(&out1.stdout);
+    let val1: serde_json::Value = serde_json::from_str(&stdout1).expect("parse json out1");
+    let cycle_present_1 = val1["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|d| d["rule_id"].as_str() == Some("IMP-001"));
+    assert!(
+        cycle_present_1,
+        "IMP-001 circular import should be reported initially: {:?}",
+        val1["diagnostics"]
+    );
+
+    // 2. Modify b.py to break the cycle. a.py remains completely UNCHANGED!
+    fs::write(&file_b, "print('no more import')\n").unwrap();
+
+    // 3. Second incremental scan: IMP-001 must be removed even though a.py was unchanged (Issue #60)
+    let out2 = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--incremental")
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run second incremental scan");
+
+    let stdout2 = String::from_utf8_lossy(&out2.stdout);
+    let val2: serde_json::Value = serde_json::from_str(&stdout2).expect("parse json out2");
+    let cycle_present_2 = val2["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|d| d["rule_id"].as_str() == Some("IMP-001"));
+    assert!(
+        !cycle_present_2,
+        "IMP-001 must NOT be present after breaking cycle on b.py while a.py is unchanged: {:?}",
+        val2["diagnostics"]
+    );
+
+    // 4. Verify consistency with full scan (--no-cache)
+    let out_full = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--no-cache")
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run full scan");
+
+    let stdout_full = String::from_utf8_lossy(&out_full.stdout);
+    let val_full: serde_json::Value = serde_json::from_str(&stdout_full).expect("parse json full");
+    assert_eq!(
+        val2["diagnostics"], val_full["diagnostics"],
+        "Incremental scan and full scan must produce identical project-wide diagnostics"
+    );
+
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn test_incremental_scan_adds_new_import_cycle_reported_on_unchanged_file() {
+    let repo = make_temp_repo("cli_cycle_added");
+    let manifest = repo.join("pyproject.toml");
+    let file_a = repo.join("a.py");
+    let file_b = repo.join("b.py");
+
+    fs::write(
+        &manifest,
+        "[project]\nname = 'cycle-app'\nversion = '0.1.0'\n",
+    )
+    .unwrap();
+    fs::write(&file_a, "import b\n").unwrap();
+    fs::write(&file_b, "print('no cycle')\n").unwrap();
+
+    let exe = env!("CARGO_BIN_EXE_stackvet");
+
+    // 1. First scan in incremental mode: no cycle
+    let out1 = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--incremental")
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run first incremental scan");
+
+    let stdout1 = String::from_utf8_lossy(&out1.stdout);
+    let val1: serde_json::Value = serde_json::from_str(&stdout1).expect("parse json out1");
+    let cycle_present_1 = val1["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|d| d["rule_id"].as_str() == Some("IMP-001"));
+    assert!(!cycle_present_1, "No cycle initially");
+
+    // 2. Introduce cycle by editing b.py to import a. a.py remains completely UNCHANGED!
+    fs::write(&file_b, "import a\n").unwrap();
+
+    // 3. Second incremental scan: IMP-001 must be detected and added even though a.py was unchanged (Issue #60)
+    let out2 = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--incremental")
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run second incremental scan");
+
+    let stdout2 = String::from_utf8_lossy(&out2.stdout);
+    let val2: serde_json::Value = serde_json::from_str(&stdout2).expect("parse json out2");
+    let cycle_present_2 = val2["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|d| d["rule_id"].as_str() == Some("IMP-001"));
+    assert!(
+        cycle_present_2,
+        "IMP-001 must be detected when new cycle is introduced on unchanged file: {:?}",
+        val2["diagnostics"]
+    );
+
+    // 4. Verify consistency with full scan (--no-cache)
+    let out_full = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--no-cache")
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run full scan");
+
+    let stdout_full = String::from_utf8_lossy(&out_full.stdout);
+    let val_full: serde_json::Value = serde_json::from_str(&stdout_full).expect("parse json full");
+    assert_eq!(
+        val2["diagnostics"], val_full["diagnostics"],
+        "Incremental scan and full scan must produce identical project-wide diagnostics"
+    );
+
+    let _ = fs::remove_dir_all(&repo);
+}
