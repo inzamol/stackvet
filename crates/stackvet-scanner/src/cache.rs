@@ -7,7 +7,7 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const CACHE_SCHEMA_VERSION: u32 = 2;
+pub const CACHE_SCHEMA_VERSION: u32 = 3;
 pub const DEFAULT_CACHE_DIR: &str = ".stackvet/cache";
 pub const DEFAULT_CACHE_FILE: &str = "scan_cache.json";
 
@@ -50,6 +50,10 @@ pub struct ScanCacheData {
     pub timestamp: u128,
     pub config_hash: String,
     pub manifest_hashes: BTreeMap<String, String>,
+    #[serde(default)]
+    pub dockerfile_hashes: BTreeMap<String, String>,
+    #[serde(default)]
+    pub ci_workflow_hashes: BTreeMap<String, String>,
     pub files: BTreeMap<String, FileCacheEntry>,
     #[serde(default)]
     pub project_diagnostics: Vec<Diagnostic>,
@@ -69,6 +73,8 @@ impl ScanCacheData {
             timestamp,
             config_hash,
             manifest_hashes: BTreeMap::new(),
+            dockerfile_hashes: BTreeMap::new(),
+            ci_workflow_hashes: BTreeMap::new(),
             files: BTreeMap::new(),
             project_diagnostics: Vec::new(),
             vulnerability_check: None,
@@ -85,6 +91,10 @@ pub enum CacheInvalidationReason {
     ConfigChanged,
     ManifestChanged { manifest: String },
     ManifestCountChanged { cached: usize, current: usize },
+    DockerfileChanged { dockerfile: String },
+    DockerfileCountChanged { cached: usize, current: usize },
+    CiWorkflowChanged { workflow: String },
+    CiWorkflowCountChanged { cached: usize, current: usize },
     Disabled,
 }
 
@@ -107,6 +117,24 @@ impl std::fmt::Display for CacheInvalidationReason {
                 write!(
                     f,
                     "Manifest count changed (cached: {cached}, current: {current})"
+                )
+            }
+            Self::DockerfileChanged { dockerfile } => {
+                write!(f, "Dockerfile modified: {dockerfile}")
+            }
+            Self::DockerfileCountChanged { cached, current } => {
+                write!(
+                    f,
+                    "Dockerfile count changed (cached: {cached}, current: {current})"
+                )
+            }
+            Self::CiWorkflowChanged { workflow } => {
+                write!(f, "CI workflow modified: {workflow}")
+            }
+            Self::CiWorkflowCountChanged { cached, current } => {
+                write!(
+                    f,
+                    "CI workflow count changed (cached: {cached}, current: {current})"
                 )
             }
             Self::Disabled => write!(f, "Incremental caching is disabled"),
@@ -178,11 +206,13 @@ impl IncrementalCacheManager {
         &self.cache_file
     }
 
-    /// Loads and validates the cache against current configuration, manifests, and source files.
+    /// Loads and validates the cache against current configuration, manifests, dockerfiles, CI workflows, and source files.
     pub fn validate(
         &self,
         current_manifests: &[PathBuf],
         current_source_files: &[PathBuf],
+        current_dockerfiles: &[PathBuf],
+        current_ci_workflows: &[PathBuf],
         current_config_hash: &str,
     ) -> CacheValidationResult {
         if !self.cache_file.exists() {
@@ -258,7 +288,69 @@ impl IncrementalCacheManager {
             }
         }
 
-        // 5. Categorize source files into unchanged, modified, added, deleted
+        // 5. Check Dockerfiles
+        if cached_data.dockerfile_hashes.len() != current_dockerfiles.len() {
+            return CacheValidationResult::Invalid(
+                CacheInvalidationReason::DockerfileCountChanged {
+                    cached: cached_data.dockerfile_hashes.len(),
+                    current: current_dockerfiles.len(),
+                },
+            );
+        }
+
+        for dockerfile_path in current_dockerfiles {
+            let rel = normalize_rel_path(&self.root, dockerfile_path);
+            let current_hash = match hash_file_content(dockerfile_path) {
+                Ok(h) => h,
+                Err(_) => {
+                    return CacheValidationResult::Invalid(
+                        CacheInvalidationReason::DockerfileChanged { dockerfile: rel },
+                    );
+                }
+            };
+
+            match cached_data.dockerfile_hashes.get(&rel) {
+                Some(cached_h) if cached_h == &current_hash => {}
+                _ => {
+                    return CacheValidationResult::Invalid(
+                        CacheInvalidationReason::DockerfileChanged { dockerfile: rel },
+                    );
+                }
+            }
+        }
+
+        // 6. Check CI workflows
+        if cached_data.ci_workflow_hashes.len() != current_ci_workflows.len() {
+            return CacheValidationResult::Invalid(
+                CacheInvalidationReason::CiWorkflowCountChanged {
+                    cached: cached_data.ci_workflow_hashes.len(),
+                    current: current_ci_workflows.len(),
+                },
+            );
+        }
+
+        for workflow_path in current_ci_workflows {
+            let rel = normalize_rel_path(&self.root, workflow_path);
+            let current_hash = match hash_file_content(workflow_path) {
+                Ok(h) => h,
+                Err(_) => {
+                    return CacheValidationResult::Invalid(
+                        CacheInvalidationReason::CiWorkflowChanged { workflow: rel },
+                    );
+                }
+            };
+
+            match cached_data.ci_workflow_hashes.get(&rel) {
+                Some(cached_h) if cached_h == &current_hash => {}
+                _ => {
+                    return CacheValidationResult::Invalid(
+                        CacheInvalidationReason::CiWorkflowChanged { workflow: rel },
+                    );
+                }
+            }
+        }
+
+        // 7. Categorize source files into unchanged, modified, added, deleted
         let mut changes = ScanChanges::default();
         let mut current_set = HashMap::new();
 
@@ -315,6 +407,21 @@ impl IncrementalCacheManager {
             cached_data,
             changes,
         }
+    }
+
+    /// Convenience method to validate cache against a ProjectContext.
+    pub fn validate_project_context(
+        &self,
+        ctx: &stackvet_core::ProjectContext,
+        current_config_hash: &str,
+    ) -> CacheValidationResult {
+        self.validate(
+            &ctx.manifest_files,
+            &ctx.source_files,
+            &ctx.dockerfiles,
+            &ctx.ci_workflows,
+            current_config_hash,
+        )
     }
 
     /// Saves updated scan cache atomically using a temporary file.
@@ -382,7 +489,7 @@ mod tests {
     fn test_cache_missing_validation() {
         let dir = make_test_dir("missing");
         let manager = IncrementalCacheManager::new(&dir);
-        let res = manager.validate(&[], &[], "hash1");
+        let res = manager.validate(&[], &[], &[], &[], "hash1");
         assert_eq!(
             res,
             CacheValidationResult::Invalid(CacheInvalidationReason::CacheMissing)
@@ -409,8 +516,8 @@ mod tests {
         manager.save(&data).unwrap();
         assert!(manager.cache_file_path().exists());
 
-        // Validate with identical config and no manifests
-        let res = manager.validate(&[], &[], "conf_hash_1");
+        // Validate with identical config and no manifests/dockerfiles/workflows
+        let res = manager.validate(&[], &[], &[], &[], "conf_hash_1");
         match res {
             CacheValidationResult::Valid {
                 cached_data,
@@ -433,7 +540,7 @@ mod tests {
         let data = ScanCacheData::new("conf_hash_1".to_string());
         manager.save(&data).unwrap();
 
-        let res = manager.validate(&[], &[], "conf_hash_2");
+        let res = manager.validate(&[], &[], &[], &[], "conf_hash_2");
         assert_eq!(
             res,
             CacheValidationResult::Invalid(CacheInvalidationReason::ConfigChanged)
@@ -458,7 +565,7 @@ mod tests {
         // Mutate manifest
         fs::write(&manifest, "[project]\nname='test2'\n").unwrap();
 
-        let res = manager.validate(std::slice::from_ref(&manifest), &[], "conf1");
+        let res = manager.validate(std::slice::from_ref(&manifest), &[], &[], &[], "conf1");
         match res {
             CacheValidationResult::Invalid(CacheInvalidationReason::ManifestChanged {
                 manifest: m,
@@ -467,6 +574,81 @@ mod tests {
             }
             _ => panic!("Expected ManifestChanged invalidation"),
         }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_cache_dockerfile_invalidation() {
+        let dir = make_test_dir("docker_inv");
+        let dockerfile = dir.join("Dockerfile");
+        fs::write(&dockerfile, "FROM python:latest\n").unwrap();
+
+        let manager = IncrementalCacheManager::new(&dir);
+        let mut data = ScanCacheData::new("conf1".to_string());
+        data.dockerfile_hashes.insert(
+            "Dockerfile".to_string(),
+            hash_file_content(&dockerfile).unwrap(),
+        );
+        manager.save(&data).unwrap();
+
+        // 1. Unchanged Dockerfile -> Valid
+        let res_valid = manager.validate(&[], &[], std::slice::from_ref(&dockerfile), &[], "conf1");
+        match res_valid {
+            CacheValidationResult::Valid { .. } => {}
+            _ => panic!("Expected valid cache hit when Dockerfile is unchanged"),
+        }
+
+        // 2. Mutate Dockerfile -> Invalid(DockerfileChanged)
+        fs::write(&dockerfile, "FROM python:3.11-slim\n").unwrap();
+        let res_invalid =
+            manager.validate(&[], &[], std::slice::from_ref(&dockerfile), &[], "conf1");
+        match res_invalid {
+            CacheValidationResult::Invalid(CacheInvalidationReason::DockerfileChanged {
+                dockerfile: d,
+            }) => {
+                assert_eq!(d, "Dockerfile");
+            }
+            _ => panic!("Expected DockerfileChanged invalidation"),
+        }
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_cache_ci_workflow_invalidation() {
+        let dir = make_test_dir("ci_inv");
+        let workflow_dir = dir.join(".github").join("workflows");
+        fs::create_dir_all(&workflow_dir).unwrap();
+        let workflow = workflow_dir.join("ci.yml");
+        fs::write(&workflow, "name: CI\non: push\n").unwrap();
+
+        let manager = IncrementalCacheManager::new(&dir);
+        let mut data = ScanCacheData::new("conf1".to_string());
+        data.ci_workflow_hashes.insert(
+            ".github/workflows/ci.yml".to_string(),
+            hash_file_content(&workflow).unwrap(),
+        );
+        manager.save(&data).unwrap();
+
+        // 1. Unchanged CI workflow -> Valid
+        let res_valid = manager.validate(&[], &[], &[], std::slice::from_ref(&workflow), "conf1");
+        match res_valid {
+            CacheValidationResult::Valid { .. } => {}
+            _ => panic!("Expected valid cache hit when CI workflow is unchanged"),
+        }
+
+        // 2. Mutate CI workflow -> Invalid(CiWorkflowChanged)
+        fs::write(&workflow, "name: CI\non: pull_request\n").unwrap();
+        let res_invalid = manager.validate(&[], &[], &[], std::slice::from_ref(&workflow), "conf1");
+        match res_invalid {
+            CacheValidationResult::Invalid(CacheInvalidationReason::CiWorkflowChanged {
+                workflow: w,
+            }) => {
+                assert_eq!(w, ".github/workflows/ci.yml");
+            }
+            _ => panic!("Expected CiWorkflowChanged invalidation"),
+        }
+
         let _ = fs::remove_dir_all(&dir);
     }
 }

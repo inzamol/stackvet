@@ -51,7 +51,7 @@ fn test_incremental_cache_cold_start_and_subsequent_hit() {
     let source_files = vec![file_a.clone(), file_b.clone()];
 
     // 1. First run: cache is missing -> Invalid(CacheMissing)
-    let val1 = cache_mgr.validate(&manifests, &source_files, &config_hash);
+    let val1 = cache_mgr.validate(&manifests, &source_files, &[], &[], &config_hash);
     match val1 {
         CacheValidationResult::Invalid(reason) => {
             assert_eq!(
@@ -109,7 +109,7 @@ fn test_incremental_cache_cold_start_and_subsequent_hit() {
     assert!(cache_mgr.cache_file_path().exists());
 
     // 2. Second run with unchanged files: Valid with NO changes (cache hit)
-    let val2 = cache_mgr.validate(&manifests, &source_files, &config_hash);
+    let val2 = cache_mgr.validate(&manifests, &source_files, &[], &[], &config_hash);
     match val2 {
         CacheValidationResult::Valid {
             cached_data,
@@ -170,7 +170,7 @@ fn test_incremental_cache_detects_modified_and_added_files() {
     fs::write(&file_c, "print('newly added')\n").unwrap();
 
     let current_sources = vec![file_a.clone(), file_c.clone()];
-    let val = cache_mgr.validate(&manifests, &current_sources, &config_hash);
+    let val = cache_mgr.validate(&manifests, &current_sources, &[], &[], &config_hash);
 
     match val {
         CacheValidationResult::Valid { changes, .. } => {
@@ -214,7 +214,13 @@ fn test_incremental_cache_invalidates_on_manifest_change() {
     )
     .unwrap();
 
-    let val = cache_mgr.validate(std::slice::from_ref(&manifest), &[file_a], &config_hash);
+    let val = cache_mgr.validate(
+        std::slice::from_ref(&manifest),
+        &[file_a],
+        &[],
+        &[],
+        &config_hash,
+    );
     match val {
         CacheValidationResult::Invalid(
             stackvet_scanner::CacheInvalidationReason::ManifestChanged { manifest: m },
@@ -248,7 +254,7 @@ fn test_incremental_cache_invalidates_on_config_change() {
     cache_mgr.save(&cache_data).unwrap();
 
     // Scan with new config hash
-    let val = cache_mgr.validate(&[manifest], &[file_a], &config_hash_2);
+    let val = cache_mgr.validate(&[manifest], &[file_a], &[], &[], &config_hash_2);
     assert_eq!(
         val,
         CacheValidationResult::Invalid(stackvet_scanner::CacheInvalidationReason::ConfigChanged)
@@ -273,7 +279,7 @@ fn test_incremental_cache_handles_corruption_safely() {
     fs::create_dir_all(repo.join(".stackvet/cache")).unwrap();
     fs::write(cache_mgr.cache_file_path(), "{ broken json: corrupt !!!").unwrap();
 
-    let val = cache_mgr.validate(&[manifest], &[file_a], &config_hash);
+    let val = cache_mgr.validate(&[manifest], &[file_a], &[], &[], &config_hash);
     match val {
         CacheValidationResult::Invalid(
             stackvet_scanner::CacheInvalidationReason::CacheCorrupted(_),
@@ -510,6 +516,304 @@ fn test_cli_scan_excludes_stackvet_cache_and_custom_cache_dir() {
         disc_005_override.is_empty(),
         "Active custom_cache must be excluded from DISC-005: {:?}",
         disc_005_override
+    );
+
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn test_incremental_cache_invalidates_on_dockerfile_change() {
+    let repo = make_temp_repo("docker_inval");
+    let file_a = repo.join("main.py");
+    let dockerfile = repo.join("Dockerfile");
+
+    fs::write(&file_a, "print('app')\n").unwrap();
+    fs::write(&dockerfile, "FROM python:latest\n").unwrap();
+
+    let cache_mgr = IncrementalCacheManager::new(&repo);
+    let config_hash = hash_bytes(b"conf");
+
+    let mut cache_data = ScanCacheData::new(config_hash.clone());
+    cache_data.dockerfile_hashes.insert(
+        "Dockerfile".to_string(),
+        hash_file_content(&dockerfile).unwrap(),
+    );
+    cache_mgr.save(&cache_data).unwrap();
+
+    // 1. Valid when Dockerfile is unchanged
+    let val_valid = cache_mgr.validate(
+        &[],
+        std::slice::from_ref(&file_a),
+        std::slice::from_ref(&dockerfile),
+        &[],
+        &config_hash,
+    );
+    assert!(matches!(val_valid, CacheValidationResult::Valid { .. }));
+
+    // 2. Invalid when Dockerfile content is modified
+    fs::write(&dockerfile, "FROM python:3.12-slim\n").unwrap();
+    let val_invalid = cache_mgr.validate(
+        &[],
+        std::slice::from_ref(&file_a),
+        std::slice::from_ref(&dockerfile),
+        &[],
+        &config_hash,
+    );
+    match val_invalid {
+        CacheValidationResult::Invalid(
+            stackvet_scanner::CacheInvalidationReason::DockerfileChanged { dockerfile: d },
+        ) => {
+            assert_eq!(d, "Dockerfile");
+        }
+        _ => panic!("Expected DockerfileChanged invalidation on Dockerfile modification"),
+    }
+
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn test_incremental_cache_invalidates_on_ci_workflow_change() {
+    let repo = make_temp_repo("ci_inval");
+    let file_a = repo.join("main.py");
+    let workflow_dir = repo.join(".github").join("workflows");
+    fs::create_dir_all(&workflow_dir).unwrap();
+    let workflow = workflow_dir.join("test.yml");
+
+    fs::write(&file_a, "print('app')\n").unwrap();
+    fs::write(&workflow, "name: Test\non: push\n").unwrap();
+
+    let cache_mgr = IncrementalCacheManager::new(&repo);
+    let config_hash = hash_bytes(b"conf");
+
+    let mut cache_data = ScanCacheData::new(config_hash.clone());
+    cache_data.ci_workflow_hashes.insert(
+        ".github/workflows/test.yml".to_string(),
+        hash_file_content(&workflow).unwrap(),
+    );
+    cache_mgr.save(&cache_data).unwrap();
+
+    // 1. Valid when workflow is unchanged
+    let val_valid = cache_mgr.validate(
+        &[],
+        std::slice::from_ref(&file_a),
+        &[],
+        std::slice::from_ref(&workflow),
+        &config_hash,
+    );
+    assert!(matches!(val_valid, CacheValidationResult::Valid { .. }));
+
+    // 2. Invalid when workflow is modified
+    fs::write(&workflow, "name: Test\non: pull_request\n").unwrap();
+    let val_invalid = cache_mgr.validate(
+        &[],
+        std::slice::from_ref(&file_a),
+        &[],
+        std::slice::from_ref(&workflow),
+        &config_hash,
+    );
+    match val_invalid {
+        CacheValidationResult::Invalid(
+            stackvet_scanner::CacheInvalidationReason::CiWorkflowChanged { workflow: w },
+        ) => {
+            assert_eq!(w, ".github/workflows/test.yml");
+        }
+        _ => panic!("Expected CiWorkflowChanged invalidation on workflow modification"),
+    }
+
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn test_cli_incremental_scan_refreshes_dockerfile_diagnostics() {
+    let repo = make_temp_repo("cli_docker_refresh");
+    let manifest = repo.join("pyproject.toml");
+    let main_file = repo.join("main.py");
+    let dockerfile = repo.join("Dockerfile");
+    let dockerignore = repo.join(".dockerignore");
+
+    fs::write(
+        &manifest,
+        "[project]\nname = 'docker-app'\nversion = '0.1.0'\n",
+    )
+    .unwrap();
+    fs::write(&main_file, "print('app')\n").unwrap();
+    fs::write(&dockerignore, ".git\n__pycache__\n").unwrap();
+    fs::write(&dockerfile, "FROM python:latest\nCMD [\"python\"]\n").unwrap();
+
+    let exe = env!("CARGO_BIN_EXE_stackvet");
+
+    // 1. First scan in incremental mode: DOC-002 (unpinned image) should be detected
+    let out1 = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--incremental")
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run first incremental scan");
+
+    let stdout1 = String::from_utf8_lossy(&out1.stdout);
+    let val1: serde_json::Value = serde_json::from_str(&stdout1).expect("parse json out1");
+    let doc_002_present = val1["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|d| d["rule_id"].as_str() == Some("DOC-002"));
+    assert!(
+        doc_002_present,
+        "DOC-002 should be reported for unpinned image in Dockerfile: {:?}",
+        val1["diagnostics"]
+    );
+
+    // 2. Mutate Dockerfile ONLY to pinned tag: python:3.12-slim
+    fs::write(&dockerfile, "FROM python:3.12-slim\nCMD [\"python\"]\n").unwrap();
+
+    // 3. Second incremental scan: Dockerfile change must invalidate cache and refresh DOC-002
+    let out2 = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--incremental")
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run second incremental scan");
+
+    let stdout2 = String::from_utf8_lossy(&out2.stdout);
+    let val2: serde_json::Value = serde_json::from_str(&stdout2).expect("parse json out2");
+    let doc_002_still_present = val2["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|d| d["rule_id"].as_str() == Some("DOC-002"));
+    assert!(
+        !doc_002_still_present,
+        "DOC-002 should be resolved after Dockerfile is pinned, found: {:?}",
+        val2["diagnostics"]
+    );
+
+    // 4. Verify incremental scan output matches full scan (--no-cache)
+    let out_full = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--no-cache")
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run full scan");
+
+    let stdout_full = String::from_utf8_lossy(&out_full.stdout);
+    let val_full: serde_json::Value = serde_json::from_str(&stdout_full).expect("parse json full");
+    assert_eq!(
+        val2["diagnostics"], val_full["diagnostics"],
+        "Incremental scan and full scan must produce equivalent diagnostics"
+    );
+
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn test_cli_incremental_scan_refreshes_ci_workflow_diagnostics() {
+    let repo = make_temp_repo("cli_ci_refresh");
+    let manifest = repo.join("pyproject.toml");
+    let main_file = repo.join("main.py");
+    let workflow_dir = repo.join(".github").join("workflows");
+    fs::create_dir_all(&workflow_dir).unwrap();
+    let workflow = workflow_dir.join("ci.yml");
+
+    fs::write(
+        &manifest,
+        "[project]\nname = 'ci-drift-app'\nversion = '0.1.0'\nrequires-python = '>=3.12'\n",
+    )
+    .unwrap();
+    fs::write(&main_file, "print('app')\n").unwrap();
+    fs::write(
+        &workflow,
+        "name: CI\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/setup-python@v5\n        with:\n          python-version: '3.10'\n",
+    )
+    .unwrap();
+
+    let exe = env!("CARGO_BIN_EXE_stackvet");
+
+    // 1. First scan in incremental mode: ENV-003 (CI matrix drift) should be detected
+    let out1 = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--incremental")
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run first incremental scan");
+
+    let stdout1 = String::from_utf8_lossy(&out1.stdout);
+    let val1: serde_json::Value = serde_json::from_str(&stdout1).expect("parse json out1");
+    let env_003_present = val1["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|d| d["rule_id"].as_str() == Some("ENV-003"));
+    assert!(
+        env_003_present,
+        "ENV-003 should be reported for CI workflow testing 3.10 when project requires >=3.12: {:?}",
+        val1["diagnostics"]
+    );
+
+    // 2. Mutate CI workflow ONLY to test python 3.12
+    fs::write(
+        &workflow,
+        "name: CI\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/setup-python@v5\n        with:\n          python-version: '3.12'\n",
+    )
+    .unwrap();
+
+    // 3. Second incremental scan: CI workflow change must invalidate cache and refresh ENV-003
+    let out2 = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--incremental")
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run second incremental scan");
+
+    let stdout2 = String::from_utf8_lossy(&out2.stdout);
+    let val2: serde_json::Value = serde_json::from_str(&stdout2).expect("parse json out2");
+    let env_003_still_present = val2["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|d| d["rule_id"].as_str() == Some("ENV-003"));
+    assert!(
+        !env_003_still_present,
+        "ENV-003 should be resolved after CI workflow is updated, found: {:?}",
+        val2["diagnostics"]
+    );
+
+    // 4. Verify incremental scan output matches full scan (--no-cache)
+    let out_full = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--no-cache")
+        .arg("--offline")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run full scan");
+
+    let stdout_full = String::from_utf8_lossy(&out_full.stdout);
+    let val_full: serde_json::Value = serde_json::from_str(&stdout_full).expect("parse json full");
+    assert_eq!(
+        val2["diagnostics"], val_full["diagnostics"],
+        "Incremental scan and full scan must produce equivalent diagnostics"
     );
 
     let _ = fs::remove_dir_all(&repo);
