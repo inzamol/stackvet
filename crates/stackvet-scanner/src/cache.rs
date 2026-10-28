@@ -367,22 +367,13 @@ impl IncrementalCacheManager {
             };
 
             let file_size = metadata.len();
-            let mtime = metadata
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|d| d.as_nanos())
-                .unwrap_or(0);
 
             if let Some(entry) = cached_data.files.get(&rel) {
-                // If mtime and file size match and mtime is strictly older than cache timestamp,
-                // assume unchanged without re-reading content.
-                // Otherwise re-read and compare content hash.
-                if entry.file_size == file_size
-                    && entry.mtime == mtime
-                    && mtime < cached_data.timestamp
-                {
-                    changes.unchanged_files.push(path.clone());
+                // If file size differs, content has definitely changed.
+                // If file size matches, verify content hash to ensure changes are not missed
+                // even when size and modification timestamp are preserved (Issue #61).
+                if entry.file_size != file_size {
+                    changes.modified_files.push(path.clone());
                 } else {
                     let content_hash = hash_file_content(path).unwrap_or_default();
                     if entry.content_hash == content_hash {
@@ -647,6 +638,68 @@ mod tests {
                 assert_eq!(w, ".github/workflows/ci.yml");
             }
             _ => panic!("Expected CiWorkflowChanged invalidation"),
+        }
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_cache_detects_content_change_when_mtime_and_size_preserved() {
+        let dir = make_test_dir("mtime_size_preserved");
+        let app_file = dir.join("app.py");
+        fs::write(&app_file, "val_a = 100\n").unwrap();
+
+        let initial_meta = fs::metadata(&app_file).unwrap();
+        let initial_mtime = initial_meta.modified().unwrap();
+
+        let manager = IncrementalCacheManager::new(&dir);
+        let mut data = ScanCacheData::new("conf1".to_string());
+        let file_size = initial_meta.len();
+        let mtime_nanos = initial_mtime.duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let content_hash = hash_file_content(&app_file).unwrap();
+
+        data.files.insert(
+            "app.py".to_string(),
+            FileCacheEntry {
+                content_hash,
+                file_size,
+                mtime: mtime_nanos,
+                diagnostics: vec![],
+            },
+        );
+        manager.save(&data).unwrap();
+
+        // Mutate app.py keeping exact same byte length
+        fs::write(&app_file, "val_b = 200\n").unwrap();
+        assert_eq!(fs::metadata(&app_file).unwrap().len(), file_size);
+
+        // Restore original mtime using File::set_modified
+        let file = fs::File::options().write(true).open(&app_file).unwrap();
+        file.set_modified(initial_mtime).unwrap();
+        drop(file);
+
+        // Verify mtime and file_size match
+        let restored_meta = fs::metadata(&app_file).unwrap();
+        assert_eq!(restored_meta.len(), file_size);
+        assert_eq!(
+            restored_meta
+                .modified()
+                .unwrap()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+            mtime_nanos
+        );
+
+        // Validate: must detect app.py in modified_files despite preserved mtime and size
+        let res = manager.validate(&[], std::slice::from_ref(&app_file), &[], &[], "conf1");
+        match res {
+            CacheValidationResult::Valid { changes, .. } => {
+                assert_eq!(changes.modified_files.len(), 1);
+                assert_eq!(changes.modified_files[0], app_file);
+                assert!(changes.unchanged_files.is_empty());
+            }
+            _ => panic!("Expected valid cache with modified file"),
         }
 
         let _ = fs::remove_dir_all(&dir);

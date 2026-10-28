@@ -5,7 +5,7 @@ use stackvet_node::detect_node_project;
 use stackvet_python::detect_python_project;
 use stackvet_scanner::ProjectScanner;
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn analyze_fixture(rel_path: &str) -> Vec<Diagnostic> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -87,11 +87,7 @@ fn test_fastapi_positive_findings_and_severity() {
     assert_eq!(fap006.severity, Severity::Error);
 
     // Verify locations
-    assert!(fap001
-        .location
-        .file_path
-        .to_string_lossy()
-        .contains("main.py"));
+    assert!(fap001.location.file_path.ends_with("main.py"));
     assert!(fap001.location.span.is_some());
 }
 
@@ -370,6 +366,18 @@ fn test_imports_arch_positive_findings_and_severity() {
         rule_ids.contains("IMP-004"),
         "Expected IMP-004 (removed stdlib module in PEP 594)"
     );
+
+    let imp001 = diags.iter().find(|d| d.rule_id.0 == "IMP-001").unwrap();
+    assert_eq!(imp001.severity, Severity::Error);
+
+    let imp002 = diags.iter().find(|d| d.rule_id.0 == "IMP-002").unwrap();
+    assert_eq!(imp002.severity, Severity::Error);
+
+    let imp003 = diags.iter().find(|d| d.rule_id.0 == "IMP-003").unwrap();
+    assert_eq!(imp003.severity, Severity::Warning);
+
+    let imp004 = diags.iter().find(|d| d.rule_id.0 == "IMP-004").unwrap();
+    assert_eq!(imp004.severity, Severity::Error);
 }
 
 #[test]
@@ -446,6 +454,11 @@ fn test_python_deps_positive_findings_and_severity() {
 
     let dep002 = diags.iter().find(|d| d.rule_id.0 == "DEP-002").unwrap();
     assert_eq!(dep002.severity, Severity::Error);
+    assert!(dep002.location.file_path.ends_with("app.py"));
+
+    let dep003 = diags.iter().find(|d| d.rule_id.0 == "DEP-003").unwrap();
+    assert_eq!(dep003.severity, Severity::Warning);
+    assert!(dep003.location.file_path.ends_with("pyproject.toml"));
 }
 
 #[test]
@@ -478,6 +491,14 @@ fn test_node_deps_positive_findings_and_severity() {
 
     let ndep001 = diags.iter().find(|d| d.rule_id.0 == "NDEP-001").unwrap();
     assert_eq!(ndep001.severity, Severity::Error);
+    assert!(ndep001
+        .location
+        .file_path
+        .ends_with(Path::new("src").join("index.ts")));
+
+    let ndep002 = diags.iter().find(|d| d.rule_id.0 == "NDEP-002").unwrap();
+    assert_eq!(ndep002.severity, Severity::Warning);
+    assert!(ndep002.location.file_path.ends_with("package.json"));
 }
 
 #[test]
@@ -527,4 +548,75 @@ fn test_monorepo_negative_zero_false_positives() {
         "Expected 0 NDEP false-positive findings in clean monorepo, found: {:?}",
         ndep_diags
     );
+}
+
+#[test]
+fn test_python_pep503_normalization_zero_false_positives() {
+    let temp_dir = std::env::temp_dir().join(format!(
+        "stackvet_pep503_test_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    // pyproject declares canonical names with capital letters and underscores
+    std::fs::write(
+        temp_dir.join("pyproject.toml"),
+        r#"[project]
+name = "pep503-app"
+version = "0.1.0"
+dependencies = [
+    "PyYAML>=6.0",
+    "typing_extensions>=4.0",
+]
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        temp_dir.join("uv.lock"),
+        r#"version = 1
+revision = 1
+
+[[package]]
+name = "pyyaml"
+version = "6.0.1"
+
+[[package]]
+name = "typing-extensions"
+version = "4.10.0"
+"#,
+    )
+    .unwrap();
+
+    // app.py imports the canonical module names
+    std::fs::write(
+        temp_dir.join("app.py"),
+        r#"import yaml
+import typing_extensions
+
+def parse():
+    return yaml.safe_load("a: 1")
+"#,
+    )
+    .unwrap();
+
+    let scanner = ProjectScanner::new(&temp_dir).with_parents(false);
+    let mut ctx = scanner.build_context().expect("Failed to build context");
+    ctx.python = detect_python_project(&temp_dir);
+
+    let diags = run_all_analyzers(&ctx, true).expect("Failed to run core analyzers");
+    let dep_diags: Vec<_> = diags
+        .iter()
+        .filter(|d| d.rule_id.0.starts_with("DEP"))
+        .collect();
+
+    assert!(
+        dep_diags.is_empty(),
+        "PEP 503 normalized package names must have 0 false-positive findings, found: {:?}",
+        dep_diags
+    );
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
 }

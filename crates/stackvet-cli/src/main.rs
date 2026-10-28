@@ -731,7 +731,7 @@ fn collect_diagnostics_incremental(
                 .map(|p| normalize_rel_path(root, p))
                 .collect();
 
-            // 1. Restore cached diagnostics for unchanged source files
+            // 1. Restore cached framework diagnostics for unchanged source files
             let mut all_diags: Vec<stackvet_core::Diagnostic> = Vec::new();
             for (rel_path, entry) in &cached_data.files {
                 if unchanged_set.contains(rel_path) {
@@ -742,19 +742,10 @@ fn collect_diagnostics_incremental(
             // 2. Identify modified and added files
             let mut reanalyze_files = changes.modified_files.clone();
             reanalyze_files.extend(changes.added_files.clone());
-            let reanalyze_set: HashSet<PathBuf> = reanalyze_files.iter().cloned().collect();
-            let source_files_set: HashSet<PathBuf> = ctx.source_files.iter().cloned().collect();
 
-            let is_source_file = |p: &Path| -> bool {
-                source_files_set.contains(p) || source_files_set.contains(&root.join(p))
-            };
-            let is_reanalyzed = |p: &Path| -> bool {
-                reanalyze_set.contains(p) || reanalyze_set.contains(&root.join(p))
-            };
-
-            // 3. Project-wide analyzers receive the full ctx.source_files so rules inspecting
-            // full sets (unused deps, lockfile drift, import graph cycles) remain sound.
-            let (mut project_wide_diags, vuln_summary) =
+            // 3. Project-wide analyzers receive the full ctx so rules inspecting
+            // full sets (unused deps, lockfile drift, import graph cycles) remain sound (Issue #60).
+            let (mut fresh_project_diags, vuln_summary) =
                 stackvet_analyzers::run_all_analyzers_with_options_and_status(
                     ctx,
                     offline,
@@ -765,38 +756,30 @@ fn collect_diagnostics_incremental(
                 &ctx.source_files,
                 &config.custom_rules,
             );
-            project_wide_diags.extend(custom_diags);
+            fresh_project_diags.extend(custom_diags);
 
             // 4. Per-file framework analyzers only inspect reanalyzed files
             let mut sub_ctx = ctx.clone();
             sub_ctx.source_files = reanalyze_files.clone();
             let fresh_fw_diags = run_all_framework_analyzers(&sub_ctx)?;
 
-            let mut fresh_diags = project_wide_diags;
-            fresh_diags.extend(fresh_fw_diags);
-
-            let mut fresh_by_file: HashMap<PathBuf, Vec<stackvet_core::Diagnostic>> =
+            let mut fresh_fw_by_file: HashMap<PathBuf, Vec<stackvet_core::Diagnostic>> =
                 HashMap::new();
-            let mut fresh_project_diags: Vec<stackvet_core::Diagnostic> = Vec::new();
-
-            for d in fresh_diags {
-                if is_reanalyzed(&d.location.file_path) {
-                    all_diags.push(d.clone());
-                    let key = if d.location.file_path.is_absolute() {
-                        d.location.file_path.clone()
-                    } else {
-                        root.join(&d.location.file_path)
-                    };
-                    fresh_by_file.entry(key).or_default().push(d);
-                } else if !is_source_file(&d.location.file_path) {
-                    fresh_project_diags.push(d);
-                }
+            for d in &fresh_fw_diags {
+                let key = if d.location.file_path.is_absolute() {
+                    d.location.file_path.clone()
+                } else {
+                    root.join(&d.location.file_path)
+                };
+                fresh_fw_by_file.entry(key).or_default().push(d.clone());
             }
 
-            // Replace cached project diagnostics with fresh results
-            cached_data.project_diagnostics = fresh_project_diags;
+            all_diags.extend(fresh_fw_diags);
+
+            // Replace cached project diagnostics unconditionally with fresh results (Issue #60)
+            cached_data.project_diagnostics = fresh_project_diags.clone();
             cached_data.vulnerability_check = vuln_summary.clone();
-            all_diags.extend(cached_data.project_diagnostics.clone());
+            all_diags.extend(fresh_project_diags);
 
             // Remove deleted files from cache
             for del in &changes.deleted_files {
@@ -804,7 +787,7 @@ fn collect_diagnostics_incremental(
                 cached_data.files.remove(&rel);
             }
 
-            // Update cache entries for reanalyzed files
+            // Update cache entries for reanalyzed files with their framework diagnostics
             for p in &reanalyze_files {
                 let rel = normalize_rel_path(root, p);
                 if let Ok(metadata) = fs::metadata(p) {
@@ -816,9 +799,9 @@ fn collect_diagnostics_incremental(
                         .map(|d| d.as_nanos())
                         .unwrap_or(0);
                     let content_hash = hash_file_content(p).unwrap_or_default();
-                    let diags = fresh_by_file
+                    let diags = fresh_fw_by_file
                         .remove(p)
-                        .or_else(|| fresh_by_file.remove(&root.join(p)))
+                        .or_else(|| fresh_fw_by_file.remove(&root.join(p)))
                         .unwrap_or_default();
 
                     cached_data.files.insert(
@@ -861,11 +844,25 @@ fn collect_diagnostics_incremental(
                 );
             }
 
-            let (all_diags, duplicates_count, vuln_summary) =
-                collect_all_diagnostics(ctx, config, offline, refresh_vuln_cache)?;
+            let (mut project_wide_diags, vuln_summary) =
+                stackvet_analyzers::run_all_analyzers_with_options_and_status(
+                    ctx,
+                    offline,
+                    refresh_vuln_cache,
+                )?;
+            let custom_diags = stackvet_core::config::evaluate_custom_rules(
+                &ctx.root,
+                &ctx.source_files,
+                &config.custom_rules,
+            );
+            project_wide_diags.extend(custom_diags);
+
+            let fw_diags = run_all_framework_analyzers(ctx)?;
 
             let mut new_cache = ScanCacheData::new(config_hash);
             new_cache.vulnerability_check = vuln_summary.clone();
+            new_cache.project_diagnostics = project_wide_diags.clone();
+
             for m in &ctx.manifest_files {
                 let rel = normalize_rel_path(root, m);
                 if let Ok(h) = hash_file_content(m) {
@@ -885,15 +882,14 @@ fn collect_diagnostics_incremental(
                 }
             }
 
-            let mut diags_by_file: HashMap<PathBuf, Vec<stackvet_core::Diagnostic>> =
-                HashMap::new();
-            for d in &all_diags {
+            let mut fw_by_file: HashMap<PathBuf, Vec<stackvet_core::Diagnostic>> = HashMap::new();
+            for d in &fw_diags {
                 let key = if d.location.file_path.is_absolute() {
                     d.location.file_path.clone()
                 } else {
                     root.join(&d.location.file_path)
                 };
-                diags_by_file.entry(key).or_default().push(d.clone());
+                fw_by_file.entry(key).or_default().push(d.clone());
             }
 
             for p in &ctx.source_files {
@@ -907,9 +903,9 @@ fn collect_diagnostics_incremental(
                         .map(|d| d.as_nanos())
                         .unwrap_or(0);
                     let content_hash = hash_file_content(p).unwrap_or_default();
-                    let diags = diags_by_file
+                    let diags = fw_by_file
                         .remove(p)
-                        .or_else(|| diags_by_file.remove(&root.join(p)))
+                        .or_else(|| fw_by_file.remove(&root.join(p)))
                         .unwrap_or_default();
 
                     new_cache.files.insert(
@@ -924,16 +920,18 @@ fn collect_diagnostics_incremental(
                 }
             }
 
-            // Save all remaining diags_by_file entries into project_diagnostics
-            let mut remaining_project_diags: Vec<stackvet_core::Diagnostic> = Vec::new();
-            for diags in diags_by_file.into_values() {
-                remaining_project_diags.extend(diags);
+            for rem in fw_by_file.into_values() {
+                new_cache.project_diagnostics.extend(rem);
             }
-            new_cache.project_diagnostics = remaining_project_diags;
 
             let _ = cache_mgr.save(&new_cache);
 
-            Ok((all_diags, duplicates_count, vuln_summary, false))
+            let mut all_diags = project_wide_diags;
+            all_diags.extend(fw_diags);
+
+            let (mut deduped, duplicates_count) = deduplicate_diagnostics(&all_diags);
+            sort_diagnostics_deterministic(&mut deduped);
+            Ok((deduped, duplicates_count, vuln_summary, false))
         }
     }
 }
