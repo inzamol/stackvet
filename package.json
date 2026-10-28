@@ -1,6 +1,6 @@
 {
   "name": "@inzamol/stackvet",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "StackVet Universal Project Health & Static Diagnostics Engine",
   "scripts": {
     "version:sync": "node scripts/sync_version.js",
