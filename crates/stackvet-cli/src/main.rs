@@ -660,13 +660,16 @@ fn collect_diagnostics_incremental(
             root.join(dir)
         }
     };
-    let cache_mgr = if let Some(dir) = custom_cache_dir {
+    let mut cache_mgr = if let Some(dir) = custom_cache_dir {
         IncrementalCacheManager::with_custom_cache_dir(root, resolve_cache_dir(dir))
     } else if let Some(dir) = &config.cache.dir {
         IncrementalCacheManager::with_custom_cache_dir(root, resolve_cache_dir(dir))
     } else {
         IncrementalCacheManager::new(root)
     };
+    if let Some(max_size) = config.cache.max_size_bytes {
+        cache_mgr = cache_mgr.with_max_file_size(max_size);
+    }
 
     let config_val = serde_json::to_value(config)
         .context("Failed to serialize configuration for cache validation")?;

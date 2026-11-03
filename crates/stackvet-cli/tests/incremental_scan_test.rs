@@ -293,6 +293,39 @@ fn test_incremental_cache_handles_corruption_safely() {
 }
 
 #[test]
+fn test_oversized_cache_file_gracefully_triggers_invalidation() {
+    let repo = make_temp_repo("oversized_cache_inval");
+    let file_a = repo.join("main.py");
+    let manifest = repo.join("pyproject.toml");
+
+    fs::write(&file_a, "print(1)\n").unwrap();
+    fs::write(&manifest, "[project]\n").unwrap();
+
+    let cache_mgr = IncrementalCacheManager::new(&repo).with_max_file_size(60);
+    let config_hash = hash_bytes(b"conf");
+
+    fs::create_dir_all(repo.join(".stackvet/cache")).unwrap();
+    let large_content = format!(
+        "{{\"schema_version\":3,\"padding\":\"{}\"}}",
+        "x".repeat(150)
+    );
+    fs::write(cache_mgr.cache_file_path(), large_content).unwrap();
+
+    let val = cache_mgr.validate(&[manifest], &[file_a], &[], &[], &config_hash);
+    match val {
+        CacheValidationResult::Invalid(
+            stackvet_scanner::CacheInvalidationReason::CacheOversized { size, max_size },
+        ) => {
+            assert_eq!(max_size, 60);
+            assert!(size >= 150);
+        }
+        other => panic!("Expected CacheOversized invalidation, got: {:?}", other),
+    }
+
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
 fn test_incremental_cache_preserves_and_restores_vulnerability_check_status() {
     let repo = make_temp_repo("vuln_status_cache");
     let cache_mgr = IncrementalCacheManager::new(&repo);
