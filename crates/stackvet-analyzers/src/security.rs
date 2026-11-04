@@ -13,6 +13,7 @@ pub struct SecurityAnalyzer {
     pub refresh_cache: bool,
     pub custom_cache_path: Option<PathBuf>,
     pub custom_osv_url: Option<String>,
+    pub custom_max_cache_size: Option<u64>,
 }
 
 impl SecurityAnalyzer {
@@ -22,6 +23,7 @@ impl SecurityAnalyzer {
             refresh_cache,
             custom_cache_path: None,
             custom_osv_url: None,
+            custom_max_cache_size: None,
         }
     }
 
@@ -31,9 +33,20 @@ impl SecurityAnalyzer {
             refresh_cache,
             custom_cache_path: Some(cache_path),
             custom_osv_url: None,
+            custom_max_cache_size: None,
         }
     }
 
+    /// Configures the security analyzer with a custom vulnerability advisory endpoint.
+    ///
+    /// # Runtime Considerations
+    /// When invoked within a `current_thread` Tokio runtime, network requests to OSV
+    /// are executed on a dedicated background thread while the calling thread waits.
+    /// Consequently, if the mock or local endpoint is hosted on the calling thread's
+    /// `current_thread` runtime, it cannot process incoming requests while that thread
+    /// is waiting. The endpoint must be served by a separate runtime or thread. This
+    /// limitation only applies when a network fetch is triggered (e.g. cache missing or
+    /// `refresh_cache = true`).
     pub fn with_endpoint(
         offline: bool,
         refresh_cache: bool,
@@ -45,15 +58,25 @@ impl SecurityAnalyzer {
             refresh_cache,
             custom_cache_path: Some(cache_path),
             custom_osv_url: Some(osv_url.into()),
+            custom_max_cache_size: None,
         }
     }
 
+    pub fn with_max_cache_size(mut self, size: u64) -> Self {
+        self.custom_max_cache_size = Some(size);
+        self
+    }
+
     fn get_cache_manager(&self, root: &Path) -> VulnCacheManager {
-        if let Some(ref path) = self.custom_cache_path {
-            VulnCacheManager::with_custom_path(path.clone())
+        let mut mgr = if let Some(ref path) = self.custom_cache_path {
+            VulnCacheManager::with_custom_path(path.clone()).with_root(root)
         } else {
             VulnCacheManager::new(root)
+        };
+        if let Some(max_size) = self.custom_max_cache_size {
+            mgr = mgr.with_max_file_size(max_size);
         }
+        mgr
     }
 
     pub fn scan_with_status(
@@ -137,6 +160,7 @@ impl SecurityAnalyzer {
 
         let mgr = self.get_cache_manager(&ctx.root);
         let mut cache_corrupted = false;
+        let mut cache_load_err: Option<String> = None;
         let mut cache_opt = match mgr.load_cache() {
             Ok(opt) => opt,
             Err(err) => {
@@ -145,6 +169,7 @@ impl SecurityAnalyzer {
                     mgr.cache_path()
                 );
                 cache_corrupted = true;
+                cache_load_err = Some(err.to_string());
                 None
             }
         };
@@ -215,9 +240,9 @@ impl SecurityAnalyzer {
         let vuln_summary = match status {
             VulnCacheStatus::Missing => {
                 let primary_manifest = packages_to_audit[0].3.clone();
-                let msg = if cache_corrupted {
+                let msg = if let Some(ref err) = cache_load_err {
                     format!(
-                        "Vulnerability checks skipped: local vulnerability cache at {:?} is corrupted or invalid",
+                        "Vulnerability checks skipped: local vulnerability cache at {:?} is corrupted or invalid: {err}",
                         mgr.cache_path()
                     )
                 } else if self.offline {
@@ -231,7 +256,7 @@ impl SecurityAnalyzer {
                 };
 
                 let explanation = if cache_corrupted {
-                    "The vulnerability database cache file contains invalid JSON or an incompatible schema. Vulnerability scanning cannot be performed with corrupted advisory data."
+                    "The vulnerability database cache file is corrupted, oversized, or invalid. Vulnerability scanning cannot be performed with corrupted advisory data."
                 } else if self.offline {
                     "Offline mode was specified, but no local vulnerability cache is available. Vulnerability checks cannot be performed."
                 } else {
@@ -484,10 +509,37 @@ struct OsvEventDetail {
 
 fn run_async_future<F, T>(future: F) -> Result<T>
 where
-    F: std::future::Future<Output = Result<T>>,
+    F: std::future::Future<Output = Result<T>> + Send,
+    T: Send,
 {
     match tokio::runtime::Handle::try_current() {
-        Ok(handle) => tokio::task::block_in_place(|| handle.block_on(future)),
+        Ok(handle) => match handle.runtime_flavor() {
+            tokio::runtime::RuntimeFlavor::MultiThread => {
+                tokio::task::block_in_place(|| handle.block_on(future))
+            }
+            _ => {
+                // In current-thread or unsupported runtimes where block_in_place is disallowed,
+                // bridge execution onto a dedicated OS thread running its own current-thread runtime.
+                std::thread::scope(|s| {
+                    let join_handle = std::thread::Builder::new()
+                        .name("stackvet-tokio-bridge".to_string())
+                        .spawn_scoped(s, || {
+                            let rt = tokio::runtime::Builder::new_current_thread()
+                                .enable_all()
+                                .build()
+                                .map_err(|e| {
+                                    anyhow::anyhow!("Failed to build Tokio runtime: {e}")
+                                })?;
+                            rt.block_on(future)
+                        })
+                        .map_err(|e| anyhow::anyhow!("Failed to spawn async bridge thread: {e}"))?;
+
+                    join_handle
+                        .join()
+                        .map_err(|_| anyhow::anyhow!("Async bridge thread panicked"))?
+                })
+            }
+        },
         Err(_) => {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()

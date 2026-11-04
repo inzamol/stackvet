@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use stackvet_core::{Diagnostic, LanguageTarget, Severity};
 use stackvet_scanner::{
     hash_bytes, hash_file_content, CacheValidationResult, FileCacheEntry, IncrementalCacheManager,
-    ScanCacheData,
+    ScanCacheData, DEFAULT_MAX_SCAN_CACHE_SIZE_BYTES,
 };
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -288,6 +288,127 @@ fn test_incremental_cache_handles_corruption_safely() {
         }
         _ => panic!("Expected CacheCorrupted invalidation on malformed cache file"),
     }
+
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn test_oversized_cache_file_gracefully_triggers_invalidation() {
+    let repo = make_temp_repo("oversized_cache_inval");
+    let file_a = repo.join("main.py");
+    let manifest = repo.join("pyproject.toml");
+
+    fs::write(&file_a, "print(1)\n").unwrap();
+    fs::write(&manifest, "[project]\n").unwrap();
+
+    let cache_mgr = IncrementalCacheManager::new(&repo).with_max_file_size(60);
+    let config_hash = hash_bytes(b"conf");
+
+    fs::create_dir_all(repo.join(".stackvet/cache")).unwrap();
+    let large_content = format!(
+        "{{\"schema_version\":3,\"padding\":\"{}\"}}",
+        "x".repeat(150)
+    );
+    fs::write(cache_mgr.cache_file_path(), large_content).unwrap();
+
+    let val = cache_mgr.validate(&[manifest], &[file_a], &[], &[], &config_hash);
+    match val {
+        CacheValidationResult::Invalid(
+            stackvet_scanner::CacheInvalidationReason::CacheOversized { size, max_size },
+        ) => {
+            assert_eq!(max_size, 60);
+            assert!(size >= 150);
+        }
+        other => panic!("Expected CacheOversized invalidation, got: {:?}", other),
+    }
+
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn test_cli_incremental_scan_invalidates_oversized_cache_and_rebuilds() {
+    let repo = make_temp_repo("cli_oversized_cache");
+    let manifest = repo.join("pyproject.toml");
+    let main_file = repo.join("main.py");
+
+    fs::write(
+        &manifest,
+        "[project]\nname = 'test-app'\nversion = '0.1.0'\n",
+    )
+    .unwrap();
+    fs::write(&main_file, "import os\nprint('hello')\n").unwrap();
+
+    // Configure cache with a small max_size_bytes = 150 bytes in .stackvet.toml
+    fs::write(
+        repo.join(".stackvet.toml"),
+        "[cache]\nenabled = true\nmax_size_bytes = 150\n",
+    )
+    .unwrap();
+
+    // Create a schema-valid scan_cache.json that exceeds 150 bytes (e.g. ~300 bytes) but is well below default 20MB
+    let cache_dir = repo.join(".stackvet").join("cache");
+    fs::create_dir_all(&cache_dir).unwrap();
+
+    let cache_mgr = IncrementalCacheManager::new(&repo);
+    let mut fake_cache = ScanCacheData::new("conf_dummy".to_string());
+    // Seed fake cached diagnostics that would never come from a fresh scan
+    fake_cache.project_diagnostics.push(
+        Diagnostic::builder("FAKE-001", Severity::Warning, LanguageTarget::General)
+            .message("Cached diagnostic that should be invalidated".to_string())
+            .file(&manifest)
+            .build(),
+    );
+    // Add dummy file entry to ensure size exceeds 150 bytes
+    fake_cache.files.insert(
+        "main.py".to_string(),
+        FileCacheEntry {
+            content_hash: "dummy_hash".to_string(),
+            file_size: 100,
+            mtime: 12345,
+            diagnostics: vec![],
+        },
+    );
+    cache_mgr.save(&fake_cache).unwrap();
+
+    let cache_file_size = fs::metadata(cache_mgr.cache_file_path()).unwrap().len();
+    assert!(
+        cache_file_size > 150,
+        "Seeded cache must exceed configured limit: {cache_file_size}"
+    );
+    assert!(
+        cache_file_size < DEFAULT_MAX_SCAN_CACHE_SIZE_BYTES,
+        "Seeded cache must be below default limit"
+    );
+
+    let exe = env!("CARGO_BIN_EXE_stackvet");
+    let output = Command::new(exe)
+        .arg("--path")
+        .arg(&repo)
+        .arg("--offline")
+        .arg("--verbose")
+        .arg("--format")
+        .arg("json")
+        .arg("scan")
+        .output()
+        .expect("Run stackvet scan");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // In verbose mode, the CacheOversized invalidation message is printed
+    let combined_output = format!("{stdout}\n{stderr}");
+    assert!(
+        combined_output.contains("Cache file exceeds size limit")
+            || combined_output.contains("exceeds size limit"),
+        "Verbose output should report oversized cache invalidation: {combined_output}"
+    );
+
+    // Ensure results come from a fresh scan and do NOT contain the fake cached diagnostic
+    assert!(
+        !stdout.contains("FAKE-001"),
+        "Report should not contain invalidated cached diagnostics: {stdout}"
+    );
 
     let _ = fs::remove_dir_all(&repo);
 }

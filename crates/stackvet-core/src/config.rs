@@ -104,6 +104,8 @@ pub struct CacheConfig {
     #[serde(default)]
     pub enabled: bool,
     pub dir: Option<PathBuf>,
+    #[serde(default)]
+    pub max_size_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

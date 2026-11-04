@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const DEFAULT_CACHE_TTL_SECS: u64 = 7 * 24 * 3600; // 7 days
+pub const DEFAULT_MAX_VULN_CACHE_SIZE_BYTES: u64 = 20 * 1024 * 1024; // 20 MB
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CachedVulnerability {
@@ -66,6 +67,8 @@ pub enum VulnCacheStatus {
 #[derive(Debug, Clone)]
 pub struct VulnCacheManager {
     cache_path: PathBuf,
+    max_file_size: u64,
+    root: Option<PathBuf>,
 }
 
 impl VulnCacheManager {
@@ -74,11 +77,33 @@ impl VulnCacheManager {
             .join(".stackvet")
             .join("cache")
             .join("vulnerabilities.json");
-        Self { cache_path }
+        Self {
+            cache_path,
+            max_file_size: DEFAULT_MAX_VULN_CACHE_SIZE_BYTES,
+            root: Some(root.to_path_buf()),
+        }
     }
 
     pub fn with_custom_path(cache_path: PathBuf) -> Self {
-        Self { cache_path }
+        Self {
+            cache_path,
+            max_file_size: DEFAULT_MAX_VULN_CACHE_SIZE_BYTES,
+            root: None,
+        }
+    }
+
+    pub fn with_root(mut self, root: impl AsRef<Path>) -> Self {
+        self.root = Some(root.as_ref().to_path_buf());
+        self
+    }
+
+    pub fn with_max_file_size(mut self, max_size: u64) -> Self {
+        self.max_file_size = max_size;
+        self
+    }
+
+    pub fn max_file_size(&self) -> u64 {
+        self.max_file_size
     }
 
     pub fn cache_path(&self) -> &Path {
@@ -90,16 +115,83 @@ impl VulnCacheManager {
     }
 
     pub fn load_cache(&self) -> Result<Option<VulnDatabaseCache>> {
-        if !self.cache_path.exists() {
-            return Ok(None);
+        let symlink_meta = match fs::symlink_metadata(&self.cache_path) {
+            Ok(m) => m,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => {
+                anyhow::bail!(
+                    "Failed to inspect vulnerability cache at {:?}: {e}",
+                    self.cache_path
+                );
+            }
+        };
+
+        if symlink_meta.is_symlink() {
+            if let Ok(canonical_path) = self.cache_path.canonicalize() {
+                if let Some(ref root) = self.root {
+                    let canonical_root = root.canonicalize().unwrap_or_else(|_| root.clone());
+                    if !canonical_path.starts_with(&canonical_root) {
+                        anyhow::bail!(
+                            "Vulnerability cache symlink at {:?} escapes repository boundary",
+                            self.cache_path
+                        );
+                    }
+                }
+            } else {
+                anyhow::bail!(
+                    "Vulnerability cache at {:?} is a broken or unresolvable symlink",
+                    self.cache_path
+                );
+            }
         }
 
-        let content = fs::read_to_string(&self.cache_path).with_context(|| {
+        let metadata = fs::metadata(&self.cache_path).with_context(|| {
+            format!(
+                "Failed to read metadata for vulnerability cache at {:?}",
+                self.cache_path
+            )
+        })?;
+
+        if !metadata.is_file() {
+            anyhow::bail!(
+                "Vulnerability cache at {:?} is not a regular file",
+                self.cache_path
+            );
+        }
+
+        if metadata.len() > self.max_file_size {
+            anyhow::bail!(
+                "Vulnerability cache at {:?} exceeds maximum allowed size ({} bytes > {} bytes limit)",
+                self.cache_path,
+                metadata.len(),
+                self.max_file_size
+            );
+        }
+
+        let file = fs::File::open(&self.cache_path).with_context(|| {
+            format!(
+                "Failed to open vulnerability cache at {:?}",
+                self.cache_path
+            )
+        })?;
+
+        use std::io::Read;
+        let mut handle = std::io::Read::take(file, self.max_file_size + 1);
+        let mut content = String::new();
+        handle.read_to_string(&mut content).with_context(|| {
             format!(
                 "Failed to read vulnerability cache at {:?}",
                 self.cache_path
             )
         })?;
+
+        if content.len() as u64 > self.max_file_size {
+            anyhow::bail!(
+                "Vulnerability cache at {:?} exceeds maximum allowed size ({} bytes limit)",
+                self.cache_path,
+                self.max_file_size
+            );
+        }
 
         let cache: VulnDatabaseCache = serde_json::from_str(&content).with_context(|| {
             format!(

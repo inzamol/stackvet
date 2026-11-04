@@ -10,7 +10,7 @@ pub mod git;
 pub use cache::{
     hash_bytes, hash_file_content, normalize_rel_path, CacheInvalidationReason,
     CacheValidationResult, FileCacheEntry, IncrementalCacheManager, ScanCacheData, ScanChanges,
-    CACHE_SCHEMA_VERSION, DEFAULT_CACHE_DIR, DEFAULT_CACHE_FILE,
+    CACHE_SCHEMA_VERSION, DEFAULT_CACHE_DIR, DEFAULT_CACHE_FILE, DEFAULT_MAX_SCAN_CACHE_SIZE_BYTES,
 };
 pub use git::{
     collect_git_diff, get_merge_base, is_git_repository, is_shallow_repository,

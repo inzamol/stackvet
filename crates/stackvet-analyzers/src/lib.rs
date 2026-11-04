@@ -14,6 +14,7 @@ pub use python_deps::PythonDependencyAnalyzer;
 pub use security::SecurityAnalyzer;
 pub use vuln_cache::{
     CachedVulnerability, VulnCacheEntry, VulnCacheManager, VulnCacheStatus, VulnDatabaseCache,
+    DEFAULT_MAX_VULN_CACHE_SIZE_BYTES,
 };
 
 use anyhow::Result;

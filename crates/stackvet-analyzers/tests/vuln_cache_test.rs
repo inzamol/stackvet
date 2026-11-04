@@ -700,3 +700,141 @@ fn test_stale_cache_refresh_failure_retains_stale_status_and_emits_sec003_and_se
         summary.message
     );
 }
+
+#[test]
+fn test_security_analyzer_in_current_thread_tokio_runtime_does_not_panic() {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async {
+        let dir = temp_test_dir("current_thread_runtime_no_panic");
+        let ctx = create_dummy_python_context(&dir, &[("requests", "2.25.0")]);
+        let cache_path = dir.join("nonexistent_cache.json");
+
+        // Force network query to an unreachable address to trigger run_async_future
+        let analyzer =
+            SecurityAnalyzer::with_endpoint(false, true, cache_path, "http://127.0.0.1:9");
+
+        // Must NOT panic with "can call blocking only when running on the multi-threaded runtime"
+        let (diags, summary) = analyzer
+            .scan_with_status(&ctx)
+            .expect("scan_with_status must return recoverable error");
+
+        assert!(
+            !diags.is_empty(),
+            "Should emit diagnostic on network failure"
+        );
+        assert_eq!(diags[0].rule_id.0, "SEC-001");
+        assert!(summary.is_some());
+    });
+}
+
+#[test]
+fn test_security_analyzer_in_multi_thread_tokio_runtime() {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async {
+        let dir = temp_test_dir("multi_thread_runtime");
+        let ctx = create_dummy_python_context(&dir, &[("requests", "2.25.0")]);
+        let cache_path = dir.join("nonexistent_cache.json");
+
+        let analyzer =
+            SecurityAnalyzer::with_endpoint(false, true, cache_path, "http://127.0.0.1:9");
+
+        let (diags, summary) = analyzer
+            .scan_with_status(&ctx)
+            .expect("scan_with_status must succeed in multi_thread runtime");
+
+        assert_eq!(diags[0].rule_id.0, "SEC-001");
+        assert!(summary.is_some());
+    });
+}
+
+#[test]
+fn test_oversized_vulnerability_cache_rejected_and_emits_sec001() {
+    let dir = temp_test_dir("oversized_vuln_cache");
+    let ctx = create_dummy_python_context(&dir, &[("requests", "2.25.0")]);
+
+    let cache_path = dir.join("vulnerabilities.json");
+    // Write 500 bytes of dummy JSON
+    let large_content = format!(
+        "{{\"schema_version\":\"1.0.0\",\"source\":\"osv.dev\",\"padding\":\"{}\"}}",
+        "a".repeat(400)
+    );
+    fs::write(&cache_path, large_content).unwrap();
+
+    // Configure a small maximum size limit of 100 bytes
+    let mgr = VulnCacheManager::with_custom_path(cache_path.clone()).with_max_file_size(100);
+    let err = mgr.load_cache().unwrap_err();
+    assert!(
+        err.to_string().contains("exceeds maximum allowed size"),
+        "Error should describe size limit: {err}"
+    );
+
+    // Running through SecurityAnalyzer with custom max cache size must not crash
+    let analyzer =
+        SecurityAnalyzer::with_cache_path(true, false, cache_path).with_max_cache_size(100);
+    let (diags, summary) = analyzer
+        .scan_with_status(&ctx)
+        .expect("analyze must succeed without crashing on oversized cache");
+
+    assert_eq!(diags.len(), 1);
+    assert_eq!(diags[0].rule_id.0, "SEC-001");
+    assert!(
+        diags[0].message.contains("corrupted or invalid"),
+        "Diagnostic message should describe cache invalidation: {}",
+        diags[0].message
+    );
+    assert!(
+        diags[0].message.contains("exceeds maximum allowed size"),
+        "Diagnostic message should include size limit reason: {}",
+        diags[0].message
+    );
+    assert_eq!(
+        summary.unwrap().status,
+        stackvet_core::VulnerabilityCheckStatus::Failed
+    );
+}
+
+#[test]
+fn test_symlink_vulnerability_cache_handling() {
+    let dir = temp_test_dir("symlink_vuln_cache");
+    let ctx = create_dummy_python_context(&dir, &[("requests", "2.25.0")]);
+
+    let outside_dir = temp_test_dir("symlink_vuln_cache_outside");
+    let outside_cache = outside_dir.join("secret_vulnerabilities.json");
+    fs::write(&outside_cache, "{}").unwrap();
+
+    let cache_link = dir.join("vulnerabilities.json");
+
+    #[cfg(unix)]
+    let symlink_created = std::os::unix::fs::symlink(&outside_cache, &cache_link).is_ok();
+    #[cfg(windows)]
+    let symlink_created = std::os::windows::fs::symlink_file(&outside_cache, &cache_link).is_ok();
+
+    if symlink_created {
+        let mgr = VulnCacheManager::with_custom_path(cache_link.clone()).with_root(&dir);
+        let load_res = mgr.load_cache();
+        assert!(
+            load_res.is_err(),
+            "Symlink pointing outside repo boundary must be rejected"
+        );
+        let err_msg = load_res.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("escapes repository boundary"),
+            "Error should indicate boundary escape: {err_msg}"
+        );
+
+        let analyzer = SecurityAnalyzer::with_cache_path(true, false, cache_link);
+        let (diags, _) = analyzer
+            .scan_with_status(&ctx)
+            .expect("scan should not crash");
+        assert_eq!(diags[0].rule_id.0, "SEC-001");
+    }
+}

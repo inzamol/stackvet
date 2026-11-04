@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub const CACHE_SCHEMA_VERSION: u32 = 3;
 pub const DEFAULT_CACHE_DIR: &str = ".stackvet/cache";
 pub const DEFAULT_CACHE_FILE: &str = "scan_cache.json";
+pub const DEFAULT_MAX_SCAN_CACHE_SIZE_BYTES: u64 = 20 * 1024 * 1024; // 20 MB
 
 /// Computes a fast, deterministic hex hash for a byte slice.
 pub fn hash_bytes(bytes: &[u8]) -> String {
@@ -86,6 +87,7 @@ impl ScanCacheData {
 pub enum CacheInvalidationReason {
     CacheMissing,
     CacheCorrupted(String),
+    CacheOversized { size: u64, max_size: u64 },
     VersionMismatch { cached: String, current: String },
     SchemaMismatch { cached: u32, current: u32 },
     ConfigChanged,
@@ -103,6 +105,12 @@ impl std::fmt::Display for CacheInvalidationReason {
         match self {
             Self::CacheMissing => write!(f, "Cache file does not exist"),
             Self::CacheCorrupted(err) => write!(f, "Cache is corrupted: {err}"),
+            Self::CacheOversized { size, max_size } => {
+                write!(
+                    f,
+                    "Cache file exceeds size limit ({size} bytes > max {max_size} bytes)"
+                )
+            }
             Self::VersionMismatch { cached, current } => {
                 write!(f, "StackVet version changed from {cached} to {current}")
             }
@@ -172,6 +180,7 @@ pub struct IncrementalCacheManager {
     root: PathBuf,
     cache_dir: PathBuf,
     cache_file: PathBuf,
+    max_file_size: u64,
 }
 
 impl IncrementalCacheManager {
@@ -183,6 +192,7 @@ impl IncrementalCacheManager {
             root: r,
             cache_dir: c_dir,
             cache_file: c_file,
+            max_file_size: DEFAULT_MAX_SCAN_CACHE_SIZE_BYTES,
         }
     }
 
@@ -199,7 +209,17 @@ impl IncrementalCacheManager {
             root: r,
             cache_dir: c_dir,
             cache_file: c_file,
+            max_file_size: DEFAULT_MAX_SCAN_CACHE_SIZE_BYTES,
         }
+    }
+
+    pub fn with_max_file_size(mut self, max_size: u64) -> Self {
+        self.max_file_size = max_size;
+        self
+    }
+
+    pub fn max_file_size(&self) -> u64 {
+        self.max_file_size
     }
 
     pub fn cache_file_path(&self) -> &Path {
@@ -215,25 +235,98 @@ impl IncrementalCacheManager {
         current_ci_workflows: &[PathBuf],
         current_config_hash: &str,
     ) -> CacheValidationResult {
-        if !self.cache_file.exists() {
-            return CacheValidationResult::Invalid(CacheInvalidationReason::CacheMissing);
-        }
-
-        let content = match fs::read_to_string(&self.cache_file) {
-            Ok(c) => c,
+        let symlink_meta = match fs::symlink_metadata(&self.cache_file) {
+            Ok(m) => m,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return CacheValidationResult::Invalid(CacheInvalidationReason::CacheMissing);
+            }
             Err(e) => {
                 return CacheValidationResult::Invalid(CacheInvalidationReason::CacheCorrupted(
                     e.to_string(),
-                ))
+                ));
             }
         };
+
+        if symlink_meta.is_symlink() {
+            let canonical_root = self
+                .root
+                .canonicalize()
+                .unwrap_or_else(|_| self.root.clone());
+            if let Ok(canonical_file) = self.cache_file.canonicalize() {
+                if !canonical_file.starts_with(&canonical_root) {
+                    return CacheValidationResult::Invalid(
+                        CacheInvalidationReason::CacheCorrupted(format!(
+                            "Cache file symlink '{}' escapes repository boundary",
+                            self.cache_file.display()
+                        )),
+                    );
+                }
+            } else {
+                return CacheValidationResult::Invalid(CacheInvalidationReason::CacheCorrupted(
+                    format!(
+                        "Cache file '{}' is a broken or unresolvable symlink",
+                        self.cache_file.display()
+                    ),
+                ));
+            }
+        }
+
+        let metadata = match fs::metadata(&self.cache_file) {
+            Ok(m) => m,
+            Err(e) => {
+                return CacheValidationResult::Invalid(CacheInvalidationReason::CacheCorrupted(
+                    e.to_string(),
+                ));
+            }
+        };
+
+        if !metadata.is_file() {
+            return CacheValidationResult::Invalid(CacheInvalidationReason::CacheCorrupted(
+                format!(
+                    "Cache path '{}' is not a regular file",
+                    self.cache_file.display()
+                ),
+            ));
+        }
+
+        if metadata.len() > self.max_file_size {
+            return CacheValidationResult::Invalid(CacheInvalidationReason::CacheOversized {
+                size: metadata.len(),
+                max_size: self.max_file_size,
+            });
+        }
+
+        let file = match fs::File::open(&self.cache_file) {
+            Ok(f) => f,
+            Err(e) => {
+                return CacheValidationResult::Invalid(CacheInvalidationReason::CacheCorrupted(
+                    e.to_string(),
+                ));
+            }
+        };
+
+        use std::io::Read;
+        let mut handle = std::io::Read::take(file, self.max_file_size + 1);
+        let mut content = String::new();
+        if let Err(e) = handle.read_to_string(&mut content) {
+            return CacheValidationResult::Invalid(CacheInvalidationReason::CacheCorrupted(
+                e.to_string(),
+            ));
+        }
+
+        if content.len() as u64 > self.max_file_size {
+            return CacheValidationResult::Invalid(CacheInvalidationReason::CacheOversized {
+                size: content.len() as u64,
+                max_size: self.max_file_size,
+            });
+        }
 
         let cached_data: ScanCacheData = match serde_json::from_str(&content) {
             Ok(d) => d,
             Err(e) => {
                 return CacheValidationResult::Invalid(CacheInvalidationReason::CacheCorrupted(
                     e.to_string(),
-                ))
+                ));
             }
         };
 
@@ -700,6 +793,40 @@ mod tests {
                 assert!(changes.unchanged_files.is_empty());
             }
             _ => panic!("Expected valid cache with modified file"),
+        }
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_cache_oversized_invalidation() {
+        let dir = make_test_dir("oversized_cache");
+        let file_a = dir.join("a.py");
+        fs::write(&file_a, "x = 1\n").unwrap();
+
+        let manager = IncrementalCacheManager::new(&dir).with_max_file_size(50);
+        let mut data = ScanCacheData::new("conf1".to_string());
+        data.files.insert(
+            "a.py".to_string(),
+            FileCacheEntry {
+                content_hash: "dummy".to_string(),
+                file_size: 10,
+                mtime: 0,
+                diagnostics: vec![],
+            },
+        );
+        manager.save(&data).unwrap();
+
+        let val = manager.validate(&[], std::slice::from_ref(&file_a), &[], &[], "conf1");
+        match val {
+            CacheValidationResult::Invalid(CacheInvalidationReason::CacheOversized {
+                size,
+                max_size,
+            }) => {
+                assert_eq!(max_size, 50);
+                assert!(size > 50);
+            }
+            other => panic!("Expected CacheOversized invalidation, got: {:?}", other),
         }
 
         let _ = fs::remove_dir_all(&dir);
