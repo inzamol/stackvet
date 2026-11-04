@@ -37,6 +37,16 @@ impl SecurityAnalyzer {
         }
     }
 
+    /// Configures the security analyzer with a custom vulnerability advisory endpoint.
+    ///
+    /// # Runtime Considerations
+    /// When invoked within a `current_thread` Tokio runtime, network requests to OSV
+    /// are executed on a dedicated background thread while the calling thread waits.
+    /// Consequently, if the mock or local endpoint is hosted on the calling thread's
+    /// `current_thread` runtime, it cannot process incoming requests while that thread
+    /// is waiting. The endpoint must be served by a separate runtime or thread. This
+    /// limitation only applies when a network fetch is triggered (e.g. cache missing or
+    /// `refresh_cache = true`).
     pub fn with_endpoint(
         offline: bool,
         refresh_cache: bool,
